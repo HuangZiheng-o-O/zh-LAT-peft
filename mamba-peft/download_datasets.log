@@ -1,0 +1,203 @@
+⬇️  snapshot tatsu-lab/alpaca_eval  ->  /Users/huangziheng/PycharmProjects/zh-ssm-peft/mamba-peft/data/tatsu-lab_alpaca_eval
+✅ snapshot ok: tatsu-lab/alpaca_eval
+⬇️  snapshot xlangai/spider  ->  /Users/huangziheng/PycharmProjects/zh-ssm-peft/mamba-peft/data/xlangai_spider
+✅ snapshot ok: xlangai/spider
+========== start download ==========
+▶️  AlpacaDataset …
+✅  AlpacaDataset ok
+▶️  SamSumDataset …
+❌  SamSumDataset failed: Dataset 'Samsung/samsum' doesn't exist on the Hub or cannot be accessed.
+▶️  BoolQDataset …
+✅  BoolQDataset ok
+▶️  PiqaDataset …
+❌  PiqaDataset failed: name 'load_dataset' is not defined
+▶️  DartDataset …
+❌  DartDataset failed: Dataset scripts are no longer supported, but found dart.py
+▶️  AlpacaEvalDataset …
+✅  AlpacaEvalDataset ok
+▶️  GlueDataset_rte …
+✅  GlueDataset_rte ok
+▶️  GlueDataset_mrpc …
+✅  GlueDataset_mrpc ok
+▶️  ArcDataset_easy …
+❌  ArcDataset_easy failed: 'A'
+▶️  ArcDataset_challenge …
+❌  ArcDataset_challenge failed: 'A'
+▶️  CifarDataset …
+✅  CifarDataset ok
+▶️  MnistDataset …
+✅  MnistDataset ok
+▶️  MmluZeroShotDataset …
+❌  MmluZeroShotDataset failed: 'A'
+▶️  SpiderDataset …
+❌  SpiderDataset failed: [Errno 2] No such file or directory: 'data/xlangai_spider/spider/tables.json'
+========== done ==========
+日志见：/Users/huangziheng/PycharmProjects/zh-ssm-peft/mamba-peft/download_datasets.log
+[2025-09-14 23:38:33] ========== start download ==========
+[2025-09-14 23:38:33] ⬇️  snapshot yahma/alpaca-cleaned  ->  /Users/huangziheng/PycharmProjects/zh-ssm-peft/mamba-peft/data/yahma_alpaca-cleaned
+[2025-09-14 23:38:33] ✅ snapshot ok: yahma/alpaca-cleaned
+[2025-09-14 23:38:33] ⏭️  skip (exists): tatsu-lab/alpaca_eval -> /Users/huangziheng/PycharmProjects/zh-ssm-peft/mamba-peft/data/tatsu-lab_alpaca_eval
+[2025-09-14 23:38:33] ⬇️  snapshot samsum  ->  /Users/huangziheng/PycharmProjects/zh-ssm-peft/mamba-peft/data/samsum
+[2025-09-14 23:38:33] ❌ snapshot failed: samsum | 401 Client Error. (Request ID: Root=1-68c78a39-50fb74700c5ff30911626925;6c0fed1e-d9bf-460e-8f75-8f46fc1c2b49)
+
+Repository Not Found for url: https://huggingface.co/api/datasets/samsum/revision/main.
+Please make sure you specified the correct `repo_id` and `repo_type`.
+If you are trying to access a private or gated repo, make sure you are authenticated. For more details, see https://huggingface.co/docs/huggingface_hub/authentication
+Invalid username or password.
+[2025-09-14 23:38:33] Traceback (most recent call last):
+  File "/opt/anaconda3/envs/deep_learning_env/lib/python3.11/site-packages/huggingface_hub/utils/_http.py", line 409, in hf_raise_for_status
+    response.raise_for_status()
+  File "/opt/anaconda3/envs/deep_learning_env/lib/python3.11/site-packages/requests/models.py", line 1026, in raise_for_status
+    raise HTTPError(http_error_msg, response=self)
+requests.exceptions.HTTPError: 401 Client Error: Unauthorized for url: https://huggingface.co/api/datasets/samsum/revision/main
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/huangziheng/PycharmProjects/zh-ssm-peft/dataset_downloader_v2.py", line 69, in download_hf_dataset
+    snapshot_download(
+  File "/opt/anaconda3/envs/deep_learning_env/lib/python3.11/site-packages/huggingface_hub/utils/_validators.py", line 114, in _inner_fn
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/envs/deep_learning_env/lib/python3.11/site-packages/huggingface_hub/_snapshot_download.py", line 245, in snapshot_download
+    raise api_call_error
+  File "/opt/anaconda3/envs/deep_learning_env/lib/python3.11/site-packages/huggingface_hub/_snapshot_download.py", line 165, in snapshot_download
+    repo_info = api.repo_info(repo_id=repo_id, repo_type=repo_type, revision=revision)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/envs/deep_learning_env/lib/python3.11/site-packages/huggingface_hub/utils/_validators.py", line 114, in _inner_fn
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/envs/deep_learning_env/lib/python3.11/site-packages/huggingface_hub/hf_api.py", line 2853, in repo_info
+    return method(
+           ^^^^^^^
+  File "/opt/anaconda3/envs/deep_learning_env/lib/python3.11/site-packages/huggingface_hub/utils/_validators.py", line 114, in _inner_fn
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/envs/deep_learning_env/lib/python3.11/site-packages/huggingface_hub/hf_api.py", line 2711, in dataset_info
+    hf_raise_for_status(r)
+  File "/opt/anaconda3/envs/deep_learning_env/lib/python3.11/site-packages/huggingface_hub/utils/_http.py", line 459, in hf_raise_for_status
+    raise _format(RepositoryNotFoundError, message, response) from e
+huggingface_hub.errors.RepositoryNotFoundError: 401 Client Error. (Request ID: Root=1-68c78a39-50fb74700c5ff30911626925;6c0fed1e-d9bf-460e-8f75-8f46fc1c2b49)
+
+Repository Not Found for url: https://huggingface.co/api/datasets/samsum/revision/main.
+Please make sure you specified the correct `repo_id` and `repo_type`.
+If you are trying to access a private or gated repo, make sure you are authenticated. For more details, see https://huggingface.co/docs/huggingface_hub/authentication
+Invalid username or password.
+
+[2025-09-14 23:38:33] ⬇️  snapshot google/boolq  ->  /Users/huangziheng/PycharmProjects/zh-ssm-peft/mamba-peft/data/google_boolq
+[2025-09-14 23:38:34] ✅ snapshot ok: google/boolq
+[2025-09-14 23:38:34] ⬇️  snapshot piqa  ->  /Users/huangziheng/PycharmProjects/zh-ssm-peft/mamba-peft/data/piqa
+[2025-09-14 23:38:34] ✅ snapshot ok: piqa
+[2025-09-14 23:38:34] ⬇️  snapshot nyu-mll/glue  ->  /Users/huangziheng/PycharmProjects/zh-ssm-peft/mamba-peft/data/nyu-mll_glue
+[2025-09-14 23:38:49] ✅ snapshot ok: nyu-mll/glue
+[2025-09-14 23:38:49] ⬇️  snapshot allenai/ai2_arc  ->  /Users/huangziheng/PycharmProjects/zh-ssm-peft/mamba-peft/data/allenai_ai2_arc
+[2025-09-14 23:38:50] ✅ snapshot ok: allenai/ai2_arc
+[2025-09-14 23:38:50] ⏭️  skip (exists): xlangai/spider -> /Users/huangziheng/PycharmProjects/zh-ssm-peft/mamba-peft/data/xlangai_spider
+[2025-09-14 23:38:50] ⬇️  spider tables.json -> /Users/huangziheng/PycharmProjects/zh-ssm-peft/mamba-peft/data/xlangai_spider/spider/tables.json
+[2025-09-14 23:38:50] ❌ spider tables.json failed: 404 Client Error: Not Found for url: https://raw.githubusercontent.com/taoyds/spider/master/tables.json
+[2025-09-14 23:38:50] Traceback (most recent call last):
+  File "/Users/huangziheng/PycharmProjects/zh-ssm-peft/dataset_downloader_v2.py", line 100, in download_spider_tables
+    r.raise_for_status()
+  File "/opt/anaconda3/envs/deep_learning_env/lib/python3.11/site-packages/requests/models.py", line 1026, in raise_for_status
+    raise HTTPError(http_error_msg, response=self)
+requests.exceptions.HTTPError: 404 Client Error: Not Found for url: https://raw.githubusercontent.com/taoyds/spider/master/tables.json
+
+[2025-09-14 23:38:50] ⬇️  snapshot cais/mmlu  ->  /Users/huangziheng/PycharmProjects/zh-ssm-peft/mamba-peft/data/cais_mmlu
+[2025-09-14 23:39:51] ❌ snapshot failed: cais/mmlu | An error happened while trying to locate the file on the Hub and we cannot find the requested files in the local cache. Please check your connection and try again or make sure your Internet connection is on.
+[2025-09-14 23:39:51] Traceback (most recent call last):
+  File "/opt/anaconda3/envs/deep_learning_env/lib/python3.11/site-packages/huggingface_hub/file_download.py", line 1546, in _get_metadata_or_catch_error
+    metadata = get_hf_file_metadata(
+               ^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/envs/deep_learning_env/lib/python3.11/site-packages/huggingface_hub/utils/_validators.py", line 114, in _inner_fn
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/envs/deep_learning_env/lib/python3.11/site-packages/huggingface_hub/file_download.py", line 1463, in get_hf_file_metadata
+    r = _request_wrapper(
+        ^^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/envs/deep_learning_env/lib/python3.11/site-packages/huggingface_hub/file_download.py", line 286, in _request_wrapper
+    response = _request_wrapper(
+               ^^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/envs/deep_learning_env/lib/python3.11/site-packages/huggingface_hub/file_download.py", line 309, in _request_wrapper
+    response = http_backoff(method=method, url=url, **params, retry_on_exceptions=(), retry_on_status_codes=(429,))
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/envs/deep_learning_env/lib/python3.11/site-packages/huggingface_hub/utils/_http.py", line 317, in http_backoff
+    response.raise_for_status()  # Will raise uncaught exception
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/envs/deep_learning_env/lib/python3.11/site-packages/requests/models.py", line 1026, in raise_for_status
+    raise HTTPError(http_error_msg, response=self)
+requests.exceptions.HTTPError: 429 Client Error: Too Many Requests for url: https://huggingface.co/datasets/cais/mmlu/resolve/c30699e8356da336a370243923dbaf21066bb9fe/us_foreign_policy/dev-00000-of-00001.parquet
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/huangziheng/PycharmProjects/zh-ssm-peft/dataset_downloader_v2.py", line 69, in download_hf_dataset
+    snapshot_download(
+  File "/opt/anaconda3/envs/deep_learning_env/lib/python3.11/site-packages/huggingface_hub/utils/_validators.py", line 114, in _inner_fn
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/envs/deep_learning_env/lib/python3.11/site-packages/huggingface_hub/_snapshot_download.py", line 330, in snapshot_download
+    _inner_hf_hub_download(file)
+  File "/opt/anaconda3/envs/deep_learning_env/lib/python3.11/site-packages/huggingface_hub/_snapshot_download.py", line 306, in _inner_hf_hub_download
+    return hf_hub_download(
+           ^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/envs/deep_learning_env/lib/python3.11/site-packages/huggingface_hub/utils/_validators.py", line 114, in _inner_fn
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/envs/deep_learning_env/lib/python3.11/site-packages/huggingface_hub/file_download.py", line 990, in hf_hub_download
+    return _hf_hub_download_to_local_dir(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/envs/deep_learning_env/lib/python3.11/site-packages/huggingface_hub/file_download.py", line 1253, in _hf_hub_download_to_local_dir
+    _raise_on_head_call_error(head_call_error, force_download, local_files_only)
+  File "/opt/anaconda3/envs/deep_learning_env/lib/python3.11/site-packages/huggingface_hub/file_download.py", line 1661, in _raise_on_head_call_error
+    raise LocalEntryNotFoundError(
+huggingface_hub.errors.LocalEntryNotFoundError: An error happened while trying to locate the file on the Hub and we cannot find the requested files in the local cache. Please check your connection and try again or make sure your Internet connection is on.
+
+[2025-09-14 23:39:51] ⬇️  snapshot dart  ->  /Users/huangziheng/PycharmProjects/zh-ssm-peft/mamba-peft/data/dart
+[2025-09-14 23:39:51] ❌ snapshot failed: dart | An error happened while trying to locate the files on the Hub and we cannot find the appropriate snapshot folder for the specified revision on the local disk. Please check your internet connection and try again.
+[2025-09-14 23:39:51] Traceback (most recent call last):
+  File "/opt/anaconda3/envs/deep_learning_env/lib/python3.11/site-packages/huggingface_hub/utils/_http.py", line 409, in hf_raise_for_status
+    response.raise_for_status()
+  File "/opt/anaconda3/envs/deep_learning_env/lib/python3.11/site-packages/requests/models.py", line 1026, in raise_for_status
+    raise HTTPError(http_error_msg, response=self)
+requests.exceptions.HTTPError: 429 Client Error: Too Many Requests for url: https://huggingface.co/api/datasets/dart/revision/main
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/opt/anaconda3/envs/deep_learning_env/lib/python3.11/site-packages/huggingface_hub/_snapshot_download.py", line 165, in snapshot_download
+    repo_info = api.repo_info(repo_id=repo_id, repo_type=repo_type, revision=revision)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/envs/deep_learning_env/lib/python3.11/site-packages/huggingface_hub/utils/_validators.py", line 114, in _inner_fn
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/envs/deep_learning_env/lib/python3.11/site-packages/huggingface_hub/hf_api.py", line 2853, in repo_info
+    return method(
+           ^^^^^^^
+  File "/opt/anaconda3/envs/deep_learning_env/lib/python3.11/site-packages/huggingface_hub/utils/_validators.py", line 114, in _inner_fn
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/envs/deep_learning_env/lib/python3.11/site-packages/huggingface_hub/hf_api.py", line 2711, in dataset_info
+    hf_raise_for_status(r)
+  File "/opt/anaconda3/envs/deep_learning_env/lib/python3.11/site-packages/huggingface_hub/utils/_http.py", line 482, in hf_raise_for_status
+    raise _format(HfHubHTTPError, str(e), response) from e
+huggingface_hub.errors.HfHubHTTPError: 429 Client Error: Too Many Requests for url: https://huggingface.co/api/datasets/dart/revision/main
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/huangziheng/PycharmProjects/zh-ssm-peft/dataset_downloader_v2.py", line 69, in download_hf_dataset
+    snapshot_download(
+  File "/opt/anaconda3/envs/deep_learning_env/lib/python3.11/site-packages/huggingface_hub/utils/_validators.py", line 114, in _inner_fn
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/envs/deep_learning_env/lib/python3.11/site-packages/huggingface_hub/_snapshot_download.py", line 248, in snapshot_download
+    raise LocalEntryNotFoundError(
+huggingface_hub.errors.LocalEntryNotFoundError: An error happened while trying to locate the files on the Hub and we cannot find the appropriate snapshot folder for the specified revision on the local disk. Please check your internet connection and try again.
+
+[2025-09-14 23:39:53] ⬇️  MNIST -> /Users/huangziheng/PycharmProjects/zh-ssm-peft/mamba-peft/data/mnist
+[2025-09-14 23:39:55] ✅ MNIST ok
+[2025-09-14 23:39:55] ⬇️  CIFAR10 -> /Users/huangziheng/PycharmProjects/zh-ssm-peft/mamba-peft/data/cifar
+[2025-09-14 23:40:03] ✅ CIFAR10 ok
+[2025-09-14 23:40:03] ========== done (8 ok, 4 fail) ==========
+[2025-09-14 23:50:02] ========== start download ==========
+[2025-09-14 23:50:02] ========== done (0 ok, 0 fail) ==========

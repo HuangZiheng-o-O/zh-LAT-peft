@@ -1,0 +1,2 @@
+causal-conv1d>=1.2.0
+mamba-ssm==2.0.3  # for selective_scan_cuda

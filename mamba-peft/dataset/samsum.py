@@ -24,7 +24,7 @@ class SamSumDataset(NlgDatasetBase):
     def get_hf_dataset(self):
         if self.hf_dataset is None:
             split = {"train": "train", "val": "validation", "test": "test"}[self.split]
-            self.hf_dataset = load_dataset("Samsung/samsum")[split]
+            self.hf_dataset = load_dataset("samsum")[split]
 
         return self.hf_dataset
 

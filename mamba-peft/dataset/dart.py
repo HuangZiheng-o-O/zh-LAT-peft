@@ -12,7 +12,7 @@ import pandas as pd
 
 class DartDataset(NlgDatasetBase):
     def __init__(self, tokenizer: AutoTokenizer, split="train", use_cache=True, **kwargs):
-        path = "dart"
+        path = "GEM/dart"
         self.df = None
         self.input_formatter = None
         prompt_prefix = "Generate text for the following RDF triples:\n"
