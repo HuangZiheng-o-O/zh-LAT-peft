@@ -1,6 +1,6 @@
 backend: cuda
 batch_size: 4
-cfg_path: /home/user/mzs_h/code/zh-ssm-peft/mamba-peft/cfg/exps/benchmark/glue/cola_gla/001_lora_r8_gla_qkvo.yaml
+cfg_path: /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/cfg/exps/benchmark/glue/cola_gla/001_lora_r8_gla_qkvo.yaml
 data: glue-tvt_cola
 debug: false
 eval_epochs: 1
@@ -15,7 +15,7 @@ no_save: false
 num_data_workers: 8
 num_epochs: 10
 optim: adamw_torch
-output_dir: /home/user/mzs_h/code/zh-ssm-peft/mamba-peft/benchmark/glue/cola_gla/001_lora_r8_gla_qkvo
+output_dir: /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/benchmark/glue/cola_gla/001_lora_r8_gla_qkvo
 overwrite: false
 peft: cfg/peft/lora/r8/lora_gla_qkvo.json
 prec: bf16

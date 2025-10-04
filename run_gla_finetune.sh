@@ -7,12 +7,12 @@ conda activate mzsz
 # =====================================================================
 
 # 【可选】如果你想临时覆盖输出目录，就把下面的变量改成非空：
-# 例：OUTPUT_DIR="/home/user/mzs_h/code/zh-ssm-peft/mamba-peft/benchmark/glue/cola_gla/001_lora_r8_gla_qkvo_debug"
+# 例：OUTPUT_DIR="/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/benchmark/glue/cola_gla/001_lora_r8_gla_qkvo_debug"
 # OUTPUT_DIR=""
 # ---------------- 原始固定路径（保持不变） ----------------
-DEFAULT_OUTPUT_DIR="/home/user/mzs_h/code/zh-ssm-peft/mamba-peft/benchmark/glue/cola_gla/001_lora_r8_gla_qkvo"
-PEFT_DIR="/home/user/mzs_h/code/zh-ssm-peft/mamba-peft"
-CFG_FILE="/home/user/mzs_h/code/zh-ssm-peft/mamba-peft/cfg/exps/benchmark/glue/cola_gla/001_lora_r8_gla_qkvo.yaml"
+DEFAULT_OUTPUT_DIR="/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/benchmark/glue/cola_gla/001_lora_r8_gla_qkvo"
+PEFT_DIR="/home/user/mzs_h/code/zh-LAT-peft/mamba-peft"
+CFG_FILE="/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/cfg/exps/benchmark/glue/cola_gla/001_lora_r8_gla_qkvo.yaml"
 
 # ---------------- 环境准备（与原命令保持一致） ----------------
 # conda activate mzsz
