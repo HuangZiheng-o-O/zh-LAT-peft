@@ -7,14 +7,21 @@ from transformers.utils import WEIGHTS_NAME, CONFIG_NAME
 from transformers.utils.hub import cached_file
 
 # Add flash-linear-attention to path for GLA support
-# Try server path first, then local path
+import sys
 import os
-if os.path.exists('/home/user/mzs_h/code/flash-linear-attention'):
-    sys.path.insert(0, '/home/user/mzs_h/code/flash-linear-attention')
-elif os.path.exists('/Users/huangziheng/PycharmProjects/code/flash-linear-attention'):
-    sys.path.insert(0, '/Users/huangziheng/PycharmProjects/code/flash-linear-attention')
+
+#if os.path.exists('/home/user/mzs_h/code/flash-linear-attention'):
+#   sys.path.insert(0, '/home/user/mzs_h/code/flash-linear-attention')
+# --- Robustly find the flash-linear-attention directory ---
+# Get the directory of the current file (hf.py)
+current_dir = os.path.dirname(os.path.abspath(__file__))
+# Construct the path to the 'flash-linear-attention' directory, which is three levels up and then into the target folder
+fla_path = os.path.abspath(os.path.join(current_dir, '..', '..', '..', 'flash-linear-attention'))
+
+if os.path.exists(fla_path):
+    sys.path.insert(0, fla_path)
 else:
-    print("Warning: flash-linear-attention path not found")
+    print(f"Warning: flash-linear-attention path not found at expected location: {fla_path}")
 
 # Backward-compat shim: provide a no-op decorator for deprecate_kwarg when missing
 try:
