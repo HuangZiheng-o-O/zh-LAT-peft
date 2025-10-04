@@ -5,7 +5,14 @@ from torch import nn
 import warnings
 
 from transformers import BeamScorer, LogitsProcessorList, StoppingCriteriaList
-from transformers.generation.utils import GenerateBeamOutput, ModelOutput, validate_stopping_criteria, _split_model_inputs, stack_model_outputs, GenerateBeamEncoderDecoderOutput, GenerateBeamDecoderOnlyOutput
+from transformers.generation.utils import GenerateBeamOutput, ModelOutput, _split_model_inputs, stack_model_outputs, GenerateBeamEncoderDecoderOutput, GenerateBeamDecoderOnlyOutput
+from transformers.generation.stopping_criteria import MaxLengthCriteria
+
+# transformers<=4.40 does not expose validate_stopping_criteria in generation.utils
+try:
+    from transformers.generation.utils import validate_stopping_criteria as hf_validate_stopping_criteria
+except Exception:
+    hf_validate_stopping_criteria = None
 
 
 def get_logits_recurrent(model, input_ids, inference_params):
@@ -90,7 +97,12 @@ def mamba_beam_search(
                 " `stopping_criteria=StoppingCriteriaList([MaxLengthCriteria(max_length=max_length)])` instead.",
                 UserWarning,
             )
-            stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
+            if hf_validate_stopping_criteria is not None:
+                stopping_criteria = hf_validate_stopping_criteria(stopping_criteria, max_length)
+            else:
+                # Manually ensure MaxLengthCriteria is present
+                if not any(isinstance(s, MaxLengthCriteria) for s in stopping_criteria):
+                    stopping_criteria.append(MaxLengthCriteria(max_length=max_length))
         if len(stopping_criteria) == 0:
             warnings.warn("You don't have defined any stopping_criteria, this will likely loop forever", UserWarning)
         pad_token_id = pad_token_id if pad_token_id is not None else model.generation_config.pad_token_id

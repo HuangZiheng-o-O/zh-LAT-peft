@@ -14,6 +14,7 @@ import numpy as np
 
 import yaml
 from mamba_ssm_peft import get_mamba_peft_model, get_trainable_parameters_ratio, load_mamba, load_tokenizer, print_trainable_parameter_names
+from mamba_ssm_peft.utils.hf import load_gla, load_gla_tokenizer
 
 from mamba_ssm_peft.utils.decoder import create_decoder
 from dataset import load_dataset
@@ -86,22 +87,49 @@ def run_train(
         print("Training for more than one epoch without saving ckpts!")
 
     is_custom_tokenizer = tokenizer != "EleutherAI/gpt-neox-20b"
-    tokenizer = load_tokenizer(tokenizer)
 
-    model_kwargs = dict(
-        dtype={"bf16": torch.bfloat16, "fp16": torch.bfloat16, "fp32": torch.float32}[prec], 
-        device="cuda",
-        backend=backend,
-    )
+    # Check if model is GLA or Mamba
+    is_gla_model = "gla" in model.lower() or "/gla-" in model.lower() or model.startswith("fla-hub/gla")
 
-    model = load_mamba(
-        model, 
-        **model_kwargs
-    )["model"]
+    if is_gla_model:
+        print(f"Loading GLA model: {model}")
+
+        model_kwargs = dict(
+            dtype={"bf16": torch.bfloat16, "fp16": torch.bfloat16, "fp32": torch.float32}[prec],
+            device="cuda" if not debug else "cpu",
+            trust_remote_code=True,
+        )
+
+        gla_loaded = load_gla(model, **model_kwargs)
+        model = gla_loaded["model"]
+        # Always use the tokenizer packaged with the GLA checkpoint to avoid offline AutoTokenizer fetches
+        tokenizer = gla_loaded["tokenizer"]
+    else:
+        print(f"Loading Mamba model: {model}")
+        tokenizer = load_tokenizer(tokenizer)
+
+        model_kwargs = dict(
+            dtype={"bf16": torch.bfloat16, "fp16": torch.bfloat16, "fp32": torch.float32}[prec],
+            device="cuda",
+            backend=backend,
+        )
+
+        model = load_mamba(
+            model,
+            **model_kwargs
+        )["model"]
 
     if peft is not None:
-        model, peft_cfg = get_mamba_peft_model(model, peft, return_peft_cfg=True, train_embedding=is_custom_tokenizer, no_print=True)
-        assert (is_sdlora and isinstance(model.base_model, SdLoraModel)) or (not is_sdlora and not isinstance(model.base_model, SdLoraModel))
+        if is_gla_model:
+            # For GLA, use generic PEFT LoRA injection instead of Mamba-specific wrapper
+            from peft import LoraConfig, get_peft_model
+            with open(peft, "r") as f:
+                peft_json = json.load(f)
+            peft_cfg = LoraConfig(**peft_json)
+            model = get_peft_model(model, peft_cfg)
+        else:
+            model, peft_cfg = get_mamba_peft_model(model, peft, return_peft_cfg=True, train_embedding=is_custom_tokenizer, no_print=True)
+            assert (is_sdlora and isinstance(model.base_model, SdLoraModel)) or (not is_sdlora and not isinstance(model.base_model, SdLoraModel))
     else:
         peft_cfg = None
 
@@ -120,11 +148,11 @@ def run_train(
         eval_generator = create_decoder(tokenizer, **eval_gen)
     else:
         eval_generator = None
-    
+
     val_data_module = load_dataset(
-        val_data if val_data is not None else data, 
-        tokenizer, 
-        val_data_split, 
+        val_data if val_data is not None else data,
+        tokenizer,
+        val_data_split,
         mode="lm" if eval_gen is None else "gen",
         return_module=True)
 
@@ -166,7 +194,8 @@ def run_train(
             save_steps=int(eval_epochs * its_per_epoch),
             eval_steps=int(eval_epochs * its_per_epoch),
             dataloader_drop_last=True,
-            report_to="wandb",
+            report_to="none",
+            # report_to="wandb",
             seed=seed,
         ),
         compute_metrics=compute_metrics,

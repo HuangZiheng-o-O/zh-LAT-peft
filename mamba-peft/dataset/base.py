@@ -130,8 +130,8 @@ class NluDatasetBase(DatasetBase):
     def preproc_input_label(self, input, label):
         if isinstance(label, int):
             label = self.label_int_to_str(label)
-
-        return input + self.tokenizer.sep_token, label   # + self.tokenizer.eos_token
+        sep = getattr(self.tokenizer, "sep_token", None) or getattr(self.tokenizer, "eos_token", None) or ""
+        return input + sep, label
     
     # workaround for old cache file, which store input and label concatenated
     def get_ids(self, idx):
@@ -150,5 +150,7 @@ class NlgDatasetBase(DatasetBase):
         super().__init__(*args, **kwargs)
 
     def preproc_input_label(self, input, label):
-        return input + self.tokenizer.sep_token, label + self.tokenizer.eos_token
+        sep = getattr(self.tokenizer, "sep_token", None) or getattr(self.tokenizer, "eos_token", None) or ""
+        eos = getattr(self.tokenizer, "eos_token", None) or ""
+        return input + sep, label + eos
     
