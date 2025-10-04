@@ -10,7 +10,7 @@ import transformers
 from packaging import version
 from transformers.cache_utils import Cache as HFCacheBase
 from transformers.generation import GenerationMixin
-from transformers.utils.deprecation import deprecate_kwarg
+# from transformers.utils.deprecation import deprecate_kwarg
 
 _TF_VERSION = transformers.__version__
 _NEED_NEW = "4.53.3"
@@ -391,7 +391,7 @@ class FLAGenerationMixin(GenerationMixin):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
+    # @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     def prepare_inputs_for_generation(
         self,
         input_ids: torch.LongTensor = None,

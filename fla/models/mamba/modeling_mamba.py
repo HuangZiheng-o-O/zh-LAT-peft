@@ -21,7 +21,7 @@ from torch import nn
 from transformers.configuration_utils import PretrainedConfig
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import ModelOutput, logging
-from transformers.utils.deprecation import deprecate_kwarg
+# from transformers.utils.deprecation import deprecate_kwarg
 
 from fla.layers.mamba import Mamba
 from fla.models.mamba.configuration_mamba import MambaConfig
@@ -444,7 +444,7 @@ class MambaForCausalLM(MambaPreTrainedModel, FLAGenerationMixin):
 
         return model_kwargs
 
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
+    # @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

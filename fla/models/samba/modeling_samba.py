@@ -10,7 +10,7 @@ import torch
 from torch import nn
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import ModelOutput, logging
-from transformers.utils.deprecation import deprecate_kwarg
+# from transformers.utils.deprecation import deprecate_kwarg
 
 from fla.layers.attn import Attention
 from fla.layers.mamba import Mamba
@@ -320,7 +320,7 @@ class SambaForCausalLM(SambaPreTrainedModel, FLAGenerationMixin):
         model_kwargs["cache_params"] = outputs.get("cache_params", None)
         return model_kwargs
 
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
+    # @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

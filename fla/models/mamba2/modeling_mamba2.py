@@ -20,7 +20,7 @@ import torch
 from torch import nn
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import ModelOutput, logging
-from transformers.utils.deprecation import deprecate_kwarg
+# from transformers.utils.deprecation import deprecate_kwarg
 
 from fla.layers.mamba2 import Mamba2
 from fla.models.mamba2.configuration_mamba2 import Mamba2Config
@@ -445,7 +445,7 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, FLAGenerationMixin):
     def set_input_embeddings(self, new_embeddings):
         return self.backbone.set_input_embeddings(new_embeddings)
 
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
+    # @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

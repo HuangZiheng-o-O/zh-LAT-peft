@@ -11,7 +11,7 @@ import torch.nn as nn
 from transformers.modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import logging
-from transformers.utils.deprecation import deprecate_kwarg
+# from transformers.utils.deprecation import deprecate_kwarg
 
 from fla.layers.path_attn import PaTHAttention
 from fla.models.path_attn.configuration_path_attention import PaTHAttentionConfig
@@ -290,7 +290,7 @@ class PaTHAttentionForCausalLM(PaTHAttentionPreTrainedModel, FLAGenerationMixin)
     def get_decoder(self):
         return self.model
 
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
+    # @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     def forward(
         self,
         input_ids: torch.LongTensor = None,
