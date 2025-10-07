@@ -21,3 +21,4 @@ checkpoint-*
 /wandb
 /weights
 /bak
+.idea/
