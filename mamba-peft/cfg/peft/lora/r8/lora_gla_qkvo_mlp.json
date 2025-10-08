@@ -6,13 +6,13 @@
     "bias": "none",
     "task_type": "CAUSAL_LM",
     "target_modules": [
-        "q_proj",
-        "k_proj", 
-        "v_proj",
-        "o_proj",
-        "gate_proj",
-        "up_proj",
-        "down_proj"
+        "attn.q_proj",
+        "attn.k_proj",
+        "attn.v_proj",
+        "attn.o_proj",
+        "mlp.gate_proj",
+        "mlp.up_proj",
+        "mlp.down_proj"
     ],
     "modules_to_save": []
 }

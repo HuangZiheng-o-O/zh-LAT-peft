@@ -6,7 +6,9 @@
     "bias": "none",
     "task_type": "CAUSAL_LM",
     "target_modules": [
-        "attn.o_proj"
+        "attn.q_proj",
+        "attn.v_proj"
     ],
     "modules_to_save": []
 }
+
