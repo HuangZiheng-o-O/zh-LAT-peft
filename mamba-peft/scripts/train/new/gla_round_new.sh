@@ -60,21 +60,23 @@ ROUND_FILES[4]="round4_E1_QKVO_r4_equal_r4_alpha8_seed42.yaml round4_E4_OONLY_r1
 IFS=' ' read -r -a SELECT_SET <<< "${ROUND_FILES[$ROUND]:-}"
 if [[ ${#SELECT_SET[@]} -ne 7 ]]; then echo "ROUND must be 1..4"; exit 1; fi
 
-# Seed discipline: ensure filenames match requested SEED to avoid accidental mismatch
+# Pre-check existence of all configs to avoid half-start
+missing=()
 for f in "${SELECT_SET[@]}"; do
-  case "$ROUND" in
-    2) [[ "$f" == *"seed${SEED}.yaml"* ]] || { echo "Seed mismatch: $f expects 127. Set SEED=127."; exit 1; };;
-    *) [[ "$f" == *"seed${SEED}.yaml"* ]] || { echo "Seed mismatch: $f expects 42. Set SEED=42."; exit 1; };;
-  esac
+  [[ -f "$BASE_DIR/$f" ]] || missing+=("$BASE_DIR/$f")
 done
+if [[ ${#missing[@]} -gt 0 ]]; then
+  echo "Missing configs:"; printf '%s\n' "${missing[@]}"; exit 1
+fi
 
 GPUS=(0 1 2 3 4 5 6)
 for i in $(seq 0 6); do
   CFG="$BASE_DIR/${SELECT_SET[$i]}"
   GPU="${GPUS[$i]}"
-  [[ -f "$CFG" ]] || { echo "Missing config: $CFG"; exit 1; }
-  echo "[GPU ${GPU}] ${CFG}"
-  CUDA_VISIBLE_DEVICES=$GPU python train.py --cfg "$CFG" --overwrite &
+  # derive seed from filename suffix _seedNNN.yaml
+  SEED_FROM_NAME=$(echo "${SELECT_SET[$i]}" | sed -n 's/.*_seed\([0-9][0-9]*\)\.yaml/\1/p')
+  echo "[GPU ${GPU}] ${CFG} (seed ${SEED_FROM_NAME})"
+  HP_SEED=${SEED_FROM_NAME} CUDA_VISIBLE_DEVICES=$GPU python train.py --cfg "$CFG" --overwrite &
   PIDS+=("$!")
 done
 wait
