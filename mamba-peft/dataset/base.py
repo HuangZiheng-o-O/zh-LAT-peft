@@ -69,7 +69,7 @@ class DatasetBase(ABC):
         return f"cache_{self.path.replace('/', ' ')}_{self.split}"
 
     def encode(self, seq):
-        return torch.LongTensor(self.tokenizer.encode(seq))
+        return torch.LongTensor(self.tokenizer.encode(seq, add_special_tokens=False))
 
     def preproc(self, idx):
         input, label = self.get_input_label(idx)
