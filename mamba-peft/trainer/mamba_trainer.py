@@ -18,6 +18,7 @@ from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 from transformers.trainer_callback import TrainerCallback
 from transformers.trainer_utils import EvalPrediction
 from transformers.training_args import TrainingArguments
+import os
 
 from mamba_ssm_peft import load_mamba
 from trainer.loss import CrossEntropy, Accuracy
@@ -27,6 +28,7 @@ from trainer.trainer_utils import BadEvalEarlyStop, MambaEvalPrediction, TrainLo
 @dataclass
 class MambaTrainingArguments(TrainingArguments):
     info: Dict[str, Any] = field(default=None)
+    save_full_model: bool = False
 
 
 class MambaTrainer(Trainer):
@@ -144,8 +146,12 @@ class MambaTrainer(Trainer):
         return (output_ids, label_ids)
 
     def save_model(self, output_dir, _internal_call):
+        # Always ensure the target directory exists for downstream HF saves
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
+        # Default: do not dump huge full-model checkpoint unless explicitly enabled
+        if not getattr(self.args, "save_full_model", False):
+            return
         torch.save(self.model, f"{output_dir}/model.pt")
 
     def _maybe_log_save_evaluate(self, tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval):
@@ -153,6 +159,15 @@ class MambaTrainer(Trainer):
             self.control.should_evaluate = False
 
         return super()._maybe_log_save_evaluate(tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval)
+
+    # Guard against rare race conditions where HF Trainer hasn't created the
+    # checkpoint folder before optimizer/scheduler save.
+    def _save_optimizer_and_scheduler(self, output_dir: str):
+        try:
+            os.makedirs(output_dir, exist_ok=True)
+        except Exception:
+            pass
+        return super()._save_optimizer_and_scheduler(output_dir)
     
     def load_model(self, path):
         self.model = load_mamba(path)["model"]

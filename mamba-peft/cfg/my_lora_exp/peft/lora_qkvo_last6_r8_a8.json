@@ -1,0 +1,37 @@
+{
+  "peft_type": "LORA",
+  "r": 8,
+  "lora_alpha": 8,
+  "lora_dropout": 0.05,
+  "bias": "none",
+  "task_type": "CAUSAL_LM",
+  "target_modules": [
+    "layers.18.attn.q_proj",
+    "layers.18.attn.k_proj",
+    "layers.18.attn.v_proj",
+    "layers.18.attn.o_proj",
+    "layers.19.attn.q_proj",
+    "layers.19.attn.k_proj",
+    "layers.19.attn.v_proj",
+    "layers.19.attn.o_proj",
+    "layers.20.attn.q_proj",
+    "layers.20.attn.k_proj",
+    "layers.20.attn.v_proj",
+    "layers.20.attn.o_proj",
+    "layers.21.attn.q_proj",
+    "layers.21.attn.k_proj",
+    "layers.21.attn.v_proj",
+    "layers.21.attn.o_proj",
+    "layers.22.attn.q_proj",
+    "layers.22.attn.k_proj",
+    "layers.22.attn.v_proj",
+    "layers.22.attn.o_proj",
+    "layers.23.attn.q_proj",
+    "layers.23.attn.k_proj",
+    "layers.23.attn.v_proj",
+    "layers.23.attn.o_proj"
+  ],
+  "modules_to_save": []
+}
+
+

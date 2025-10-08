@@ -1,0 +1,9 @@
+batch_size: 4
+data: glue-tvt_cola
+learning_rate: 0.0003
+model: /home/user/mzs_h/model/second-gla-1.3B-100B/gla-1.3B-100B
+no_save: false
+num_epochs: 10
+peft: cfg/my_lora_exp/peft/lora_qkvo_r16_a16.json
+prec: bf16
+seed: 127

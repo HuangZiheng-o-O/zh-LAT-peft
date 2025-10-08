@@ -1,0 +1,14 @@
+{
+  "peft_type": "LORA",
+  "r": 16,
+  "lora_alpha": 16,
+  "lora_dropout": 0.05,
+  "bias": "none",
+  "task_type": "CAUSAL_LM",
+  "target_modules": [
+    "attn.o_proj"
+  ],
+  "modules_to_save": []
+}
+
+

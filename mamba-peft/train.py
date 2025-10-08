@@ -1,6 +1,7 @@
 
 import json
 import os
+import os
 import shutil
 
 from mamba_ssm_peft.peft import MambaPeftType
@@ -125,6 +126,25 @@ def run_train(
             from peft import LoraConfig, get_peft_model
             with open(peft, "r") as f:
                 peft_json = json.load(f)
+            # Optional env overrides from launcher (highest precedence)
+            r_env = os.environ.get("HP_PEFT_R")
+            alpha_env = os.environ.get("HP_PEFT_ALPHA")
+            drop_env = os.environ.get("HP_PEFT_DROPOUT")
+            if r_env is not None:
+                try:
+                    peft_json["r"] = int(r_env)
+                except Exception:
+                    pass
+            if alpha_env is not None:
+                try:
+                    peft_json["lora_alpha"] = int(alpha_env)
+                except Exception:
+                    pass
+            if drop_env is not None:
+                try:
+                    peft_json["lora_dropout"] = float(drop_env)
+                except Exception:
+                    pass
             peft_cfg = LoraConfig(**peft_json)
             model = get_peft_model(model, peft_cfg)
         else:
@@ -209,10 +229,10 @@ def run_train(
 
 
 def get_output_path_for_cfg(cfg_path):
-    output_dir = str(Path(cfg_path).parent / Path(cfg_path).stem)
-    output_dir = output_dir.replace("cfg/exps/", "")
-    output_dir = Path("weights", output_dir)
-    return output_dir
+    # Fixed output root per user request:
+    # /home/user/mzs_h/output/benchmark/glue/cola_gla/<yaml_stem>
+    stem = Path(cfg_path).stem
+    return Path("/home/user/mzs_h/output/benchmark/glue/cola_gla") / stem
 
 
 def main():
@@ -232,6 +252,30 @@ def main():
 
     with open(args.cfg, "r") as f:
         cfg = yaml.safe_load(f)
+
+    # Apply environment overrides (highest precedence)
+    env = os.environ
+    def _maybe(v, cast):
+        return cast(v) if v is not None and v != "" else None
+    # Data override: accept raw task (e.g., rte) or full id (glue-tvt_rte)
+    data_env = env.get("HP_DATA")
+    if data_env:
+        cfg["data"] = data_env if data_env.startswith("glue") else f"glue-tvt_{data_env}"
+    bs_env = _maybe(env.get("HP_BATCH_SIZE"), int)
+    if bs_env is not None:
+        cfg["batch_size"] = bs_env
+    lr_env = _maybe(env.get("HP_LR"), float)
+    if lr_env is not None:
+        cfg["learning_rate"] = lr_env
+    epochs_env = _maybe(env.get("HP_EPOCHS"), int)
+    if epochs_env is not None:
+        cfg["num_epochs"] = epochs_env
+    prec_env = env.get("HP_PREC")
+    if prec_env:
+        cfg["prec"] = prec_env
+    seed_env = _maybe(env.get("HP_SEED"), int)
+    if seed_env is not None:
+        cfg["seed"] = seed_env
 
     output_dir = get_output_path_for_cfg(args.cfg)
 

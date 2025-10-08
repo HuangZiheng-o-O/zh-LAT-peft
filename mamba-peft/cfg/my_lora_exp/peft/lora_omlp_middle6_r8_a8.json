@@ -1,0 +1,37 @@
+{
+  "peft_type": "LORA",
+  "r": 8,
+  "lora_alpha": 8,
+  "lora_dropout": 0.05,
+  "bias": "none",
+  "task_type": "CAUSAL_LM",
+  "target_modules": [
+    "layers.9.attn.o_proj",
+    "layers.9.mlp.gate_proj",
+    "layers.9.mlp.up_proj",
+    "layers.9.mlp.down_proj",
+    "layers.10.attn.o_proj",
+    "layers.10.mlp.gate_proj",
+    "layers.10.mlp.up_proj",
+    "layers.10.mlp.down_proj",
+    "layers.11.attn.o_proj",
+    "layers.11.mlp.gate_proj",
+    "layers.11.mlp.up_proj",
+    "layers.11.mlp.down_proj",
+    "layers.12.attn.o_proj",
+    "layers.12.mlp.gate_proj",
+    "layers.12.mlp.up_proj",
+    "layers.12.mlp.down_proj",
+    "layers.13.attn.o_proj",
+    "layers.13.mlp.gate_proj",
+    "layers.13.mlp.up_proj",
+    "layers.13.mlp.down_proj",
+    "layers.14.attn.o_proj",
+    "layers.14.mlp.gate_proj",
+    "layers.14.mlp.up_proj",
+    "layers.14.mlp.down_proj"
+  ],
+  "modules_to_save": []
+}
+
+
