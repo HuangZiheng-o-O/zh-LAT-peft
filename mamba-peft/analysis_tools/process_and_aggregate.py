@@ -6,9 +6,9 @@ process_and_aggregate.py
 cd ~/mzs_h/code/zh-LAT-peft/mamba-peft/
 
 python3 analysis_tools/process_and_aggregate.py
-/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/weights/benchmark/glue/cola_gla-firstround/
+/home/user/mzs_h/output/benchmark/glue/cola_gla/
 /home/user/mzs_h/code/zh-LAT-peft/experiment_result/
-/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/weights/benchmark/glue/cola_gla-firstround/
+/home/user/mzs_h/output/benchmark/glue/cola_gla/
 
 This script orchestrates a two-stage pipeline:
 1.  Processes raw experiment data to generate plots, CSVs, and checkpoint summary
@@ -36,7 +36,7 @@ def main():
     parser.add_argument(
         "--base_dir",
         type=str,
-        default="/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/weights/benchmark/glue/cola_gla_fourth/",
+        default="/home/user/mzs_h/output/benchmark/glue/cola_gla/",
         help="Base directory containing the raw experiment folders (e.g., with checkpoint-* subdirs)."
     )
     parser.add_argument(

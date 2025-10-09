@@ -56,6 +56,7 @@ ROUND_FILES[1]="round1_E0_ZS_r0_alpha0_seed42.yaml round1_E1_QKVO_r8_alpha8_seed
 ROUND_FILES[2]="round2_E7_GONLY_r8_alpha8_seed127.yaml round2_E8_QKVO_G_r8_alpha8_seed127.yaml round2_E1_QKVO_R16_r16_alpha16_seed127.yaml round2_E1_QKVO_seed_r8_alpha8_seed127.yaml round2_E2_OMLP_seed_r8_alpha8_seed127.yaml round2_E3_QV_seed_r8_alpha8_seed127.yaml round2_E4_OONLY_seed_r4_alpha8_seed127.yaml"
 ROUND_FILES[3]="round3_E1_QKVO_last6_r8_alpha8_seed42.yaml round3_E2_OMLP_last6_r8_alpha8_seed42.yaml round3_E1_QKVO_first6_r8_alpha8_seed42.yaml round3_E2_OMLP_middle6_r8_alpha8_seed42.yaml round3_E1_QKVO_alpha2r_r8_alpha16_seed42.yaml round3_E1_QKVO_dropout0_r8_alpha8_seed42.yaml round3_E1_QKVO_lr1e-4_r8_alpha8_seed42.yaml"
 ROUND_FILES[4]="round4_E1_QKVO_r4_equal_r4_alpha8_seed42.yaml round4_E4_OONLY_r16_equal_r16_alpha16_seed42.yaml round4_E2_OMLP_r6_equal_r6_alpha6_seed42.yaml round4_E1_QKVO_DoRA_r8_alpha8_seed42.yaml round4_E2_OMLP_DoRA_r8_alpha8_seed42.yaml round4_E1_QKVO_RSLoRA_r8_alpha8_seed42.yaml round4_E1_QKVO_plus_GK_last6_r8_alpha8_seed42.yaml"
+ROUND_FILES[5]="round5_QKVO_r16_a16_seed127.yaml round5_QKVO_plus_G_r16_a16_seed127.yaml round5_OMLP_r8_a8_seed127.yaml round5_OMLP_plus_G_r8_a8_seed127.yaml round5_QKVO_RSLoRA_r8_a8_seed127.yaml round5_QKVO_plus_G_RSLoRA_r8_a8_seed127.yaml round2_E1_QKVO_seed_r8_alpha8_seed127.yaml"
 
 IFS=' ' read -r -a SELECT_SET <<< "${ROUND_FILES[$ROUND]:-}"
 if [[ ${#SELECT_SET[@]} -ne 7 ]]; then echo "ROUND must be 1..4"; exit 1; fi
