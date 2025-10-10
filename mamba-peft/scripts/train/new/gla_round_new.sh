@@ -10,8 +10,10 @@ set -euo pipefail
 # Usage examples (same as before):
 #   bash scripts/train/new/gla_round_new.sh 1
 #   TASK=rte SEED=127 bash scripts/train/new/gla_round_new.sh 2
-#   bash scripts/train/new/gla_round_new.sh all
+#   mamba-peft/scripts/train/new/gla_round_new.sh
+#   bash mamba-peft/scripts/train/new/gla_round_new.sh all
 #   bash scripts/train/new/gla_round_new.sh 3 1
+#   bash mamba-peft/scripts/train/new/gla_round_new.sh E1 all
 #
 # Optional:
 #   export GPU_IDS="0 1 2 3 4 5 6"   # Explicit GPU mapping; if set, its count must also be 7.
@@ -21,41 +23,83 @@ set -euo pipefail
 ###############################################################################
 # Master list of yaml filenames (seedless, relative to $CFG_DIR).
 # 把你要跑的 YAML 全部写进这个数组即可；脚本会自动按每 7 个切一轮。
-Round_all=(
-  E0_ZS_r0_alpha0.yaml
-  E1_QKVO_DoRA_r8_alpha8.yaml
-  E1_QKVO_R16_r16_alpha16.yaml
-  E1_QKVO_RSLoRA_r8_alpha8.yaml
-  E1_QKVO_r8_alpha16.yaml
-  E1_QKVO_dropout0_r8_alpha8.yaml
-  E1_QKVO_first6_r8_alpha8.yaml
-  E1_QKVO_last6_r8_alpha8.yaml
-  E1_QKVO_lr1e-4_r8_alpha8.yaml
-  E1_QKVO_plus_GK_last6_r8_alpha8.yaml
-  E1_QKVO_r4_alpha8.yaml
-  E1_QKVO_r8_alpha8.yaml
+#Round_all=(
+#  E0_ZS_r0_alpha0.yaml
+#  E1_QKVO_DoRA_r8_alpha8.yaml
+#  E1_QKVO_R16_r16_alpha16.yaml
+#  E1_QKVO_RSLoRA_r8_alpha8.yaml
+#  E1_QKVO_r8_alpha16.yaml
+#  E1_QKVO_dropout0_r8_alpha8.yaml
+#  E1_QKVO_first6_r8_alpha8.yaml
+#  E1_QKVO_last6_r8_alpha8.yaml
+#  E1_QKVO_lr1e-4_r8_alpha8.yaml
+#  E1_QKVO_plus_GK_last6_r8_alpha8.yaml
+#  E1_QKVO_r4_alpha8.yaml
+#  E1_QKVO_r8_alpha8.yaml
+#
+#
+#  E2_OMLP_DoRA_r8_alpha8.yaml
+#  E2_OMLP_r8_alpha16.yaml
+#  E2_OMLP_dropout0_r8_alpha8.yaml
+#  E2_OMLP_last6_r8_alpha8.yaml
+#  E2_OMLP_middle6_r8_alpha8.yaml
+#  E2_OMLP_r6_alpha6.yaml
+#  E2_OMLP_r8_alpha8.yaml
+#  E3_QV_r8_alpha8.yaml
+#  E4_OONLY_dropout0_r4_alpha4.yaml
+#  E4_OONLY_r16_alpha16.yaml
+#  E4_OONLY_r4_alpha4.yaml
+#  E4_OONLY_r4_alpha8.yaml
+#  E5_MLPONLY_r8_alpha8.yaml
+#  E6_QKV_r8_alpha8.yaml
+#  E7_GONLY_r4_alpha4.yaml
+#  E7_GONLY_r8_alpha8.yaml
+#  E8_QKVO_G_r8_alpha8.yaml
+#  OMLP_plus_G_r8_a8.yaml
+#  QKVO_plus_G_RSLoRA_r8_a8.yaml
+#  QKVO_plus_G_r16_a16.yaml
+#)
+Round_all=()
 
+# --- E1 Series: QKVO Fine-tuning Experiments ---
+ROUND_E1=(
+  # Baseline (Centerpiece of comparisons)
+  "E1_QKVO_r8_alpha8.yaml"
 
-  E2_OMLP_DoRA_r8_alpha8.yaml
-  E2_OMLP_r8_alpha16.yaml
-  E2_OMLP_dropout0_r8_alpha8.yaml
-  E2_OMLP_last6_r8_alpha8.yaml
-  E2_OMLP_middle6_r8_alpha8.yaml
-  E2_OMLP_r6_alpha6.yaml
-  E2_OMLP_r8_alpha8.yaml
-  E3_QV_r8_alpha8.yaml
-  E4_OONLY_dropout0_r4_alpha4.yaml
-  E4_OONLY_r16_alpha16.yaml
-  E4_OONLY_r4_alpha4.yaml
-  E4_OONLY_r4_alpha8.yaml
-  E5_MLPONLY_r8_alpha8.yaml
-  E6_QKV_r8_alpha8.yaml
-  E7_GONLY_r4_alpha4.yaml
-  E7_GONLY_r8_alpha8.yaml
-  E8_QKVO_G_r8_alpha8.yaml
-  OMLP_plus_G_r8_a8.yaml
-  QKVO_plus_G_RSLoRA_r8_a8.yaml
-  QKVO_plus_G_r16_a16.yaml
+  # --- Group 1: Capacity (Rank & Alpha) ---
+  # Description: Evaluates the impact of LoRA's capacity.
+  # Baseline: E1_QKVO_r8_alpha8.yaml
+  "E1_QKVO_r4_alpha8.yaml"            # Lower rank
+  "E1_QKVO_r8_alpha16.yaml"           # Higher alpha at same rank
+  "E1_QKVO_R16_r16_alpha16.yaml"      # Higher rank and scaled alpha
+
+  # --- Group 2: Core Target Modules ---
+  # Description: Ablation study on which modules to fine-tune.
+  # Baseline: E1_QKVO_r8_alpha8.yaml
+  "E1_QKVO_plus_G_r8_alpha8.yaml"
+  "E1_QKVO_plus_GK_r8_alpha8.yaml"
+  "E1_QKVO_plus_MLP_r8_alpha8.yaml"
+  "E1_QKVO_plus_G_plus_GK_r8_alpha8.yaml"
+  "E1_QKVO_plus_G_plus_GK_plus_MLP_r8_alpha8.yaml"
+  "QKVO_plus_G_r16_a16.yaml"          # Compares with E1_QKVO_R16_alpha16
+
+  # --- Group 3: LoRA Variants & Training Strategy ---
+  # Description: Compares different LoRA algorithms and training hyperparameters.
+  # Baseline: E1_QKVO_r8_alpha8.yaml
+  "E1_QKVO_DoRA_r8_alpha8.yaml"
+  "E1_QKVO_RSLoRA_r8_alpha8.yaml"
+  "E1_QKVO_lr1e-4_r8_alpha8.yaml"
+  "E1_QKVO_dropout0_r8_alpha8.yaml"
+
+  # --- Group 4: Layer Targeting ---
+  # Description: Explores the effect of fine-tuning different layers.
+  # Baseline: E1_QKVO_r8_alpha8.yaml (all layers)
+  "E1_QKVO_first6_r8_alpha8.yaml"
+  "E1_QKVO_last6_r8_alpha8.yaml"
+
+  # --- Confounded Experiments (from original list) ---
+  # Description: Kept for reference, but mix multiple variables.
+  "E1_QKVO_plus_GK_last6_r8_alpha8.yaml"
 )
 
 ###############################################################################
@@ -195,9 +239,21 @@ if (( NUM_GPUS != 7 )); then
   exit 1
 fi
 
+# -------------------------
+# Suite selector (E1 only)
+# -------------------------
+if [[ "${1:-}" =~ ^(E1|e1)$ ]]; then
+  SELECT_SUITE="E1"
+  Round_all=("${ROUND_E1[@]}")   # replace master list with E1 subset
+  shift                          # consume "E1"
+  ROUND="${1:-all}"              # default to 'all' if no more args
+else
+  SELECT_SUITE="ALL"
+fi
+
 # -------- Dynamic round slicing from Round_all --------
 if (( ${#Round_all[@]} == 0 )); then
-  echo "ERROR: Round_all is empty. Please populate the Round_all array with yaml filenames." >&2
+  echo "ERROR: Round_all is empty. Please populate the Round_all array or call with 'E1' to use ROUND_E1." >&2
   exit 1
 fi
 
@@ -211,10 +267,10 @@ defined_rounds_str() {
   printf "%s" "$out"
 }
 
-# Resolve a config entry to an absolute path under $CFG_DIR
+# Resolve a config entry to an absolute path under $CFG_DIR (no side effects!)
 canonical_cfg_path() {
   local entry="$1"
-  local path="${cfg_path:=${CFG_DIR}/${entry}}"
+  local path="${CFG_DIR}/${entry}"
   if [[ -f "$path" ]]; then
     printf '%s\n' "$path"; return 0
   else
@@ -251,11 +307,12 @@ run_round () {
   # Resolve to absolute paths and verify existence
   local missing=()
   local -a RESOLVED_CFGS=()
+  local resolved=""
   for f in "${SELECT_SET[@]}"; do
-    if cfg_path="$(canonical_cfg_path "$f")"; then
-      RESOLVED_CFGS+=("$cfg_path")
+    if resolved="$(canonical_cfg_path "$f")"; then
+      RESOLVED_CFGS+=("$resolved")
     else
-      missing+=("$cfg_path")
+      missing+=("$resolved")
     fi
   done
   if (( ${#missing[@]} > 0 )); then
@@ -266,6 +323,7 @@ run_round () {
 
   local num_jobs="${#RESOLVED_CFGS[@]}"
   echo "=== Starting Round ${r} (${num_jobs} jobs; FORCE_SEED=${FORCE_SEED}; NUM_GPUS=${NUM_GPUS}) ==="
+  echo "SUITE   = ${SELECT_SUITE}"
   echo "CFG_DIR = $CFG_DIR"
   echo "PEFT_DIR= $PEFT_DIR"
   echo "GPUs    = ${DETECTED_GPUS[*]}"
@@ -301,7 +359,11 @@ run_round () {
 # Build the run queue
 # -------------------------
 if (( $# == 0 )); then
-  RUN_QUEUE+=("$ROUND")
+  if [[ "$ROUND" == "all" ]]; then
+    for ((r=1;r<=N_ROUNDS;r++)); do RUN_QUEUE+=("$r"); done
+  else
+    RUN_QUEUE+=("$ROUND")
+  fi
 else
   for arg in "$@"; do
     if [[ "$arg" == "all" ]]; then
@@ -315,7 +377,7 @@ fi
 # Validate run queue
 for r in "${RUN_QUEUE[@]}"; do
   if ! [[ "$r" =~ ^[0-9]+$ ]] || (( r < 1 || r > N_ROUNDS )); then
-    echo "Invalid round '$r'. Valid values: $(defined_rounds_str)or 'all'." >&2
+    echo "Invalid round '$r'. Valid values: $(defined_rounds_str) or 'all'." >&2
     exit 1
   fi
 done
@@ -334,7 +396,9 @@ for r in "${RUN_QUEUE[@]}"; do
     for pid in "${PIDS[@]}"; do kill -INT "$pid" 2>/dev/null || true; done
     for pid in "${PIDS[@]}"; do kill -TERM "$pid" 2>/dev/null || true; done
     for pid in "${PIDS[@]}"; do kill -KILL "$pid" 2>/dev/null || true; done
-    pkill -f -- "train.py --cfg ${EXP_ROOT}/" 2>/dev/null || true
+    if [[ -n "${EXP_ROOT:-}" ]]; then
+      pkill -f -- "train.py --cfg ${EXP_ROOT}/" 2>/dev/null || true
+    fi
 
     print_failure_summary
     exit 1
