@@ -13,7 +13,7 @@ set -euo pipefail
 #   mamba-peft/scripts/train/new/gla_round_new.sh
 #   bash mamba-peft/scripts/train/new/gla_round_new.sh all
 #   bash scripts/train/new/gla_round_new.sh 3 1
-#   bash mamba-peft/scripts/train/new/gla_round_new.sh E1 all
+#   bash /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new/gla_round_new.sh E1 all
 #
 # Optional:
 #   export GPU_IDS="0 1 2 3 4 5 6"   # Explicit GPU mapping; if set, its count must also be 7.
@@ -62,7 +62,7 @@ set -euo pipefail
 Round_all=()
 
 # --- E1 Series: QKVO Fine-tuning Experiments ---
-ROUND_E0=(
+ROUND_NA=(
   # Baseline (Centerpiece of comparisons)
   "E1_QKVO_r8_alpha8.yaml"
 
@@ -102,7 +102,7 @@ ROUND_E0=(
   "E1_QKVO_plus_GK_last6_r8_alpha8.yaml"
 )
 
-OUND_E1=(
+ROUND_NA2=(
 
   # --- 实验方向 1：Alpha=2r 缩放策略检验 ---
   # 动机：发现 alpha=2r（r=8, a=16）有显著提升，验证该策略在其他配置下是否依然有效。
@@ -121,6 +121,31 @@ OUND_E1=(
   # --- 附加配置（补充探索） ---
   "E1_QKVO_plus_G_plus_GK_r16_alpha16.yaml"      # +G+GK 在高 Rank、scaled alpha=16
   "E1_QKVO_plus_G_plus_GK_DORA_r8_alpha8.yaml"   # DoRA 变体 + 最强模块组合
+)
+
+
+#!/usr/bin/env bash
+
+ROUND_E1=(
+
+  # --- 实验方向 1：精细化 Alpha 调优 & +G+GK 中间点探索 ---
+  # 动机：在 alpha=8–16 之间绘制性能曲线，并探索中间地带 +G+GK 的相互作用关系。
+  "E1_QKVO_r8_alpha12.yaml"                  # 实验 1.1: 探索 alpha=12 (r=8)
+  "E1_QKVO_r8_alpha20.yaml"                  # 实验 1.2: 探索 alpha=20 (r=8)
+  "E1_QKVO_plus_G_plus_GK_r8_alpha12.yaml"   # 实验 1.3: +G+GK @ alpha=12 (r=8)
+
+  # --- 实验方向 2：在“alpha=2r”启发下重新审视 Rank ---
+  # 动机：使用更优 alpha=2r 策略，绘制性能随 Rank 变化的曲线。
+  # "E1_QKVO_r4_alpha8.yaml"    # 实验 2.1: r=4, alpha=8
+  #"E1_QKVO_r8_alpha16.yaml"   # 实验 2.2: r=8, alpha=16
+  "E1_QKVO_r12_alpha24.yaml"  # 实验 2.3: r=12, alpha=24
+  #"E1_QKVO_r16_alpha32.yaml"  # 实验 2.4: r=16, alpha=32
+
+  # --- 实验方向 3：在“冠军配置”上重新评估 LoRA 变体 ---
+  # 动机：验证 DoRA 和 RS-LoRA 在 (r=8, alpha=16) 冠军配置下的表现。
+  "E1_QKVO_DoRA_r8_alpha16.yaml"     # 实验 3.1: use_dora=true
+  "E1_QKVO_RSLoRA_r8_alpha16.yaml"   # 实验 3.2: use_rslora=true
+
 )
 ###############################################################################
 #                           DO NOT EDIT BELOW UNLESS                          #
