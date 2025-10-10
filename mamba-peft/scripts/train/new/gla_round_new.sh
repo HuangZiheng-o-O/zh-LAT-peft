@@ -62,91 +62,84 @@ set -euo pipefail
 Round_all=()
 
 # --- E1 Series: QKVO Fine-tuning Experiments ---
-ROUND_NA=(
-  # Baseline (Centerpiece of comparisons)
+#!/usr/bin/env bash
+
+# --- E1 Series: QKVO Fine-tuning Experiments (Unified & Reordered) ---
+# 组织原则（控制变量）：
+# 1) 以固定 (r, alpha) 的“基线”统一参照；
+# 2) 单变量扫描：先在固定 rank 下扫描 alpha，再在 alpha=2r 策略下只改变 rank；
+# 3) 仅改“目标模块”的消融；随后考察“模块×alpha”的互作；
+# 4) 仅改“被微调层范围”的层级定位；
+# 5) 仅改“算法/训练策略”的 LoRA 变体与超参；
+# 6) 在“冠军配置”(r=8, a=16) 上复验算法与模块；
+# 7) MLP 在更高容量下的复查；最后做高容量对照与混杂项保留。
+
+ROUND_E1=(
+
+  # --- 0. 基线（统一对照） ---
+  # 控制变量：固定 r=8, alpha=8；后续组只改注释里的那一个因子。
   "E1_QKVO_r8_alpha8.yaml"
 
-  # --- Group 1: Capacity (Rank & Alpha) ---
-  # Description: Evaluates the impact of LoRA's capacity.
-  # Baseline: E1_QKVO_r8_alpha8.yaml
-  "E1_QKVO_r4_alpha8.yaml"            # Lower rank
-  "E1_QKVO_r8_alpha16.yaml"           # Higher alpha at same rank
-  "E1_QKVO_R16_r16_alpha16.yaml"      # Higher rank and scaled alpha
+  # --- 1. Alpha 扫描（控制 rank=8，不改其它；只改变 alpha） ---
+  # 目的：绘制 alpha 曲线，验证缩放效应；关注 alpha=2r（r=8→a=16）的关键点。
+  "E1_QKVO_r8_alpha12.yaml"
+  "E1_QKVO_r8_alpha16.yaml"        # 关键假设点：alpha=2r
+  "E1_QKVO_r8_alpha20.yaml"
 
-  # --- Group 2: Core Target Modules ---
-  # Description: Ablation study on which modules to fine-tune.
-  # Baseline: E1_QKVO_r8_alpha8.yaml
+  # --- 2. Rank×Alpha 等比扩展（控制策略 alpha=2r；只改变 rank） ---
+  # 目的：在等效缩放策略下( alpha=2r )观察容量-性能曲线：r=4/8/12/16 → a=8/16/24/32。
+  "E1_QKVO_r4_alpha8.yaml"
+  "E1_QKVO_r12_alpha24.yaml"
+  "E1_QKVO_r16_alpha32.yaml"
+
+  # --- 3. 模块消融（控制 r=8, a=8；只改变微调的目标模块） ---
+  # 目的：QKVO 为基础，考察 +G、+GK、+MLP 及其组合的边际贡献。
   "E1_QKVO_plus_G_r8_alpha8.yaml"
   "E1_QKVO_plus_GK_r8_alpha8.yaml"
   "E1_QKVO_plus_MLP_r8_alpha8.yaml"
   "E1_QKVO_plus_G_plus_GK_r8_alpha8.yaml"
   "E1_QKVO_plus_G_plus_GK_plus_MLP_r8_alpha8.yaml"
-  "QKVO_plus_G_r16_a16.yaml"          # Compares with E1_QKVO_R16_alpha16
 
-  # --- Group 3: LoRA Variants & Training Strategy ---
-  # Description: Compares different LoRA algorithms and training hyperparameters.
-  # Baseline: E1_QKVO_r8_alpha8.yaml
+  # --- 4. 模块 × Alpha 互作（控制模块或组合不变；在 r=8 下只改变 alpha） ---
+  # 目的：在更优 alpha 区间检验模块组合是否被“激活”或产生协同。
+  "E1_QKVO_plus_G_plus_GK_r8_alpha12.yaml"
+  "E1_QKVO_plus_G_plus_GK_r8_alpha16.yaml"   # +G+GK @ alpha=2r
+  "E1_QKVO_plus_MLP_r8_alpha16.yaml"         # 检查 MLP 是否在更高 alpha 下显效
+
+  # --- 5. 层级定位（控制 r=8, a=8；只改变被微调的层范围） ---
+  # 目的：定位增益主要来自前/后层还是全层。
+  "E1_QKVO_first6_r8_alpha8.yaml"
+  "E1_QKVO_last6_r8_alpha8.yaml"
+
+  # --- 6. 算法/训练策略变体（控制 r=8, a=8；只改变算法或训练超参） ---
+  # 目的：把算法因素与容量因素解耦；在基线容量下比较 DoRA、RS-LoRA、学习率、dropout。
   "E1_QKVO_DoRA_r8_alpha8.yaml"
   "E1_QKVO_RSLoRA_r8_alpha8.yaml"
   "E1_QKVO_lr1e-4_r8_alpha8.yaml"
   "E1_QKVO_dropout0_r8_alpha8.yaml"
 
-  # --- Group 4: Layer Targeting ---
-  # Description: Explores the effect of fine-tuning different layers.
-  # Baseline: E1_QKVO_r8_alpha8.yaml (all layers)
-  "E1_QKVO_first6_r8_alpha8.yaml"
-  "E1_QKVO_last6_r8_alpha8.yaml"
+  # --- 7. 冠军配置复验（控制 r=8, a=16；只改变算法或模块组合） ---
+  # 目的：在更优的容量点复核算法与组合是否进一步放大收益。
+  "E1_QKVO_DoRA_r8_alpha16.yaml"
+  "E1_QKVO_RSLoRA_r8_alpha16.yaml"
+  "E1_QKVO_plus_G_plus_GK_RSLoRA_r8_alpha8.yaml"  # 对照：同组合在 a=8 的表现
+  "E1_QKVO_plus_G_plus_GK_DORA_r8_alpha8.yaml"    # 对照：同组合在 a=8 的表现（DoRA）
 
-  # --- Confounded Experiments (from original list) ---
-  # Description: Kept for reference, but mix multiple variables.
+  # --- 8. MLP 在更高容量下的复查（控制模块=MLP；只改变 r 或 alpha） ---
+  # 目的：评估容量提升是否“激活” MLP 的贡献。
+  "E1_QKVO_plus_MLP_r16_alpha16.yaml"
+
+  # --- 9. 高容量对照（r=16 相关；用于与 r=8 系列对齐比较） ---
+  # 目的：在更大模型容量下对比基础与模块组合的可迁移性。
+  "E1_QKVO_plus_G_plus_GK_r16_alpha16.yaml"
+  "QKVO_plus_G_r16_a16.yaml"
+  "E1_QKVO_R16_r16_alpha16.yaml"   # 命名看似异常（R16_r16）；请确认是否应为 "E1_QKVO_r16_alpha16.yaml"
+
+  # --- 10. 混杂/保留项（多变量同时变化；仅作参考或 sanity check） ---
   "E1_QKVO_plus_GK_last6_r8_alpha8.yaml"
 )
 
-ROUND_NA2=(
 
-  # --- 实验方向 1：Alpha=2r 缩放策略检验 ---
-  # 动机：发现 alpha=2r（r=8, a=16）有显著提升，验证该策略在其他配置下是否依然有效。
-  "E1_QKVO_plus_G_plus_GK_r8_alpha16.yaml"   # 实验 1.1：最佳模块组合上应用 alpha=2r
-  "E1_QKVO_r16_alpha32.yaml"                # 实验 1.2：高 Rank 下的 alpha=2r
-
-  # --- 实验方向 2：RS-LoRA 与最佳模块组合 ---
-  # 动机：RS-LoRA 是表现最好的变体，+G+GK 是最强模块组合，两者结合能否产生协同增益？
-  "E1_QKVO_plus_G_plus_GK_RSLoRA_r8_alpha8.yaml"  # 实验 2.1
-
-  # --- 实验方向 3：MLP 模块重新评估 ---
-  # 动机：在 r=8, a=8 时 MLP 提升有限，测试在更优 alpha 或更高容量下是否“激活”其价值。
-  "E1_QKVO_plus_MLP_r8_alpha16.yaml"        # 实验 3.1：MLP + alpha=2r
-  "E1_QKVO_plus_MLP_r16_alpha16.yaml"       # 进一步测试高 Rank 下的 MLP 效果
-
-  # --- 附加配置（补充探索） ---
-  "E1_QKVO_plus_G_plus_GK_r16_alpha16.yaml"      # +G+GK 在高 Rank、scaled alpha=16
-  "E1_QKVO_plus_G_plus_GK_DORA_r8_alpha8.yaml"   # DoRA 变体 + 最强模块组合
-)
-
-
-#!/usr/bin/env bash
-
-ROUND_E1=(
-
-  # --- 实验方向 1：精细化 Alpha 调优 & +G+GK 中间点探索 ---
-  # 动机：在 alpha=8–16 之间绘制性能曲线，并探索中间地带 +G+GK 的相互作用关系。
-  "E1_QKVO_r8_alpha12.yaml"                  # 实验 1.1: 探索 alpha=12 (r=8)
-  "E1_QKVO_r8_alpha20.yaml"                  # 实验 1.2: 探索 alpha=20 (r=8)
-  "E1_QKVO_plus_G_plus_GK_r8_alpha12.yaml"   # 实验 1.3: +G+GK @ alpha=12 (r=8)
-
-  # --- 实验方向 2：在“alpha=2r”启发下重新审视 Rank ---
-  # 动机：使用更优 alpha=2r 策略，绘制性能随 Rank 变化的曲线。
-  # "E1_QKVO_r4_alpha8.yaml"    # 实验 2.1: r=4, alpha=8
-  #"E1_QKVO_r8_alpha16.yaml"   # 实验 2.2: r=8, alpha=16
-  "E1_QKVO_r12_alpha24.yaml"  # 实验 2.3: r=12, alpha=24
-  #"E1_QKVO_r16_alpha32.yaml"  # 实验 2.4: r=16, alpha=32
-
-  # --- 实验方向 3：在“冠军配置”上重新评估 LoRA 变体 ---
-  # 动机：验证 DoRA 和 RS-LoRA 在 (r=8, alpha=16) 冠军配置下的表现。
-  "E1_QKVO_DoRA_r8_alpha16.yaml"     # 实验 3.1: use_dora=true
-  "E1_QKVO_RSLoRA_r8_alpha16.yaml"   # 实验 3.2: use_rslora=true
-
-)
 ###############################################################################
 #                           DO NOT EDIT BELOW UNLESS                          #
 #                             YOU KNOW WHAT YOU DO                            #
@@ -205,7 +198,7 @@ trap cleanup INT TERM
 ROUND="${1:-1}"        # first arg kept for backward compat/docs; may be number or 'all'
 TASK="${TASK:-cola}"   # informational only
 SEED="${SEED:-42}"     # informational only (NOT used for training)
-FORCE_SEED=127         # actual seed used in training (HP_SEED). Ignore any seed elsewhere.
+FORCE_SEED=127         # actual seed used in training (HP_SEED). Ignore any seed elsewhere. FORCE_SEED=127 确实能够全局控制随机性，确保所有实验（除了数据集shuffle的固定种子外）都在相同的随机种子下运行。
 
 # Remote workspace expected by train.py
 PEFT_ROOT="/home/user/mzs_h/code/zh-LAT-peft/mamba-peft"
