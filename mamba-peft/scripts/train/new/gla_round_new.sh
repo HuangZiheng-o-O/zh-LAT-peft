@@ -62,7 +62,7 @@ set -euo pipefail
 Round_all=()
 
 # --- E1 Series: QKVO Fine-tuning Experiments ---
-ROUND_E1=(
+ROUND_E0=(
   # Baseline (Centerpiece of comparisons)
   "E1_QKVO_r8_alpha8.yaml"
 
@@ -102,6 +102,26 @@ ROUND_E1=(
   "E1_QKVO_plus_GK_last6_r8_alpha8.yaml"
 )
 
+OUND_E1=(
+
+  # --- 实验方向 1：Alpha=2r 缩放策略检验 ---
+  # 动机：发现 alpha=2r（r=8, a=16）有显著提升，验证该策略在其他配置下是否依然有效。
+  "E1_QKVO_plus_G_plus_GK_r8_alpha16.yaml"   # 实验 1.1：最佳模块组合上应用 alpha=2r
+  "E1_QKVO_r16_alpha32.yaml"                # 实验 1.2：高 Rank 下的 alpha=2r
+
+  # --- 实验方向 2：RS-LoRA 与最佳模块组合 ---
+  # 动机：RS-LoRA 是表现最好的变体，+G+GK 是最强模块组合，两者结合能否产生协同增益？
+  "E1_QKVO_plus_G_plus_GK_RSLoRA_r8_alpha8.yaml"  # 实验 2.1
+
+  # --- 实验方向 3：MLP 模块重新评估 ---
+  # 动机：在 r=8, a=8 时 MLP 提升有限，测试在更优 alpha 或更高容量下是否“激活”其价值。
+  "E1_QKVO_plus_MLP_r8_alpha16.yaml"        # 实验 3.1：MLP + alpha=2r
+  "E1_QKVO_plus_MLP_r16_alpha16.yaml"       # 进一步测试高 Rank 下的 MLP 效果
+
+  # --- 附加配置（补充探索） ---
+  "E1_QKVO_plus_G_plus_GK_r16_alpha16.yaml"      # +G+GK 在高 Rank、scaled alpha=16
+  "E1_QKVO_plus_G_plus_GK_DORA_r8_alpha8.yaml"   # DoRA 变体 + 最强模块组合
+)
 ###############################################################################
 #                           DO NOT EDIT BELOW UNLESS                          #
 #                             YOU KNOW WHAT YOU DO                            #
