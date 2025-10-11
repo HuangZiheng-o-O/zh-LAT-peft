@@ -198,7 +198,7 @@ trap cleanup INT TERM
 ROUND="${1:-1}"        # first arg kept for backward compat/docs; may be number or 'all'
 TASK="${TASK:-cola}"   # informational only
 SEED="${SEED:-42}"     # informational only (NOT used for training)
-FORCE_SEED=127         # actual seed used in training (HP_SEED). Ignore any seed elsewhere. FORCE_SEED=127 确实能够全局控制随机性，确保所有实验（除了数据集shuffle的固定种子外）都在相同的随机种子下运行。
+FORCE_SEED=83         # actual seed used in training (HP_SEED). Ignore any seed elsewhere. FORCE_SEED=127 确实能够全局控制随机性，确保所有实验（除了数据集shuffle的固定种子外）都在相同的随机种子下运行。13 21 42 87 127
 
 # Remote workspace expected by train.py
 PEFT_ROOT="/home/user/mzs_h/code/zh-LAT-peft/mamba-peft"
