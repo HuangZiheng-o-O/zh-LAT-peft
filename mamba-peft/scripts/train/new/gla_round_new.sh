@@ -14,6 +14,8 @@ set -euo pipefail
 #   bash mamba-peft/scripts/train/new/gla_round_new.sh all
 #   bash scripts/train/new/gla_round_new.sh 3 1
 #   bash /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new/gla_round_new.sh E1 all
+#   bash /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new/gla_round_new.sh E2 2
+#   bash /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new/gla_round_new.sh e4 all
 #
 # Optional:
 #   export GPU_IDS="0 1 2 3 4 5 6"   # Explicit GPU mapping; if set, its count must also be 7.
@@ -139,6 +141,55 @@ ROUND_E1=(
   "E1_QKVO_plus_GK_last6_r8_alpha8.yaml"
 )
 
+ROUND_E2=(
+  # --- 0. 基线 (统一对照) ---
+  # 控制变量：固定 r=8, alpha=8, target=O-MLP
+  "E2_OMLP_r8_alpha8.yaml"
+
+  # --- 1. Alpha 扫描 (控制 Rank=8) ---
+  # 目的：绘制 O-MLP 对 alpha 的敏感度曲线。
+  "E2_OMLP_r8_alpha4.yaml"
+  "E2_OMLP_r8_alpha16.yaml"
+  "E2_OMLP_r8_alpha24.yaml"
+
+  # --- 2. Rank 扫描 (控制 Alpha=Rank) ---
+  # 目的：绘制 O-MLP 在 alpha=r 策略下的容量-性能曲线。
+  "E2_OMLP_r4_alpha4.yaml"
+  "E2_OMLP_r6_alpha6.yaml"
+  "E2_OMLP_r16_alpha16.yaml"
+
+  # --- 3. 模块消融 (控制 r=8, a=8) ---
+  # 目的：分解 O-MLP，探究性能增益的核心来源。
+  "E4_OONLY_r8_alpha8.yaml"  # 注意：这是 E4 系列，但用于 E2 的消融对比
+  "E5_MLPONLY_r8_alpha8.yaml"  # 注意：这是 E5 系列，但用于 E2 的消融对比
+
+  # --- 4. 与门控模块的交互作用 (控制 r=8, a=8) ---
+  # 目的：测试 O-MLP 与 G/GK 门控微调的协同效应。
+  "OMLP_plus_G_r8_a8.yaml"
+  "E2_OMLP_plus_GK_r8_alpha8.yaml"
+  "E2_OMLP_plus_G_plus_GK_r8_alpha8.yaml"
+
+  # --- 5. 算法/训练策略变体 (控制 r=8, a=8) ---
+  # 目的：在 O-MLP 基线上评估不同 LoRA 变体和超参。
+  "E2_OMLP_DoRA_r8_alpha8.yaml"
+  "E2_OMLP_RSLoRA_r8_alpha8.yaml"
+  "E2_OMLP_dropout0_r8_alpha8.yaml"
+  "E2_OMLP_lr1e-4_r8_alpha8.yaml"
+
+  # --- 6. 层级定位 (来自您原有的配置，作为补充) ---
+  "E2_OMLP_last6_r8_alpha8.yaml"
+  "E2_OMLP_middle6_r8_alpha8.yaml"
+)
+
+# 可选占位：若后续需要支持 E3/E4/...，在此处定义各自的数组（可为空，脚本会自动跳过空数组）。
+: "${ROUND_E3[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E3=()
+: "${ROUND_E4[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E4=()
+: "${ROUND_E5[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E5=()
+: "${ROUND_E6[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E6=()
+: "${ROUND_E7[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E7=()
+: "${ROUND_E8[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E8=()
+: "${ROUND_E9[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E9=()
+: "${ROUND_E10[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E10=()
 
 ###############################################################################
 #                           DO NOT EDIT BELOW UNLESS                          #
@@ -277,24 +328,68 @@ if (( NUM_GPUS != 7 )); then
   exit 1
 fi
 
-# -------------------------
-# Suite selector (E1 only)
-# -------------------------
-if [[ "${1:-}" =~ ^(E1|e1)$ ]]; then
-  SELECT_SUITE="E1"
-  Round_all=("${ROUND_E1[@]}")   # replace master list with E1 subset
-  shift                          # consume "E1"
-  ROUND="${1:-all}"              # default to 'all' if no more args
+# =========================
+# Suite selector (E1..E10)
+# =========================
+SELECT_SUITE="ALL"
+
+# helper: append one suite array (if exists and non-empty) into Round_all
+append_suite_into_master() {
+  local var="$1"
+  # If array variable exists, and has >0 elements, append
+  if eval "[[ \${#${var}[@]:-0} -gt 0 ]]"; then
+    # shellcheck disable=SC2206
+    local tmp=( $(eval "printf '%q ' \"\${${var}[@]}\"") )
+    # Re-expand quoted words safely
+    # shellcheck disable=SC2128
+    if ((${#tmp[@]} > 0)); then
+      # Re-read as proper array with original spacing preserved
+      # (We already protected words with %q above)
+      # shellcheck disable=SC2034
+      read -r -a tmp <<<"$(eval "printf '%s ' \"\${${var}[@]}\"")"
+      Round_all+=("${tmp[@]}")
+    fi
+  fi
+}
+
+# If first arg is Ex (case-insensitive), select that suite
+if [[ "${1:-}" =~ ^([Ee][0-9]+)$ ]]; then
+  suite="${BASH_REMATCH[1]}"
+  suite="${suite^^}"              # to upper (E1/E2/...)
+  SELECT_SUITE="$suite"
+  shift                            # consume "Ex"
+
+  varname="ROUND_${suite}"
+  if ! eval "[[ \${#${varname}[@]:-0} -gt 0 ]]"; then
+    echo "ERROR: Suite '${suite}' is not defined or empty. Please define ${varname}=() with configs." >&2
+    exit 1
+  fi
+  # Replace master list with the selected suite subset
+  Round_all=()
+  append_suite_into_master "${varname}"
+
+  # Default to 'all' for ROUND if no further args
+  ROUND="${1:-all}"
 else
-  SELECT_SUITE="ALL"
+  # When no suite is specified:
+  # 1) If user already filled Round_all manually (non-empty), keep it.
+  # 2) Otherwise, auto-concatenate all ROUND_E* arrays in numeric order.
+  if (( ${#Round_all[@]} == 0 )); then
+    Round_all=()
+    # Try numeric order E1..E10 (extend as needed)
+    for i in {1..10}; do
+      append_suite_into_master "ROUND_E${i}"
+    done
+    # If still empty, warn
+    if (( ${#Round_all[@]} == 0 )); then
+      echo "ERROR: No configs found. Either populate Round_all=() manually, or pass a suite like 'E1', 'E2', ...," >&2
+      echo "       or define the corresponding ROUND_E* arrays." >&2
+      exit 1
+    fi
+  fi
 fi
 
 # -------- Dynamic round slicing from Round_all --------
-if (( ${#Round_all[@]} == 0 )); then
-  echo "ERROR: Round_all is empty. Please populate the Round_all array or call with 'E1' to use ROUND_E1." >&2
-  exit 1
-fi
-
 # Number of dynamic rounds = ceil(len / NUM_GPUS)
 TOTAL_CFGS="${#Round_all[@]}"
 N_ROUNDS=$(( (TOTAL_CFGS + NUM_GPUS - 1) / NUM_GPUS ))
@@ -397,10 +492,10 @@ run_round () {
 # Build the run queue
 # -------------------------
 if (( $# == 0 )); then
-  if [[ "$ROUND" == "all" ]]; then
+  if [[ "${ROUND:-}" == "all" ]]; then
     for ((r=1;r<=N_ROUNDS;r++)); do RUN_QUEUE+=("$r"); done
   else
-    RUN_QUEUE+=("$ROUND")
+    RUN_QUEUE+=("${ROUND:-1}")
   fi
 else
   for arg in "$@"; do
