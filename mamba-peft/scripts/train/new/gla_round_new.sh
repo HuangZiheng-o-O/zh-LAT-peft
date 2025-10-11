@@ -15,6 +15,7 @@ set -euo pipefail
 #   bash scripts/train/new/gla_round_new.sh 3 1
 #   bash /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new/gla_round_new.sh E1 all
 #   bash /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new/gla_round_new.sh E2 2
+#   bash /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new/gla_round_new.sh E2 all
 #   bash /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new/gla_round_new.sh e4 all
 #
 # Optional:
@@ -57,7 +58,7 @@ set -euo pipefail
 #  E7_GONLY_r4_alpha4.yaml
 #  E7_GONLY_r8_alpha8.yaml
 #  E8_QKVO_G_r8_alpha8.yaml
-#  OMLP_plus_G_r8_a8.yaml
+#  E2_OMLP_plus_G_r8_a8.yaml
 #  QKVO_plus_G_RSLoRA_r8_a8.yaml
 #  QKVO_plus_G_r16_a16.yaml
 #)
@@ -165,7 +166,7 @@ ROUND_E2=(
 
   # --- 4. 与门控模块的交互作用 (控制 r=8, a=8) ---
   # 目的：测试 O-MLP 与 G/GK 门控微调的协同效应。
-  "OMLP_plus_G_r8_a8.yaml"
+  "E2_OMLP_plus_G_r8_a8.yaml"
   "E2_OMLP_plus_GK_r8_alpha8.yaml"
   "E2_OMLP_plus_G_plus_GK_r8_alpha8.yaml"
 
@@ -333,54 +334,38 @@ fi
 # =========================
 SELECT_SUITE="ALL"
 
-# helper: append one suite array (if exists and non-empty) into Round_all
 append_suite_into_master() {
   local var="$1"
-  # If array variable exists, and has >0 elements, append
-  if eval "[[ \${#${var}[@]:-0} -gt 0 ]]"; then
-    # shellcheck disable=SC2206
+  if eval "[[ -v ${var} && \${#${var}[@]} -gt 0 ]]"; then
     local tmp=( $(eval "printf '%q ' \"\${${var}[@]}\"") )
-    # Re-expand quoted words safely
-    # shellcheck disable=SC2128
     if ((${#tmp[@]} > 0)); then
-      # Re-read as proper array with original spacing preserved
-      # (We already protected words with %q above)
-      # shellcheck disable=SC2034
       read -r -a tmp <<<"$(eval "printf '%s ' \"\${${var}[@]}\"")"
       Round_all+=("${tmp[@]}")
     fi
   fi
 }
 
-# If first arg is Ex (case-insensitive), select that suite
 if [[ "${1:-}" =~ ^([Ee][0-9]+)$ ]]; then
   suite="${BASH_REMATCH[1]}"
-  suite="${suite^^}"              # to upper (E1/E2/...)
+  suite="${suite^^}"
   SELECT_SUITE="$suite"
-  shift                            # consume "Ex"
+  shift
 
   varname="ROUND_${suite}"
-  if ! eval "[[ \${#${varname}[@]:-0} -gt 0 ]]"; then
+  if ! eval "[[ -v ${varname} && \${#${varname}[@]} -gt 0 ]]"; then
     echo "ERROR: Suite '${suite}' is not defined or empty. Please define ${varname}=() with configs." >&2
     exit 1
   fi
-  # Replace master list with the selected suite subset
+
   Round_all=()
   append_suite_into_master "${varname}"
-
-  # Default to 'all' for ROUND if no further args
   ROUND="${1:-all}"
 else
-  # When no suite is specified:
-  # 1) If user already filled Round_all manually (non-empty), keep it.
-  # 2) Otherwise, auto-concatenate all ROUND_E* arrays in numeric order.
   if (( ${#Round_all[@]} == 0 )); then
     Round_all=()
-    # Try numeric order E1..E10 (extend as needed)
     for i in {1..10}; do
       append_suite_into_master "ROUND_E${i}"
     done
-    # If still empty, warn
     if (( ${#Round_all[@]} == 0 )); then
       echo "ERROR: No configs found. Either populate Round_all=() manually, or pass a suite like 'E1', 'E2', ...," >&2
       echo "       or define the corresponding ROUND_E* arrays." >&2
@@ -388,7 +373,6 @@ else
     fi
   fi
 fi
-
 # -------- Dynamic round slicing from Round_all --------
 # Number of dynamic rounds = ceil(len / NUM_GPUS)
 TOTAL_CFGS="${#Round_all[@]}"
