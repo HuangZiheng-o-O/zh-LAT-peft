@@ -182,8 +182,93 @@ ROUND_E2=(
   "E2_OMLP_middle6_r8_alpha8.yaml"
 )
 
+ROUND_E3=(
+# ============================
+# ROUND_E3  ——  第一次回复的实验清单（Core + 复核预留位）
+# 设计宗旨：
+#   * 仅新增、且与现有结果不重复；
+#   * 控制变量严格：同一 (r, alpha) 下对比 Base / DoRA / RSLoRA；
+#   * 聚焦“高概率优”的容量窗口（r10, α16/20；r12, α24）与 +GK 的小幅增益验证；
+#   * Checkpoint 建议：~5k / ~7k / ~9k（必要时 ~10–12k）。
+# 备注：
+#   * seed 不在此处控制（由脚本 FORCE_SEED 统一），此数组仅列 YAML 文件名。
+# ============================
+
+  # ---------- A1. 纯 QKVO 的 rank/alpha 插值（r=10） ----------
+  # 目标：在“中高 α”区间 (16/20) 插值 rank=10，并用 DoRA/RSLoRA 做配对对照
+  # 控制：同一 seed、同一 alpha，对比 Base / DoRA / RSLoRA
+
+  "E1_QKVO_r10_alpha16.yaml"         # 基线：QKVO, r=10, α=16
+  "E1_QKVO_DoRA_r10_alpha16.yaml"    # 对照1：加 DoRA（方向-幅值分解）
+  "E1_QKVO_RSLoRA_r10_alpha16.yaml"  # 对照2：加 RSLoRA（稀疏/随机子空间）
+
+  "E1_QKVO_r10_alpha20.yaml"         # 基线：QKVO, r=10, α=20
+  "E1_QKVO_DoRA_r10_alpha20.yaml"    # 对照1：r=10, α=20 + DoRA
+  "E1_QKVO_RSLoRA_r10_alpha20.yaml"  # 对照2：r=10, α=20 + RSLoRA
+
+
+  # ---------- A2. 将 DoRA / RSLoRA 移植到强基线 r12, α24 ----------
+  # 目标：验证 DoRA / RSLoRA 在第二强“纯 QKVO”组合上的稳定增益
+  # 控制：同一 (r, α)；Base 已存在，无需重复，仅补 DoRA/RSLoRA 版本
+
+  "E1_QKVO_DoRA_r12_alpha24.yaml"    # QKVO, r=12, α=24 + DoRA
+  "E1_QKVO_RSLoRA_r12_alpha24.yaml"  # QKVO, r=12, α=24 + RSLoRA
+
+
+  # ---------- A3. 在强配置上验证 +GK 的“增量价值” ----------
+  # 目标：对齐我们发现的 +GK 小幅稳定增益（~0.5%），并考察与 DoRA 的叠加
+  # 控制：同一 (r, α)；对比 “带/不带 DoRA”的 +GK 增量
+
+  "E1_QKVO_plus_GK_DoRA_r8_alpha16.yaml"  # r=8, α=16 +GK +DoRA（你尚未在 α16 上做过该组合）
+  "E1_QKVO_plus_GK_r8_alpha16.yaml"       # r=8, α=16 +GK（无 DoRA，对照其纯增益）
+
+# ============================
+# （新家族/新打点组合，贴合 GLA 结构）
+# 设计宗旨：
+#   * 不与已跑过的 E1/E2 重复，转而探索更细粒度的“打点集合”；
+#   * 每条结构给 Base 与 DoRA 配对（最小而有力的对照）；
+#   * 统一容量：r=8, α=16（你的数据中该档位稳健），减少无关方差；
+#   * 注释清楚标明目标层，便于审计与复现。
+# ============================
+
+  # ---------- E3：Gating-only（仅门控；GLA 特有） ----------
+  # 目标层：g_proj（输出门 W_r）、gk_proj[0/1]（遗忘门 W_α^1 / W_α^2）
+  # 动机：以极少参数直接调控 r_t 与 α_t 的动态，撬动记忆/遗忘机制
+  "E3_GATINGONLY_r8_alpha16.yaml"          # Base：LoRA 仅作用于 {g_proj, gk_proj[0], gk_proj[1]}
+  "E3_GATINGONLY_DoRA_r8_alpha16.yaml"     # 对照：同上 + DoRA
+
+
+  # ---------- E6：QK-only（仅对齐核；不动 V/O/门控/FFN） ----------
+  # 目标层：q_proj、k_proj
+  # 动机：Q/K 决定相似度核；低秩更新改变对齐模式而不改写值通道
+  "E6_QKONLY_r8_alpha16.yaml"              # Base：LoRA 仅作用于 {q_proj, k_proj}
+  "E6_QKONLY_DoRA_r8_alpha16.yaml"         # 对照：同上 + DoRA
+
+
+  # ---------- E7：KV-only（仅值与键；不动 Q/O/门控/FFN） ----------
+  # 目标层：k_proj、v_proj
+  # 动机：更贴近值路由/状态累积的通路，适合长序列/记忆型任务
+  "E7_KVONLY_r8_alpha16.yaml"              # Base：LoRA 仅作用于 {k_proj, v_proj}
+  "E7_KVONLY_DoRA_r8_alpha16.yaml"         # 对照：同上 + DoRA
+
+
+  # ---------- E8：Attn+Gating（QK + 门控；不含 V/O/FFN） ----------
+  # 目标层：q_proj、k_proj、g_proj、gk_proj[0]、gk_proj[1]
+  # 动机：把“对齐核（QK）”与“门控（r_t、α_t）”贯通；参数远少于全 QKVO
+  "E8_QK_plus_GATING_r8_alpha16.yaml"      # Base：LoRA 作用于 {q,k,g,gk0,gk1}
+  "E8_QK_plus_GATING_DoRA_r8_alpha16.yaml" # 对照：同上 + DoRA
+
+
+  # ---------- E9：O + Head（输出端适配；读出为主） ----------
+  # 目标层：o_proj、lm_head
+  # 动机：若任务偏“读出域适配”，仅输出侧的小参数更新或可足够
+  "E9_OplusHEAD_r8_alpha16.yaml"           # Base：LoRA 仅作用于 {o_proj, lm_head}
+  "E9_OplusHEAD_DoRA_r8_alpha16.yaml"      # 对照：同上 + DoRA
+)
+
+
 # 可选占位：若后续需要支持 E3/E4/...，在此处定义各自的数组（可为空，脚本会自动跳过空数组）。
-: "${ROUND_E3[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E3=()
+#: "${ROUND_E3[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E3=()
 : "${ROUND_E4[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E4=()
 : "${ROUND_E5[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E5=()
 : "${ROUND_E6[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E6=()
@@ -250,7 +335,7 @@ trap cleanup INT TERM
 ROUND="${1:-1}"        # first arg kept for backward compat/docs; may be number or 'all'
 TASK="${TASK:-cola}"   # informational only
 SEED="${SEED:-42}"     # informational only (NOT used for training)
-FORCE_SEED=83         # actual seed used in training (HP_SEED). Ignore any seed elsewhere. FORCE_SEED=127 确实能够全局控制随机性，确保所有实验（除了数据集shuffle的固定种子外）都在相同的随机种子下运行。13 21 42 87 127
+FORCE_SEED=127         # actual seed used in training (HP_SEED). Ignore any seed elsewhere. FORCE_SEED=127 确实能够全局控制随机性，确保所有实验（除了数据集shuffle的固定种子外）都在相同的随机种子下运行。13 21 42 87 127
 
 # Remote workspace expected by train.py
 PEFT_ROOT="/home/user/mzs_h/code/zh-LAT-peft/mamba-peft"
