@@ -7,7 +7,7 @@ cd ~/mzs_h/code/zh-LAT-peft/mamba-peft/
 
 python3 analysis_tools/process_and_aggregate.py
 /home/user/mzs_h/output/benchmark/glue/cola_gla/
-/home/user/mzs_h/code/zh-LAT-peft/experiment_result/
+/home/user/mzs_h/output/all_agg_results/experiment_result/
 /home/user/mzs_h/output/benchmark/glue/cola_gla/
 
 This script orchestrates a two-stage pipeline:
@@ -42,7 +42,7 @@ def main():
     parser.add_argument(
         "--output_dir",
         type=str,
-        default="/home/user/mzs_h/code/zh-LAT-peft/experiment_result/",
+        default="/home/user/mzs_h/output/all_agg_results/experiment_result/",
         help="Directory to save the processed experiment folders and the final aggregated report."
     )
     parser.add_argument(

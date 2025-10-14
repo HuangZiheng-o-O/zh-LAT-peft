@@ -275,7 +275,7 @@ def safe_process_experiment(exp_dir: Path, output_dir: Path):
 def main():
     parser = argparse.ArgumentParser(description="Process experiment results in parallel, generate plots and reports.")
     parser.add_argument("--base_dir", type=str, default="/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/weights/benchmark/glue/cola_gla/", help="Base directory containing experiment folders.")
-    parser.add_argument("--output_dir", type=str, default="/home/user/mzs_h/code/zh-LAT-peft/experiment_result/", help="Directory to save the final zip files.")
+    parser.add_argument("--output_dir", type=str, default="/home/user/mzs_h/output/all_agg_results/experiment_result/", help="Directory to save the final zip files.")
     parser.add_argument("--workers", type=int, default=None, help="Number of parallel workers. Defaults to number of CPU cores.")
     args = parser.parse_args()
 
