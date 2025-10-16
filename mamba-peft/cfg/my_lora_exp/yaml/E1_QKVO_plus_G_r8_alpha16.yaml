@@ -1,0 +1,7 @@
+batch_size: 4
+learning_rate: 0.0003
+model: /home/user/mzs_h/model/second-gla-1.3B-100B/gla-1.3B-100B
+no_save: false
+num_epochs: 10
+peft: cfg/my_lora_exp/peft/lora_QKVO_plus_G_r8_alpha16.json
+prec: bf16

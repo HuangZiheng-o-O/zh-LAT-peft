@@ -1,0 +1,16 @@
+{
+  "peft_type": "LORA",
+  "r": 8,
+  "lora_alpha": 16,
+  "lora_dropout": 0.05,
+  "bias": "none",
+  "task_type": "CAUSAL_LM",
+  "use_rslora": true,
+  "target_modules": [
+    "attn.g_proj",
+    "attn.gk_proj.0",
+    "attn.gk_proj.1",
+    "attn.q_proj",
+    "attn.k_proj"
+  ]
+}

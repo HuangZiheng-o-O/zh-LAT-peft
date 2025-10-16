@@ -6,10 +6,10 @@ set -euo pipefail
 # - Read configs from Round_all=() and AUTO-SPLIT into rounds of size == NUM_GPUS
 # - NUM_GPUS is auto-detected; must equal 7 (this host has 7 GPUs). If not 7, exit with an error.
 # - Each round launches up to NUM_GPUS parallel jobs (one per GPU).
-#
+# Found the latest cached dataset configuration 'mrpc' at /home/user/mzs_h/data/hf_cache/nyu-mll___glue/mrpc/0.0.0/bcdcba79d07bc864c1c254ccfcedcce55bcc9a8c (last modified on Sun Sep 14 23:23:58 2025).
 # Usage examples (same as before):
 #   bash scripts/train/new/gla_round_new.sh 1
-#   TASK=rte SEED=127 bash scripts/train/new/gla_round_new.sh 2
+#   SEED=127 bash scripts/train/new/gla_round_new.sh 2
 #   mamba-peft/scripts/train/new/gla_round_new.sh
 #   bash mamba-peft/scripts/train/new/gla_round_new.sh all
 #   bash scripts/train/new/gla_round_new.sh 3 1
@@ -17,10 +17,10 @@ set -euo pipefail
 #   bash /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new/gla_round_new.sh E2 2
 #   bash /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new/gla_round_new.sh E2 all
 #   bash /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new/gla_round_new.sh e4 all
-#
+#   bash /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new/gla_round_new.sh all
 # Optional:
 #   export GPU_IDS="0 1 2 3 4 5 6"   # Explicit GPU mapping; if set, its count must also be 7.
-
+#   bash /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new/gla_tmux_nohup.sh --suite E2 --round all --seed 87 --data glue-tvt_mrpc
 ###############################################################################
 #                               USER CONFIG HERE                              #
 ###############################################################################
@@ -218,8 +218,11 @@ Round_all=()
 #  "E9_OplusHEAD_DoRA_r8_alpha16.yaml"
 #)
 #
+# bash /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new/gla_round_new.sh E2 all
 
-Round_all=(
+
+ROUND_E1=("E1_QKVO_r8_alpha16.yaml")
+ROUND_E2=(
 
   # ======================
   # 0. 统一基线（多锚点）
@@ -365,9 +368,9 @@ Round_all=(
 
 )
 
-
+#: "${ROUND_E1[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E1=()
 # 可选占位：若后续需要支持 E3/E4/...，在此处定义各自的数组（可为空，脚本会自动跳过空数组）。
-#: "${ROUND_E3[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E3=()
+: "${ROUND_E3[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E3=()
 : "${ROUND_E4[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E4=()
 : "${ROUND_E5[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E5=()
 : "${ROUND_E6[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E6=()
@@ -432,9 +435,9 @@ cleanup() {
 trap cleanup INT TERM
 
 ROUND="${1:-1}"        # first arg kept for backward compat/docs; may be number or 'all'
-TASK="${TASK:-cola}"   # informational only
 SEED="${SEED:-42}"     # informational only (NOT used for training)
-FORCE_SEED=83         # actual seed used in training (HP_SEED). Ignore any seed elsewhere. FORCE_SEED=127 确实能够全局控制随机性，确保所有实验（除了数据集shuffle的固定种子外）都在相同的随机种子下运行。13 21 42 87 127
+FORCE_SEED=87         # actual seed used in training (HP_SEED). Ignore any seed elsewhere. FORCE_SEED=127 确实能够全局控制随机性，确保所有实验（除了数据集shuffle的固定种子外）都在相同的随机种子下运行。13 21 42 87 127
+DATA="${DATA:-glue-tvt_cola}"  # injected dataset name (can override via env: DATA=AAA)
 
 # Remote workspace expected by train.py
 PEFT_ROOT="/home/user/mzs_h/code/zh-LAT-peft/mamba-peft"
@@ -597,6 +600,15 @@ get_round_configs() {
   (( ${#SELECT_SET[@]} > 0 ))
 }
 
+# Create a temp YAML with injected data: <DATA>, leaving original YAML intact.
+make_tmp_cfg_with_data() {
+  local src="$1"; local outdir="$2"
+  local out="$outdir/$(basename "$src")"
+  cp "$src" "$out"
+  printf '\n# injected by gla_round_new.sh\ndata: %s\n' "$DATA" >>"$out"
+  printf '%s\n' "$out"
+}
+
 run_round () {
   local r="$1"
 
@@ -628,16 +640,22 @@ run_round () {
   echo "CFG_DIR = $CFG_DIR"
   echo "PEFT_DIR= $PEFT_DIR"
   echo "GPUs    = ${DETECTED_GPUS[*]}"
+  echo "DATA    = ${DATA}"
 
   # Choose GPU per job from detected list
   PIDS=()
   local i
+  # Make a temp dir for this round's YAML copies with injected data
+  local TMP_CFG_DIR
+  TMP_CFG_DIR="$(mktemp -d /tmp/gla_data_XXXXXX)"
   for i in "${!RESOLVED_CFGS[@]}"; do
     local CFG="${RESOLVED_CFGS[$i]}"
     local GPU="${DETECTED_GPUS[$i]}"
-    echo "[GPU ${GPU}] ${CFG}  (HP_SEED=${FORCE_SEED}; ignoring seed in name/YAML)"
+    local CFG_INJ
+    CFG_INJ="$(make_tmp_cfg_with_data "$CFG" "$TMP_CFG_DIR")"
+    echo "[GPU ${GPU}] ${CFG_INJ}  (HP_SEED=${FORCE_SEED}; data=${DATA}; ignoring seed in name/YAML)"
     HP_SEED=${FORCE_SEED} CUDA_VISIBLE_DEVICES="$GPU" \
-      python train.py --cfg "$CFG" --overwrite &
+      python train.py --cfg "$CFG_INJ" --overwrite &
     PIDS+=("$!")
   done
 
@@ -648,11 +666,14 @@ run_round () {
     fi
   done
 
+  # cleanup temp dir
+  rm -rf "$TMP_CFG_DIR" || true
+
   if (( any_failed )); then
     return 1
   fi
 
-  echo "ROUND=${r} TASK=${TASK} SEED=${SEED} finished (all ran with HP_SEED=${FORCE_SEED})."
+  echo "ROUND=${r} finished (all ran with HP_SEED=${FORCE_SEED})."
   return 0
 }
 
