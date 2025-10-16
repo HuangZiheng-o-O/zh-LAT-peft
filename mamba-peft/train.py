@@ -194,7 +194,7 @@ def run_train(
         train_dataset=train_data_module.dataset,
         tokenizer=tokenizer,
         args=MambaTrainingArguments(
-            learning_rate=learning_rate,
+            learning_rate=float(learning_rate),
             max_steps=int(num_epochs * its_per_epoch),
             per_device_train_batch_size=batch_size,
             per_device_eval_batch_size=1,
@@ -228,11 +228,22 @@ def run_train(
     trainer.train(resume_from_checkpoint=resume_from_checkpoint)
 
 
-def get_output_path_for_cfg(cfg_path):
-    # Fixed output root per user request:
-    # /home/user/mzs_h/output/benchmark/glue/cola_gla/<yaml_stem>
-    stem = Path(cfg_path).stem
-    return Path("/home/user/mzs_h/output/benchmark/glue/cola_gla") / stem
+def get_output_path_for_cfg(cfg_path, cfg):
+    """
+    目标：
+      /home/user/mzs_h/output/benchmark/glue/<data>_seed<seed>/<yaml_stem>
+    回退（缺 data/seed 时）：
+      /home/user/mzs_h/output/benchmark/glue/cola_gla/<yaml_stem>
+    """
+    yaml_stem = Path(cfg_path).stem
+    data = cfg.get("data")
+    seed = cfg.get("seed")
+
+    if data and seed is not None:
+        folder = f"{data}_seed{seed}"
+        return Path("/home/user/mzs_h/output/benchmark/glue") / folder / yaml_stem
+    # fallback 与旧逻辑一致
+    return Path("/home/user/mzs_h/output/benchmark/glue/cola_gla") / yaml_stem
 
 
 def main():
@@ -277,7 +288,7 @@ def main():
     if seed_env is not None:
         cfg["seed"] = seed_env
 
-    output_dir = get_output_path_for_cfg(args.cfg)
+    output_dir = get_output_path_for_cfg(args.cfg, cfg)
 
     train_args = {**cfg, **{k: v for k, v in vars(args).items() if v is not None}, "output_dir": str(output_dir)}
     train_args["cfg_path"] = train_args.pop("cfg")
