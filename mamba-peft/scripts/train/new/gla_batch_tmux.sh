@@ -14,6 +14,8 @@ set -euo pipefail
 #
 #   # Custom session name and log dir:
 #   ./gla_batch_tmux.sh --suite E2 --round all --pairs "127:AAA,87:BBB" --name batch_exp --logdir /path/to/logs
+#   # Per-GPU settings:
+#   ./gla_batch_tmux.sh --suite E2 --round all --pairs "127:glue-tvt_mrpc 127:glue-tvt_cola" --gpus "0 1 2 3 5 6" --gpu-plan "3,3,3,3,0,3,3"
 #
 # Requirements: tmux, awk, nohup. Place this script next to gla_round_new.sh.
 
@@ -43,6 +45,8 @@ Flags:
   --pairs    Comma- or space-separated list of seed:data pairs, e.g. "127:AAA,87:BBB"
   --name     Optional tmux session name (auto-generated if omitted)
   --logdir   Where to store logs (default: ./logs next to this script)
+  --gpus     Space- or comma-separated GPU IDs (overrides auto-detect)
+  --gpu-plan Comma/space ints per GPU concurrency (e.g. "3,3,3,3,0,3,3" or single int)
   -h, --help Show this help
 
 Example:
@@ -58,6 +62,8 @@ while [[ $# -gt 0 ]]; do
     --pairs)  PAIRS="$2"; shift 2;;
     --name)   SESSION_NAME="$2"; shift 2;;
     --logdir) LOG_DIR="$2"; shift 2;;
+    --gpus)   export GPU_IDS="$2"; shift 2;;
+    --gpu-plan) export GPU_PLAN="$2"; shift 2;;
     -h|--help) print_help; exit 0;;
     *) echo "Unknown arg: $1" >&2; print_help; exit 2;;
   esac

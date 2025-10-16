@@ -13,6 +13,8 @@ set -euo pipefail
 #   bash /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new/gla_round_new.sh E2 all
 #   # With a custom session name and log directory:
 #   bash /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new/gla_tmux_nohup.sh --suite E2 --round all --seed 127 --data glue-tvt_mrpc --name exp_AAA --logdir /path/to/logs
+#   # Per-GPU settings:
+#   bash /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new/gla_tmux_nohup.sh --suite E2 --round all --data glue-tvt_mrpc --gpus "0 1 2 3 5 6" --gpu-plan "3,3,3,3,0,3,3"
 #
 # Notes:
 # - Requires: tmux, nohup.
@@ -48,6 +50,8 @@ Flags:
   --data     Dataset code/name injected via env DATA=... (default: glue-tvt_cola)
   --name     Optional tmux session name (auto-generated if omitted)
   --logdir   Log directory (default: ./logs next to this wrapper)
+  --gpus     Space- or comma-separated GPU IDs (overrides auto-detect)
+  --gpu-plan Comma/space ints per GPU concurrency (e.g. "3,3,3,3,0,3,3" or single int)
   -h, --help Show this help
 
 Examples:
@@ -65,6 +69,8 @@ while [[ $# -gt 0 ]]; do
     --data)   DATA_VAL="$2"; shift 2;;
     --name)   SESSION_NAME="$2"; shift 2;;
     --logdir) LOG_DIR="$2"; shift 2;;
+    --gpus)   export GPU_IDS="$2"; shift 2;;
+    --gpu-plan) export GPU_PLAN="$2"; shift 2;;
     -h|--help) print_help; exit 0;;
     *) echo "Unknown arg: $1" >&2; print_help; exit 2;;
   esac

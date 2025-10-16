@@ -506,13 +506,52 @@ detect_gpus() {
 detect_gpus
 NUM_GPUS="${#DETECTED_GPUS[@]}"
 
-# Hard requirement: server must expose exactly 7 GPUs.
-if (( NUM_GPUS != 7 )); then
-  echo "ERROR: Expected exactly 7 GPUs on this server, but detected ${NUM_GPUS}." >&2
-  echo " - DETECTED_GPUS = ${DETECTED_GPUS[*]-<none>}" >&2
-  echo "Troubleshooting:" >&2
-  echo "  * If you intend to run on a subset/specific devices, set: export GPU_IDS=\"0 1 2 3 4 5 6\"" >&2
-  echo "  * If CUDA_VISIBLE_DEVICES is set, ensure it lists 7 devices." >&2
+if (( NUM_GPUS < 1 )); then
+  echo "ERROR: No GPUs detected (after considering GPU_IDS/CUDA_VISIBLE_DEVICES)." >&2
+  exit 1
+fi
+
+# -------------------------
+# Per-GPU concurrency plan
+# -------------------------
+# GPU_PLAN: comma/space separated integers per detected GPU, e.g. "3,3,3,3,0,3,3".
+# - If unset: default to 1 slot per detected GPU (previous behavior)
+# - If single integer provided: broadcast to all GPUs
+# - If length matches NUM_GPUS: use as-is
+# - Otherwise: error
+GPU_PLAN_STR="${GPU_PLAN:-}"
+declare -a GPU_PLAN_ARR=()
+if [[ -z "$GPU_PLAN_STR" ]]; then
+  for _ in "${DETECTED_GPUS[@]}"; do GPU_PLAN_ARR+=(1); done
+else
+  # normalize separators to spaces
+  GPU_PLAN_STR="${GPU_PLAN_STR//,/ }"
+  read -r -a GPU_PLAN_ARR <<<"$GPU_PLAN_STR"
+  if (( ${#GPU_PLAN_ARR[@]} == 1 )); then
+    val="${GPU_PLAN_ARR[0]}"; GPU_PLAN_ARR=()
+    for _ in "${DETECTED_GPUS[@]}"; do GPU_PLAN_ARR+=("$val"); done
+  elif (( ${#GPU_PLAN_ARR[@]} != NUM_GPUS )); then
+    echo "ERROR: GPU_PLAN length (${#GPU_PLAN_ARR[@]}) must be 1 or equal to number of detected GPUs (${NUM_GPUS})." >&2
+    echo " - DETECTED_GPUS = ${DETECTED_GPUS[*]}" >&2
+    echo " - GPU_PLAN      = ${GPU_PLAN_STR}" >&2
+    exit 1
+  fi
+fi
+
+# Build GPU_SLOTS by repeating each GPU id according to its concurrency
+declare -a GPU_SLOTS=()
+for i in "${!DETECTED_GPUS[@]}"; do
+  gpu="${DETECTED_GPUS[$i]}"
+  cnt="${GPU_PLAN_ARR[$i]}"
+  # treat non-positive as zero
+  if [[ -z "$cnt" || "$cnt" -le 0 ]]; then cnt=0; fi
+  for ((j=0;j<cnt;j++)); do GPU_SLOTS+=("$gpu"); done
+done
+N_SLOTS="${#GPU_SLOTS[@]}"
+if (( N_SLOTS < 1 )); then
+  echo "ERROR: Effective parallel slots is zero (GPU_PLAN all zeros?)." >&2
+  echo " - DETECTED_GPUS = ${DETECTED_GPUS[*]}" >&2
+  echo " - GPU_PLAN      = ${GPU_PLAN_ARR[*]}" >&2
   exit 1
 fi
 
@@ -561,9 +600,9 @@ else
   fi
 fi
 # -------- Dynamic round slicing from Round_all --------
-# Number of dynamic rounds = ceil(len / NUM_GPUS)
+# Number of dynamic rounds = ceil(len / N_SLOTS)
 TOTAL_CFGS="${#Round_all[@]}"
-N_ROUNDS=$(( (TOTAL_CFGS + NUM_GPUS - 1) / NUM_GPUS ))
+N_ROUNDS=$(( (TOTAL_CFGS + N_SLOTS - 1) / N_SLOTS ))
 
 defined_rounds_str() {
   local out=""
@@ -589,8 +628,8 @@ get_round_configs() {
   if (( r < 1 || r > N_ROUNDS )); then
     return 1
   fi
-  local start=$(( (r-1)*NUM_GPUS ))
-  local end=$(( r*NUM_GPUS ))
+  local start=$(( (r-1)*N_SLOTS ))
+  local end=$(( r*N_SLOTS ))
   if (( end > TOTAL_CFGS )); then end="$TOTAL_CFGS"; fi
   SELECT_SET=()
   local i
@@ -635,11 +674,13 @@ run_round () {
   fi
 
   local num_jobs="${#RESOLVED_CFGS[@]}"
-  echo "=== Starting Round ${r} (${num_jobs} jobs; FORCE_SEED=${FORCE_SEED}; NUM_GPUS=${NUM_GPUS}) ==="
+  echo "=== Starting Round ${r} (${num_jobs} jobs; FORCE_SEED=${FORCE_SEED}; NUM_GPUS=${NUM_GPUS}; N_SLOTS=${N_SLOTS}) ==="
   echo "SUITE   = ${SELECT_SUITE}"
   echo "CFG_DIR = $CFG_DIR"
   echo "PEFT_DIR= $PEFT_DIR"
   echo "GPUs    = ${DETECTED_GPUS[*]}"
+  echo "PLAN    = ${GPU_PLAN_ARR[*]}  (GPU->slots)"
+  echo "SLOTS   = ${GPU_SLOTS[*]}     (flattened)"
   echo "DATA    = ${DATA}"
 
   # Choose GPU per job from detected list
@@ -650,7 +691,9 @@ run_round () {
   TMP_CFG_DIR="$(mktemp -d /tmp/gla_data_XXXXXX)"
   for i in "${!RESOLVED_CFGS[@]}"; do
     local CFG="${RESOLVED_CFGS[$i]}"
-    local GPU="${DETECTED_GPUS[$i]}"
+    # choose slot by index cycling when fewer jobs than slots
+    local slot_index=$(( i % N_SLOTS ))
+    local GPU="${GPU_SLOTS[$slot_index]}"
     local CFG_INJ
     CFG_INJ="$(make_tmp_cfg_with_data "$CFG" "$TMP_CFG_DIR")"
     echo "[GPU ${GPU}] ${CFG_INJ}  (HP_SEED=${FORCE_SEED}; data=${DATA}; ignoring seed in name/YAML)"
