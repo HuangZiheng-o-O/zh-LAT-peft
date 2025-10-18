@@ -143,13 +143,20 @@ for item in "${JOBS[@]}"; do
   cleanup_tmpfiles+=("$tmp_launcher")
 
   echo "[$(date +%F_%T)] START idx=${idx} seed=${seed} data=${data}  -> ${log_file}"
+  job_start_epoch="$(date +%s)"
   # Run the job, teeing output to the log file and stdout.
   (
     cd "$SCRIPT_DIR"
     DATA="$data" bash "$tmp_launcher" "$SUITE" "$ROUND" 2>&1 | tee "$log_file"
   )
   status=$?
-  echo "[$(date +%F_%T)] END   idx=${idx} seed=${seed} data=${data}  status=${status}" | tee -a "$log_file"
+  job_end_epoch="$(date +%s)"
+  job_elapsed=$(( job_end_epoch - job_start_epoch ))
+  job_h=$(( job_elapsed / 3600 ))
+  job_m=$(( (job_elapsed % 3600) / 60 ))
+  job_s=$(( job_elapsed % 60 ))
+  printf '[%s] END   idx=%s seed=%s data=%s  status=%s  elapsed=%02d:%02d:%02d (%ds)\n' \
+    "$(date +%F_%T)" "$idx" "$seed" "$data" "$status" "$job_h" "$job_m" "$job_s" "$job_elapsed" | tee -a "$log_file"
   if [[ $status -ne 0 ]]; then
     echo "Job failed (idx=${idx}). Stopping the batch." | tee -a "$log_file"
     exit $status

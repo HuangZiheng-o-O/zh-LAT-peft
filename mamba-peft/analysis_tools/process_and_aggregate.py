@@ -27,6 +27,7 @@ from pathlib import Path
 # Import the main functions from the other scripts
 import make_cola_figs_raw
 import aggregate_results
+import parse_aggregated_results
 
 def main():
     parser = argparse.ArgumentParser(
@@ -63,10 +64,20 @@ def main():
 
     # --- Stage 2: Aggregating top-1 checkpoint results ---
     print("\n--- Stage 2: Aggregating top-1 checkpoint results ---")
+    aggregated_filename = "all_best_checkpoints_top1.txt"
     aggregate_results.aggregate_specific_text_files(
         target_dir=args.output_dir,
         filename_to_aggregate="best_checkpoints_top1.txt",
-        output_filename="all_best_checkpoints_top1.txt"
+        output_filename=aggregated_filename
+    )
+
+    # --- Stage 3: Parse aggregated results into structured tables ---
+    print("\n--- Stage 3: Parsing aggregated results to CSV and Excel ---")
+    parse_aggregated_results.run_parsing(
+        aggregated_file=str(Path(args.output_dir) / aggregated_filename),
+        output_dir=args.output_dir,
+        excel_filename="top1_checkpoints_summary.xlsx",
+        csv_filename="top1_checkpoints_summary.csv"
     )
 
     print("\n=== Pipeline finished! ===")

@@ -221,8 +221,44 @@ Round_all=()
 # bash /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new/gla_round_new.sh E2 all
 
 
-ROUND_E1=("E1_QKVO_r8_alpha16.yaml")
 ROUND_E2=(
+  "E1_QKVO_r8_alpha16.yaml"
+  "E1_QKVO_r8_alpha12.yaml"
+  "E1_QKVO_r8_alpha20.yaml"
+  "E1_QKVO_r16_alpha32.yaml"
+  "E1_QKVO_DoRA_r8_alpha16.yaml"
+  "E1_QKVO_RSLoRA_r8_alpha16.yaml"
+  "E1_QKVO_DoRA_r12_alpha24.yaml"
+  "E1_QKVO_RSLoRA_r12_alpha24.yaml"
+  "E1_QKVO_plus_G_r8_alpha16.yaml"
+  "E1_QKVO_plus_GK_r8_alpha16.yaml"
+  "E1_QKVO_plus_G_plus_GK_r8_alpha16.yaml"
+  "E1_QKVO_plus_MLP_r8_alpha16.yaml"
+  "E1_QKVO_first6_r8_alpha16.yaml"
+  "E1_QKVO_last6_r8_alpha16.yaml"
+  "E1_QKVO_dropout0_r8_alpha16.yaml"
+  "E1_QKVO_wd0.01_r8_alpha16.yaml"
+  "E2_OMLP_r8_alpha16.yaml"
+)
+ROUND_E3=(
+  # Mixed budget: QKVO r8a16 main, Gates (g/gk) as auxiliaries
+  "E3_QKVO_main_Gates_aux_r8a16_r2a2.yaml"
+  "E3_QKVO_main_Gates_aux_r8a16_r4a4.yaml"
+  "E3_QKVO_main_Gates_aux_r8a16_r4a8.yaml"
+
+  # Mixed budget: add MLP as auxiliary (with/without Gates)
+  "E3_QKVO_main_MLP_aux_r8a16_r4a8.yaml"
+  "E3_QKVO_main_GatesMLP_aux_r8a16_r4a8.yaml"
+
+  # Method variants at fixed mixed Gates r4a4
+  "E3_QKVO_main_Gates_aux_RSLoRA_r8a16_r4a4.yaml"
+  "E3_QKVO_main_Gates_aux_DoRA_r8a16_r4a4.yaml"
+
+  # Diagnostic: add only G vs only GK on top of QKVO r8a16
+  "E3_QKVO_plus_G_only_r4a4.yaml"
+  "E3_QKVO_plus_GK_only_r4a4.yaml"
+)
+ROUND_E1=(
 
   # ======================
   # 0. 统一基线（多锚点）
@@ -682,6 +718,12 @@ run_round () {
   echo "PLAN    = ${GPU_PLAN_ARR[*]}  (GPU->slots)"
   echo "SLOTS   = ${GPU_SLOTS[*]}     (flattened)"
   echo "DATA    = ${DATA}"
+  # Round timing (start)
+  local __round_start_epoch
+  __round_start_epoch="$(date +%s)"
+  local __round_start_iso
+  __round_start_iso="$(date +%F_%T)"
+  echo "[${__round_start_iso}] ROUND=${r} START"
 
   # Choose GPU per job from detected list
   PIDS=()
@@ -711,6 +753,21 @@ run_round () {
 
   # cleanup temp dir
   rm -rf "$TMP_CFG_DIR" || true
+
+  # Round timing (end)
+  local __round_end_epoch
+  __round_end_epoch="$(date +%s)"
+  local __round_end_iso
+  __round_end_iso="$(date +%F_%T)"
+  local __round_elapsed
+  __round_elapsed=$(( __round_end_epoch - __round_start_epoch ))
+  local __round_h
+  local __round_m
+  local __round_s
+  __round_h=$(( __round_elapsed / 3600 ))
+  __round_m=$(( (__round_elapsed % 3600) / 60 ))
+  __round_s=$(( __round_elapsed % 60 ))
+  printf '[%s] ROUND=%s END elapsed=%02d:%02d:%02d (%ds)\n' "${__round_end_iso}" "${r}" "${__round_h}" "${__round_m}" "${__round_s}" "${__round_elapsed}"
 
   if (( any_failed )); then
     return 1

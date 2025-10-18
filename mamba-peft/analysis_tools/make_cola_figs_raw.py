@@ -35,17 +35,35 @@ def load_log_history(json_path: Path) -> pd.DataFrame:
     if not logs:
         raise ValueError("'log_history' is empty or not found in the JSON file.")
     df = pd.DataFrame(logs)
+    # Add all potential metrics to the numeric conversion list
     num_cols = [
         "epoch", "step", "loss", "grad_norm", "learning_rate",
-        "eval_loss", "eval_matthews_correlation", "eval_runtime",
+        "eval_loss", "eval_matthews_correlation", "eval_accuracy", "eval_f1",
+        "eval_spearmanr", "eval_pearson", "eval_runtime",
         "eval_samples_per_second", "eval_steps_per_second"
     ]
     df = coerce_numeric(df, num_cols)
     return df
 
-def split_train_eval(df: pd.DataFrame):
+def get_metric_name(df: pd.DataFrame) -> str:
+    """Finds the name of the evaluation metric column in the DataFrame."""
+    # Metrics where a higher score is better
+    possible_metrics = [
+        "eval_matthews_correlation",
+        "eval_accuracy",
+        "eval_f1",
+        "eval_spearmanr",
+        "eval_pearson",
+    ]
+    for metric in possible_metrics:
+        if metric in df.columns and df[metric].notna().any():
+            return metric
+    # If no primary metric is found, raise a clear error
+    raise KeyError(f"Could not find a valid evaluation metric in the logs. Looked for: {possible_metrics}")
+
+def split_train_eval(df: pd.DataFrame, metric_name: str):
     df_train = df[df["loss"].notna()].copy()
-    df_eval = df[df["eval_matthews_correlation"].notna()].copy().sort_values("step").reset_index(drop=True)
+    df_eval = df[df[metric_name].notna()].copy().sort_values("step").reset_index(drop=True)
     return df_train, df_eval
 
 def ensure_dir(p: Path):
@@ -107,15 +125,16 @@ def plot_learning_rate(df_train: pd.DataFrame, figdir: Path):
     plt.title("Learning Rate Schedule")
     return save_all(figdir, "learning_rate")
 
-def plot_eval_mcc(df_eval: pd.DataFrame, figdir: Path):
+def plot_eval_metric(df_eval: pd.DataFrame, figdir: Path, metric_name: str):
     if df_eval.empty: return None
     d = _sorted_by_step(df_eval)
+    metric_label = metric_name.replace('eval_', '').replace('_', ' ').title()
     plt.figure()
-    plt.plot(d["step"], d["eval_matthews_correlation"], linestyle="-", marker="o", markersize=4)
+    plt.plot(d["step"], d[metric_name], linestyle="-", marker="o", markersize=4)
     plt.xlabel("Step")
-    plt.ylabel("Eval MCC")
-    plt.title("CoLA Eval MCC (raw checkpoints)")
-    return save_all(figdir, "eval_mcc_raw")
+    plt.ylabel(f"Eval {metric_label}")
+    plt.title(f"Eval {metric_label} (raw checkpoints)")
+    return save_all(figdir, f"eval_{metric_name.replace('eval_', '')}_raw")
 
 def plot_eval_loss(df_eval: pd.DataFrame, figdir: Path):
     if df_eval.empty: return None
@@ -124,16 +143,17 @@ def plot_eval_loss(df_eval: pd.DataFrame, figdir: Path):
     plt.plot(d["step"], d["eval_loss"], linestyle="-", marker="o", markersize=4)
     plt.xlabel("Step")
     plt.ylabel("Eval Loss")
-    plt.title("CoLA Eval Loss (raw checkpoints)")
+    plt.title("Eval Loss (raw checkpoints)")
     return save_all(figdir, "eval_loss_raw")
 
-def export_csvs(df: pd.DataFrame, df_eval: pd.DataFrame, out_dir: Path, exp_name: str):
+def export_csvs(df: pd.DataFrame, df_eval: pd.DataFrame, out_dir: Path, exp_name: str, metric_name: str):
     out_dir = Path(out_dir)
     ensure_dir(out_dir)
-    csv_all = out_dir / f"cola_{exp_name}_log_history_raw.csv"
+    csv_all = out_dir / f"{exp_name}_log_history_raw.csv"
     df.to_csv(csv_all, index=False)
-    csv_eval = out_dir / f"cola_{exp_name}_eval_only_raw.csv"
-    cols = ["epoch", "step", "eval_matthews_correlation", "eval_loss", "eval_runtime", "eval_samples_per_second"]
+    csv_eval = out_dir / f"{exp_name}_eval_only_raw.csv"
+    # Dynamically include the metric column
+    cols = ["epoch", "step", metric_name, "eval_loss", "eval_runtime", "eval_samples_per_second"]
     cols = [c for c in cols if c in df_eval.columns]
     df_eval[cols].to_csv(csv_eval, index=False)
     return str(csv_all), str(csv_eval)
@@ -172,25 +192,31 @@ def safe_process_experiment(exp_dir: Path, output_dir: Path):
         ensure_dir(exp_output_dir)
         latest_json = find_latest_checkpoint_json(exp_dir)
         df = load_log_history(latest_json)
-        df_train, df_eval = split_train_eval(df)
+
+        # Dynamically determine the metric and use it
+        metric_name = get_metric_name(df)
+        print(f"  Using metric: {metric_name}")
+
+        df_train, df_eval = split_train_eval(df, metric_name)
         if df_eval.empty:
             raise ValueError("No evaluation data found in logs after splitting.")
 
         plot_training_loss(df_train, exp_output_dir)
         plot_grad_norm(df_train, exp_output_dir)
         plot_learning_rate(df_train, exp_output_dir)
-        plot_eval_mcc(df_eval, exp_output_dir)
+        plot_eval_metric(df_eval, exp_output_dir, metric_name)
         plot_eval_loss(df_eval, exp_output_dir)
-        export_csvs(df, df_eval, exp_output_dir, exp_name)
+        export_csvs(df, df_eval, exp_output_dir, exp_name, metric_name)
 
-        top_3 = df_eval.nlargest(3, 'eval_matthews_correlation')
+        # Find best checkpoints based on the dynamic metric
+        top_3 = df_eval.nlargest(3, metric_name)
         top_1 = top_3.head(1)
 
-        top_3_info = f"Top 3 Checkpoints for {exp_name} (by eval_matthews_correlation):\n\n"
+        top_3_info = f"Top 3 Checkpoints for {exp_name} (by {metric_name}):\n\n"
         for _, row in top_3.iterrows():
             step = int(row['step'])
             checkpoint_path = exp_dir / f"checkpoint-{step}"
-            top_3_info += f"- Score: {row['eval_matthews_correlation']:.6f}\n"
+            top_3_info += f"- Score: {row[metric_name]:.6f}\n"
             top_3_info += f"  Step: {step}\n"
             top_3_info += f"  Path: {checkpoint_path}\n\n"
 
@@ -199,8 +225,8 @@ def safe_process_experiment(exp_dir: Path, output_dir: Path):
             row = top_1.iloc[0]
             step = int(row['step'])
             checkpoint_path = exp_dir / f"checkpoint-{step}"
-            top_1_info = f"Top 1 Checkpoint for {exp_name} (by eval_matthews_correlation):\n\n"
-            top_1_info += f"- Score: {row['eval_matthews_correlation']:.6f}\n"
+            top_1_info = f"Top 1 Checkpoint for {exp_name} (by {metric_name}):\n\n"
+            top_1_info += f"- Score: {row[metric_name]:.6f}\n"
             top_1_info += f"  Step: {step}\n"
             top_1_info += f"  Path: {checkpoint_path}\n\n"
 
@@ -227,11 +253,8 @@ def safe_process_experiment(exp_dir: Path, output_dir: Path):
 def run_processing(base_dir: str, output_dir: str, workers: int = None):
     base_dir = Path(base_dir)
     output_dir = Path(output_dir)
-    if not output_dir.is_dir():
-        raise FileNotFoundError(
-            f"Output directory does not exist: {output_dir}\n"
-            f"Please create this directory manually before running the script."
-        )
+    # Ensure the output directory exists, creating it if necessary.
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     experiment_dirs: List[Path] = sorted([d for d in base_dir.iterdir() if is_valid_experiment_dir(d)])
     if not experiment_dirs:
@@ -256,7 +279,7 @@ def run_processing(base_dir: str, output_dir: str, workers: int = None):
 def main():
     parser = argparse.ArgumentParser(description="Process experiment results, generate plots and reports.")
     parser.add_argument("--base_dir", type=str, default="/home/user/mzs_h/output/benchmark/glue/cola_gla/", help="Base directory containing experiment folders.")
-    parser.add_argument("--output_dir", type=str, default="/home/user/mzs_h/output/all_agg_results/experiment_result/", help="Directory to save the final zip files.")
+    parser.add_argument("--output_dir", type=str, default="/home/user/mzs_h/output/all_agg_results/experiment_result/", help="Directory to save the final reports.")
     parser.add_argument("--workers", type=int, default=None, help="Number of parallel workers. Defaults to number of CPU cores.")
     args = parser.parse_args()
     run_processing(args.base_dir, args.output_dir, args.workers)

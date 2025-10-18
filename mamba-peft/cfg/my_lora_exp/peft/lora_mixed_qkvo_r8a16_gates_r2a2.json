@@ -1,0 +1,21 @@
+{
+  "peft_type": "LORA",
+  "task_type": "CAUSAL_LM",
+  "target_modules": ["q_proj", "k_proj", "v_proj", "o_proj", "g_proj", "gk_proj"],
+  "r": 8,
+  "lora_alpha": 16,
+  "lora_dropout": 0.05,
+  "bias": "none",
+  "fan_in_fan_out": false,
+  "modules_to_save": ["lm_head"],
+  "rank_pattern": {
+    "g_proj": 2,
+    "gk_proj": 2
+  },
+  "alpha_pattern": {
+    "g_proj": 2,
+    "gk_proj": 2
+  }
+}
+
+
