@@ -408,6 +408,17 @@ ROUND_E1=(
 # 可选占位：若后续需要支持 E3/E4/...，在此处定义各自的数组（可为空，脚本会自动跳过空数组）。
 : "${ROUND_E3[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E3=()
 : "${ROUND_E4[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E4=()
+ROUND_E4=(
+  # LoRA baseline (QKVO) and +G+GK
+  "round4_QKVO_r8_a16_seed127.yaml"
+  "round4_QKVO_plus_GK_r8_a16_seed127.yaml"
+  # DoRA variants
+  "round4_DoRA_QKVO_r8_a16_seed127.yaml"
+  "round4_DoRA_QKVO_plus_GK_r8_a16_seed127.yaml"
+  # RSLoRA variants
+  "round4_RSLORA_QKVO_r8_a16_seed127.yaml"
+  "round4_RSLORA_QKVO_plus_GK_r8_a16_seed127.yaml"
+)
 : "${ROUND_E5[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E5=()
 : "${ROUND_E6[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E6=()
 : "${ROUND_E7[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E7=()
