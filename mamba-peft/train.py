@@ -204,7 +204,33 @@ def run_train(
         num_epochs = 1
 
     its_per_epoch = int(np.ceil(len(train_data_module.dataset) / batch_size))
+    # Allow runtime overrides to quickly constrain training length/frequency
+    env = os.environ
     logging_steps = min(50, its_per_epoch)
+    try:
+        if env.get("HP_LOGGING_STEPS"):
+            logging_steps = int(env.get("HP_LOGGING_STEPS"))
+    except Exception:
+        pass
+    total_steps = int(num_epochs * its_per_epoch)
+    try:
+        if env.get("HP_MAX_STEPS"):
+            total_steps = int(env.get("HP_MAX_STEPS"))
+    except Exception:
+        pass
+    # Eval/save frequency overrides
+    eval_steps_override = None
+    save_steps_override = None
+    try:
+        if env.get("HP_EVAL_STEPS"):
+            eval_steps_override = int(env.get("HP_EVAL_STEPS"))
+    except Exception:
+        pass
+    try:
+        if env.get("HP_SAVE_STEPS"):
+            save_steps_override = int(env.get("HP_SAVE_STEPS"))
+    except Exception:
+        pass
 
     os.environ["WANDB_NAME"] = str(output_dir).replace("weights/", "")
 
@@ -215,7 +241,7 @@ def run_train(
         tokenizer=tokenizer,
         args=MambaTrainingArguments(
             learning_rate=float(learning_rate),
-            max_steps=int(num_epochs * its_per_epoch),
+            max_steps=total_steps,
             per_device_train_batch_size=batch_size,
             per_device_eval_batch_size=1,
             gradient_accumulation_steps=gradient_accumulation_steps,
@@ -231,8 +257,8 @@ def run_train(
             },
             save_strategy="steps" if not no_save else "no",
             evaluation_strategy="steps" if not skip_eval else "no",
-            save_steps=int(eval_epochs * its_per_epoch),
-            eval_steps=int(eval_epochs * its_per_epoch),
+            save_steps=(save_steps_override if save_steps_override is not None else int(eval_epochs * its_per_epoch)),
+            eval_steps=(eval_steps_override if eval_steps_override is not None else int(eval_epochs * its_per_epoch)),
             dataloader_drop_last=True,
             report_to="none",
             # report_to="wandb",
