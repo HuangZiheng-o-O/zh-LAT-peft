@@ -5,7 +5,7 @@
   "lora_dropout": 0.05,
   "bias": "none",
   "task_type": "CAUSAL_LM",
-  "use_dora": true,
+  "use_loraga": true,
   "target_modules": [
     "attn.q_proj",
     "attn.k_proj",

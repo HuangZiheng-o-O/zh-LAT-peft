@@ -37,7 +37,7 @@ LOG_DIR="/home/user/mzs_h/log"
 print_help() {
   cat <<'EOF'
 Usage:
-  gla_batch_tmux.sh --suite <E1|E2|...> --round <N|all> --pairs "SEED:DATA[,SEED:DATA ...]" [--name <session>] [--logdir <dir>]
+  gla_batch_tmux.sh --suite <E1|E2|...> --round <N|all> --pairs "SEED:DATA[,SEED:DATA ...]" [--name <session>] [--logdir <dir>] [--pissa-fast]
 
 Flags:
   --suite    Suite passed to launcher (default: E2)
@@ -47,7 +47,8 @@ Flags:
   --logdir   Where to store logs (default: ./logs next to this script)
   --gpus     Space- or comma-separated GPU IDs (overrides auto-detect)
   --gpu-plan Comma/space ints per GPU concurrency (e.g. "3,3,3,3,0,3,3" or single int)
-  -h, --help Show this help
+  --pissa-fast Enable fast PiSSA init (maps init_lora_weights=pissa -> pissa_niter_4 when present)
+  -h, --help   Show this help
 
 Example:
   ./gla_batch_tmux.sh --suite E2 --round all --pairs "127:AAA,87:BBB"
@@ -55,6 +56,7 @@ EOF
 }
 
 # Parse args
+PISSA_FAST=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --suite)  SUITE="$2"; shift 2;;
@@ -64,6 +66,7 @@ while [[ $# -gt 0 ]]; do
     --logdir) LOG_DIR="$2"; shift 2;;
     --gpus)   export GPU_IDS="$2"; shift 2;;
     --gpu-plan) export GPU_PLAN="$2"; shift 2;;
+    --pissa-fast) PISSA_FAST=1; shift 1;;
     -h|--help) print_help; exit 0;;
     *) echo "Unknown arg: $1" >&2; print_help; exit 2;;
   esac
@@ -108,6 +111,10 @@ HDR
   printf 'SUITE=%q\n' "$SUITE"
   printf 'ROUND=%q\n' "$ROUND"
   printf 'LOG_DIR=%q\n' "$LOG_DIR"
+  # Capture GPU env into the runner so tmux sessions get the right values even if tmux server env differs
+  printf 'GPU_IDS=%q\n' "${GPU_IDS:-}"
+  printf 'GPU_PLAN=%q\n' "${GPU_PLAN:-}"
+  printf 'PISSA_FAST=%q\n' "${PISSA_FAST:-0}"
 
   echo 'mkdir -p "$LOG_DIR"'
 
@@ -147,7 +154,9 @@ for item in "${JOBS[@]}"; do
   # Run the job, teeing output to the log file and stdout.
   (
     cd "$SCRIPT_DIR"
-    DATA="$data" bash "$tmp_launcher" "$SUITE" "$ROUND" 2>&1 | tee "$log_file"
+    GPU_IDS="$GPU_IDS" GPU_PLAN="$GPU_PLAN" DATA="$data" \
+      HP_PISSA_FAST="$PISSA_FAST" \
+      bash "$tmp_launcher" "$SUITE" "$ROUND" 2>&1 | tee "$log_file"
   )
   status=$?
   job_end_epoch="$(date +%s)"

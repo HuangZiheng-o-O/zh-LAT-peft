@@ -12,6 +12,7 @@ from pathlib import Path
 import torch
 import argparse
 import numpy as np
+from torch.utils.data import DataLoader
 
 import yaml
 from mamba_ssm_peft import get_mamba_peft_model, get_trainable_parameters_ratio, load_mamba, load_tokenizer, print_trainable_parameter_names
@@ -20,6 +21,7 @@ from mamba_ssm_peft.utils.hf import load_gla, load_gla_tokenizer
 from mamba_ssm_peft.utils.decoder import create_decoder
 from dataset import load_dataset
 from trainer.mamba_trainer import MambaTrainer, MambaTrainingArguments
+from trainer.loraga_local import maybe_apply_loraga_ga_init
 
 
 def _lock_share(name):
@@ -130,6 +132,9 @@ def run_train(
             r_env = os.environ.get("HP_PEFT_R")
             alpha_env = os.environ.get("HP_PEFT_ALPHA")
             drop_env = os.environ.get("HP_PEFT_DROPOUT")
+            init_env = os.environ.get("HP_INIT")
+            # Optional fast PiSSA: only upgrade when JSON explicitly requests PiSSA
+            fast_pissa_env = os.environ.get("HP_PISSA_FAST")
             if r_env is not None:
                 try:
                     peft_json["r"] = int(r_env)
@@ -145,6 +150,18 @@ def run_train(
                     peft_json["lora_dropout"] = float(drop_env)
                 except Exception:
                     pass
+            if init_env:
+                # e.g., "pissa" or "pissa_niter_4"
+                peft_json["init_lora_weights"] = init_env
+            else:
+                # If HP_PISSA_FAST is set, and config uses PiSSA, switch to fast SVD init
+                try:
+                    if fast_pissa_env and str(fast_pissa_env).lower() not in ("0", "false", "no", "off"): 
+                        init_val = peft_json.get("init_lora_weights", None)
+                        if isinstance(init_val, str) and init_val.lower() == "pissa":
+                            peft_json["init_lora_weights"] = "pissa_niter_4"
+                except Exception:
+                    pass
             peft_cfg = LoraConfig(**peft_json)
             model = get_peft_model(model, peft_cfg)
         else:
@@ -158,6 +175,9 @@ def run_train(
     print("Loaded model")
 
     train_data_module = load_dataset(data, tokenizer, "train", return_module=True)
+
+    # Optional LoRA-GA initialization (module-only, stable-scaling & layerwise supported)
+    maybe_apply_loraga_ga_init(model, train_data_module, peft, debug=debug)
 
     Path(output_dir).mkdir(parents=True, exist_ok=True)
 

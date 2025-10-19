@@ -223,22 +223,22 @@ Round_all=()
 
 ROUND_E2=(
   "E1_QKVO_r8_alpha16.yaml"
-  "E1_QKVO_r8_alpha12.yaml"
-  "E1_QKVO_r8_alpha20.yaml"
-  "E1_QKVO_r16_alpha32.yaml"
-  "E1_QKVO_DoRA_r8_alpha16.yaml"
-  "E1_QKVO_RSLoRA_r8_alpha16.yaml"
-  "E1_QKVO_DoRA_r12_alpha24.yaml"
-  "E1_QKVO_RSLoRA_r12_alpha24.yaml"
-  "E1_QKVO_plus_G_r8_alpha16.yaml"
-  "E1_QKVO_plus_GK_r8_alpha16.yaml"
-  "E1_QKVO_plus_G_plus_GK_r8_alpha16.yaml"
-  "E1_QKVO_plus_MLP_r8_alpha16.yaml"
-  "E1_QKVO_first6_r8_alpha16.yaml"
-  "E1_QKVO_last6_r8_alpha16.yaml"
-  "E1_QKVO_dropout0_r8_alpha16.yaml"
-  "E1_QKVO_wd0.01_r8_alpha16.yaml"
-  "E2_OMLP_r8_alpha16.yaml"
+#  "E1_QKVO_r8_alpha12.yaml"
+#  "E1_QKVO_r8_alpha20.yaml"
+#  "E1_QKVO_r16_alpha32.yaml"
+#  "E1_QKVO_DoRA_r8_alpha16.yaml"
+#  "E1_QKVO_RSLoRA_r8_alpha16.yaml"
+#  "E1_QKVO_DoRA_r12_alpha24.yaml"
+#  "E1_QKVO_RSLoRA_r12_alpha24.yaml"
+#  "E1_QKVO_plus_G_r8_alpha16.yaml"
+#  "E1_QKVO_plus_GK_r8_alpha16.yaml"
+#  "E1_QKVO_plus_G_plus_GK_r8_alpha16.yaml"
+#  "E1_QKVO_plus_MLP_r8_alpha16.yaml"
+#  "E1_QKVO_first6_r8_alpha16.yaml"
+#  "E1_QKVO_last6_r8_alpha16.yaml"
+#  "E1_QKVO_dropout0_r8_alpha16.yaml"
+#  "E1_QKVO_wd0.01_r8_alpha16.yaml"
+#  "E2_OMLP_r8_alpha16.yaml"
 )
 ROUND_E3=(
   # Mixed budget: QKVO r8a16 main, Gates (g/gk) as auxiliaries
@@ -410,14 +410,21 @@ ROUND_E1=(
 : "${ROUND_E4[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E4=()
 ROUND_E4=(
   # LoRA baseline (QKVO) and +G+GK
-  "round4_QKVO_r8_a16_seed127.yaml"
-  "round4_QKVO_plus_GK_r8_a16_seed127.yaml"
+  "round4_QKVO_r8_a16.yaml"
+  "round4_QKVO_plus_GK_r8_a16.yaml"
   # DoRA variants
-  "round4_DoRA_QKVO_r8_a16_seed127.yaml"
-  "round4_DoRA_QKVO_plus_GK_r8_a16_seed127.yaml"
+  "round4_DoRA_QKVO_r8_a16.yaml"
+  "round4_DoRA_QKVO_plus_GK_r8_a16.yaml"
   # RSLoRA variants
-  "round4_RSLORA_QKVO_r8_a16_seed127.yaml"
-  "round4_RSLORA_QKVO_plus_GK_r8_a16_seed127.yaml"
+  "round4_RSLORA_QKVO_r8_a16.yaml"
+  "round4_RSLORA_QKVO_plus_GK_r8_a16.yaml"
+  # PiSSA variants
+  "round4_PISSA_QKVO_r8_a16.yaml"
+  "round4_PISSA_QKVO_plus_GK_r8_a16.yaml"
+  # LoRA-GA variants
+  "round4_LORAGA_QKVO_r8_a16.yaml"
+  "round4_LORAGA_QKVO_plus_GK_r8_a16.yaml"
+
 )
 : "${ROUND_E5[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E5=()
 : "${ROUND_E6[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E6=()

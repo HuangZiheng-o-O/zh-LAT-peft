@@ -1,3 +1,102 @@
+## GLA batch launcher usage (gla_round_new.sh)
+
+This launcher runs seedless YAML configs in batches, auto-slicing by available GPU slots, and injects a global seed per job. It works for baseline LoRA and the new variants (DoRA, RSLoRA, PiSSA, LoRA‑GA, Delta‑LoRA).
+
+### Quick start
+
+- Run an entire suite (e.g., E4):
+  - `bash mamba-peft/scripts/train/new/gla_round_new.sh E4 all`
+- Run a specific dynamic round number within a suite (after auto-slicing):
+  - `bash mamba-peft/scripts/train/new/gla_round_new.sh E4 2`
+
+### Config sources
+
+- YAML directory: `cfg/my_lora_exp/yaml/`
+- PEFT JSON directory: `cfg/my_lora_exp/peft/`
+- The suite arrays in `gla_round_new.sh` (e.g., `ROUND_E4=(...)`) list seedless YAML filenames. You can add/remove YAMLs there to control what runs.
+
+### GPU selection and concurrency
+
+- Auto-detects GPUs; requires at least 1 GPU.
+- To run on specific devices:
+  - `export GPU_IDS="0 1 2"` or `export CUDA_VISIBLE_DEVICES=0,1,2`
+- Per-GPU concurrency (slots) via `GPU_PLAN`:
+  - Single value (broadcast): `export GPU_PLAN=2` (each detected GPU runs 2 jobs)
+  - Per-GPU list: `export GPU_PLAN="2,1,1"`
+
+### Dataset selection (task)
+
+- Script-level (YAML injection):
+  - `export DATA=glue-tvt_cola` (default) or e.g. `export DATA=glue-tvt_rte`
+  - The launcher appends `data: <DATA>` to a temporary copy of each YAML (the original YAML is untouched).
+- Train-time override (highest precedence):
+  - `export HP_DATA=rte` (becomes `glue-tvt_rte`) or `export HP_DATA=glue-tvt_rte`
+
+### Global seed
+
+- The launcher injects a single global seed (`HP_SEED`) per job. It ignores any seed in filenames/YAML.
+- To change the seed, edit `FORCE_SEED=` inside `gla_round_new.sh`.
+
+### Output paths
+
+- Each job writes to: `/home/user/mzs_h/output/benchmark/glue/cola_gla/<yaml_stem>`
+- Reruns from the launcher use `--overwrite` (start from step 0). To resume from checkpoints, run `python train.py --cfg ... --resume` manually.
+
+### Variant controls (LoRA family)
+
+- Baseline LoRA: use standard PEFT JSON (no extra keys).
+- DoRA: use JSON with `"use_dora": true`.
+- RSLoRA: use JSON with `"use_rslora": true`.
+- PiSSA initialization:
+  - Set in JSON `"init_lora_weights": "pissa"` (full SVD) or `"pissa_niter_4"` (fast SVD, seconds-level init).
+  - Strongly recommended: `"lora_dropout": 0.0` for PiSSA (authors advise no dropout).
+  - Global override (all jobs): `export HP_INIT=pissa` (or `pissa_niter_4`).
+- LoRA‑GA (first-step gradient-approx init):
+  - Enable per JSON with `"use_loraga": true`.
+  - Local GA enhancer (module-only, no coupling): `trainer/loraga_local.py` supports:
+    - Single‑pass or layerwise per‑layer gradient capture (env: `HP_LORAGA_LAYERWISE=1` for layerwise)
+    - Stable scaling heuristic (env: `HP_LORAGA_STABLE_C`, default 1.0)
+    - Batching controls (env: `HP_LORAGA_BATCH_SIZE`, `HP_LORAGA_STEPS`)
+  - This only runs when `use_loraga: true` and never affects other variants.
+- Delta‑LoRA (periodic merge of Δ(BA) to W):
+  - Enable per JSON with `"delta_lora_every": <steps>` (e.g., 2000). 0 or missing disables it.
+
+Notes:
+- PiSSA and LoRA‑GA are both initialization strategies; avoid enabling both for the same job unless you intend LoRA‑GA to overwrite the PiSSA init.
+- Delta‑LoRA will zero A/B after each merge; don’t enable it if you need to export a persistent LoRA adapter.
+
+### Per-job hyperparameter overrides (env)
+
+- Supported in `train.py` (highest precedence over YAML):
+  - `HP_BATCH_SIZE` (int) → `batch_size`
+  - `HP_LR` (float) → `learning_rate`
+  - `HP_EPOCHS` (int) → `num_epochs`
+  - `HP_PREC` (string: `bf16|fp16|fp32`) → `prec`
+  - `HP_SEED` (int) → global seed (set by launcher per job)
+- PEFT overrides (GLA path):
+  - `HP_PEFT_R` (int) → `r`
+  - `HP_PEFT_ALPHA` (int) → `lora_alpha`
+  - `HP_PEFT_DROPOUT` (float) → `lora_dropout`
+  - `HP_INIT` (string) → `init_lora_weights` (e.g., `pissa`)
+
+### Examples
+
+- Run E4 full with PiSSA globally:
+  - `export HP_INIT=pissa`
+  - `bash mamba-peft/scripts/train/new/gla_round_new.sh E4 all`
+
+- Run E4 second dynamic round on 2 GPUs with two slots each:
+  - `export GPU_IDS="0 1"`
+  - `export GPU_PLAN=2`
+  - `bash mamba-peft/scripts/train/new/gla_round_new.sh E4 2`
+
+- Single job (manual):
+  - `CUDA_VISIBLE_DEVICES=0 python mamba-peft/train.py --cfg cfg/my_lora_exp/yaml/round4_QKVO_r8_a16.yaml --overwrite`
+
+### Caches and mirrors (pre-set by launcher)
+
+- The launcher sets HF caches to `/home/user/mzs_h/data/hf_cache` and uses `https://hf-mirror.com`.
+
 <!-- Update timestamp: 2025-10-16 21:44:30 -->
 
 # GLA Batch Run Manual — Per‑GPU Concurrency Update

@@ -2,9 +2,9 @@
   "peft_type": "LORA",
   "task_type": "CAUSAL_LM",
   "target_modules": [
-    "q_proj", "k_proj", "v_proj", "o_proj",
-    "g_proj", "gk_proj",
-    "gate_proj", "up_proj", "down_proj"
+    "attn.q_proj", "attn.k_proj", "attn.v_proj", "attn.o_proj",
+    "attn.g_proj", "attn.gk_proj.0", "attn.gk_proj.1",
+    "mlp.gate_proj", "mlp.up_proj", "mlp.down_proj"
   ],
   "r": 8,
   "lora_alpha": 16,
@@ -13,19 +13,22 @@
   "fan_in_fan_out": false,
   "modules_to_save": ["lm_head"],
   "rank_pattern": {
-    "g_proj": 4,
-    "gk_proj": 4,
-    "gate_proj": 4,
-    "up_proj": 4,
-    "down_proj": 4
+    "attn.g_proj": 4,
+    "attn.gk_proj.0": 4,
+    "attn.gk_proj.1": 4,
+    "mlp.gate_proj": 4,
+    "mlp.up_proj": 4,
+    "mlp.down_proj": 4
   },
   "alpha_pattern": {
-    "g_proj": 8,
-    "gk_proj": 8,
-    "gate_proj": 8,
-    "up_proj": 8,
-    "down_proj": 8
+    "attn.g_proj": 8,
+    "attn.gk_proj.0": 8,
+    "attn.gk_proj.1": 8,
+    "mlp.gate_proj": 8,
+    "mlp.up_proj": 8,
+    "mlp.down_proj": 8
   }
 }
+
 
 

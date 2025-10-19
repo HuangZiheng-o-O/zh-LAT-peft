@@ -7,9 +7,8 @@ from pathlib import Path
 # 脚本配置区域 (Script Configuration Area)
 # ======================================================================================
 
-# 1. 定义文件输出的基础路径
-# 请确保此路径正确指向您的 `my_lora_exp` 目录
-BASE_PATH = "/Users/huangziheng/PycharmProjects/code/zh-LAT-peft/mamba-peft/cfg/my_lora_exp"
+# 1. 定义文件输出的基础路径（相对于仓库根，兼容本地与服务器）
+BASE_PATH = str((Path(__file__).resolve().parents[2] / "cfg" / "my_lora_exp").resolve())
 PEFT_PATH = os.path.join(BASE_PATH, "peft")
 YAML_PATH = os.path.join(BASE_PATH, "yaml")
 

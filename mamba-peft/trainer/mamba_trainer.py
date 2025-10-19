@@ -114,6 +114,10 @@ class MambaTrainer(Trainer):
         self.train_loss_early_stop(self.control, lm_loss)
 
         return lm_loss
+
+    def optimizer_step(self, *args, **kwargs):
+        super().optimizer_step(*args, **kwargs)
+        # Delta-LoRA removed: no periodic merge
     
     @torch.no_grad()
     def prediction_step(
