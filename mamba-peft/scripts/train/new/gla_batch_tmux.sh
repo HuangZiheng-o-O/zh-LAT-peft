@@ -182,9 +182,11 @@ echo "==> tmux session  : $SESSION_NAME"
 echo "==> master log    : $MASTER_LOG"
 echo "==> suite/round   : $SUITE / $ROUND"
 echo "==> jobs (--pairs): $PAIRS_NORM"
+echo "==> command       : $0 $*"
+echo "==> env (GPU_IDS/GPU_PLAN): GPU_IDS='${GPU_IDS:-}' GPU_PLAN='${GPU_PLAN:-}'"
 echo ""
 
-CMD="bash \"$RUNNER\" | tee -a \"$MASTER_LOG\""
+CMD="start_iso=\$(date +%F_%T); echo \"[\$start_iso] BATCH_CMD: $0 $*\" | tee -a \"$MASTER_LOG\"; bash \"$RUNNER\" | tee -a \"$MASTER_LOG\""
 
 echo "Starting batch in new tmux session. Your terminal will be attached."
 echo "To detach (and leave it running), press: Ctrl-b d"

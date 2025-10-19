@@ -103,7 +103,7 @@ echo "==> data        : $DATA_VAL"
 echo ""
 
 # Start in tmux with nohup; export DATA so that the minimal-patched launcher can inject dataset.
-CMD="cd \"$SCRIPT_DIR\"; \nstart_epoch=\$(date +%s); start_iso=\$(date +%F_%T); echo \"[\$start_iso] SESSION=$SESSION_NAME START\" | tee -a \"$LOG_FILE\"; \nDATA=\"$DATA_VAL\" bash \"$TMP_LAUNCHER\" \"$SUITE\" \"$ROUND\" 2>&1 | tee -a \"$LOG_FILE\"; \nend_epoch=\$(date +%s); end_iso=\$(date +%F_%T); elapsed=\$(( end_epoch - start_epoch )); h=\$(( elapsed / 3600 )); m=\$(( (elapsed % 3600) / 60 )); s=\$(( elapsed % 60 )); printf '[%s] SESSION=%s END elapsed=%02d:%02d:%02d (%ds)\n' \"$end_iso\" \"$SESSION_NAME\" \"$h\" \"$m\" \"$s\" \"$elapsed\" | tee -a \"$LOG_FILE\""
+CMD="cd \"$SCRIPT_DIR\"; \nstart_epoch=\$(date +%s); start_iso=\$(date +%F_%T); echo \"[\$start_iso] SESSION_CMD: $0 $*\" | tee -a \"$LOG_FILE\"; echo \"[\$start_iso] SESSION=$SESSION_NAME START\" | tee -a \"$LOG_FILE\"; \nDATA=\"$DATA_VAL\" bash \"$TMP_LAUNCHER\" \"$SUITE\" \"$ROUND\" 2>&1 | tee -a \"$LOG_FILE\"; \nend_epoch=\$(date +%s); end_iso=\$(date +%F_%T); elapsed=\$(( end_epoch - start_epoch )); h=\$(( elapsed / 3600  )); m=\$(( (elapsed % 3600) / 60 )); s=\$(( elapsed % 60 )); printf '[%s] SESSION=%s END elapsed=%02d:%02d:%02d (%ds)\n' \"$end_iso\" \"$SESSION_NAME\" \"$h\" \"$m\" \"$s\" \"$elapsed\" | tee -a \"$LOG_FILE\""
 if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
   echo "Session already exists: $SESSION_NAME" >&2
   exit 3

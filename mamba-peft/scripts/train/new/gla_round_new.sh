@@ -223,22 +223,27 @@ Round_all=()
 
 ROUND_E2=(
   "E1_QKVO_r8_alpha16.yaml"
-#  "E1_QKVO_r8_alpha12.yaml"
-#  "E1_QKVO_r8_alpha20.yaml"
-#  "E1_QKVO_r16_alpha32.yaml"
-#  "E1_QKVO_DoRA_r8_alpha16.yaml"
-#  "E1_QKVO_RSLoRA_r8_alpha16.yaml"
-#  "E1_QKVO_DoRA_r12_alpha24.yaml"
-#  "E1_QKVO_RSLoRA_r12_alpha24.yaml"
-#  "E1_QKVO_plus_G_r8_alpha16.yaml"
-#  "E1_QKVO_plus_GK_r8_alpha16.yaml"
-#  "E1_QKVO_plus_G_plus_GK_r8_alpha16.yaml"
-#  "E1_QKVO_plus_MLP_r8_alpha16.yaml"
-#  "E1_QKVO_first6_r8_alpha16.yaml"
-#  "E1_QKVO_last6_r8_alpha16.yaml"
-#  "E1_QKVO_dropout0_r8_alpha16.yaml"
-#  "E1_QKVO_wd0.01_r8_alpha16.yaml"
-#  "E2_OMLP_r8_alpha16.yaml"
+  "E1_QKVO_r8_alpha12.yaml"
+  "E1_QKVO_r8_alpha20.yaml"
+  "E1_QKVO_r16_alpha32.yaml"
+  "E1_QKVO_DoRA_r8_alpha16.yaml"
+
+  "E1_QKVO_RSLoRA_r8_alpha16.yaml"
+  "E1_QKVO_DoRA_r12_alpha24.yaml"
+  "E1_QKVO_RSLoRA_r12_alpha24.yaml"
+  "E1_QKVO_plus_G_r8_alpha16.yaml"
+  "E1_QKVO_plus_GK_r8_alpha16.yaml"
+
+  "E1_QKVO_plus_G_plus_GK_r8_alpha16.yaml"
+  "E1_QKVO_plus_MLP_r8_alpha16.yaml"
+  "E1_QKVO_first6_r8_alpha16.yaml"
+  "E1_QKVO_last6_r8_alpha16.yaml"
+  "E1_QKVO_dropout0_r8_alpha16.yaml"
+
+  "E1_QKVO_wd0.01_r8_alpha16.yaml"
+  "E2_OMLP_r8_alpha16.yaml"
+
+
 )
 ROUND_E3=(
   # Mixed budget: QKVO r8a16 main, Gates (g/gk) as auxiliaries
@@ -511,6 +516,30 @@ export NCCL_IB_DISABLE=1
 export WANDB_MODE=disabled
 export WANDB_DISABLED=true
 rm -rf ~/.config/wandb ~/.triton ~/.cache/torch_extensions || true
+
+# ---- Echo invocation & key env overrides (for reproducible logs) ----
+echo "CMD: $0 $*"
+echo "ENV_OVERRIDES:"
+for _k in \
+  GPU_IDS \
+  GPU_PLAN \
+  CUDA_VISIBLE_DEVICES \
+  DATA \
+  FORCE_SEED \
+  SEED \
+  HP_DATA HP_BATCH_SIZE HP_LR HP_EPOCHS HP_PREC HP_SEED \
+  HP_PEFT_R HP_PEFT_ALPHA HP_PEFT_DROPOUT HP_INIT HP_PISSA_FAST \
+  HP_MAX_STEPS HP_EVAL_STEPS HP_SAVE_STEPS HP_LOGGING_STEPS \
+  HP_LORAGA_BATCH_SIZE HP_LORAGA_STEPS HP_LORAGA_LAYERWISE HP_LORAGA_STABLE_C
+do
+  v="${!_k-}"
+  if [[ -n "${v:-}" ]]; then
+    echo "  ${_k}=${v}"
+  fi
+done
+if command -v env >/dev/null 2>&1; then
+  echo "HP_* (all):"; env | grep -E '^HP_' | sort || true
+fi
 
 # ---------------------------------------------------------------------------
 # Paths: split root and subdirs (YAML & JSON)
