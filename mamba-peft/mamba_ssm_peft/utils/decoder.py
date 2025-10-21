@@ -4,7 +4,39 @@ from abc import ABC, abstractmethod
 import torch
 from typing import Any
 
-from transformers import BeamSearchScorer, LogitsProcessorList, MinLengthLogitsProcessor, MaxLengthCriteria, StoppingCriteriaList
+# Robust imports for Transformers 4.5x API variations
+try:
+    from transformers import (
+        BeamSearchScorer,
+        LogitsProcessorList,
+        MinLengthLogitsProcessor,
+        MaxLengthCriteria,
+        StoppingCriteriaList,
+    )
+except Exception:
+    try:
+        # Some symbols moved under transformers.generation.*
+        from transformers.generation import (
+            BeamSearchScorer,  # may exist here
+            LogitsProcessorList,
+        )
+    except Exception:
+        BeamSearchScorer = None
+        try:
+            from transformers.generation import LogitsProcessorList  # type: ignore
+        except Exception:
+            LogitsProcessorList = None  # will raise later if used
+    try:
+        from transformers.generation.logits_process import MinLengthLogitsProcessor  # type: ignore
+    except Exception:
+        pass
+    try:
+        from transformers.generation.stopping_criteria import (  # type: ignore
+            MaxLengthCriteria,
+            StoppingCriteriaList,
+        )
+    except Exception:
+        pass
 import torch
 
 from mamba_ssm_peft.utils.beam_search import mamba_beam_search
@@ -23,7 +55,9 @@ class MambaDecoderBase(ABC):
         if self.random_generator is None:
             if self.seed is not None:
                 device = next(iter(model.parameters())).device
-                self.random_generator = torch.Decoder(device).manual_seed(self.seed)
+                g = torch.Generator(device=device)
+                g.manual_seed(self.seed)
+                self.random_generator = g
 
         return self.random_generator
 
@@ -79,6 +113,14 @@ class MambaBeamSearchDecoder(MambaDecoderBase):
         device = input_ids.device
 
         # instantiate beam scorer
+        if BeamSearchScorer is None:
+            # Try lazy import from submodule if not resolved above
+            try:
+                from transformers.generation.beam_search import BeamSearchScorer as _BSS  # type: ignore
+                BeamSearchScorer = _BSS
+            except Exception as e:
+                raise ImportError("BeamSearchScorer is not available in this transformers version") from e
+
         beam_scorer = BeamSearchScorer(
             batch_size=1,
             num_beams=self.num_beams,

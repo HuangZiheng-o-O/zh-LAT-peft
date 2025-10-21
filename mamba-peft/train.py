@@ -1,4 +1,19 @@
 
+import sys
+from pathlib import Path
+# --- ensure local 'fla' submodule is importable when running from mamba-peft/ ---
+try:
+    import fla  # noqa: F401
+except Exception:
+    try:
+        repo_root = Path(__file__).resolve().parents[1]  # .../zh-LAT-peft
+        fla_symlink = repo_root / "fla"
+        if fla_symlink.exists():
+            sys.path.insert(0, str(repo_root))
+            import fla  # noqa: F401
+    except Exception:
+        pass
+
 import json
 import os
 import os

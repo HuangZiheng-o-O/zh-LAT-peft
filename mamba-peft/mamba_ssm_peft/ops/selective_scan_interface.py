@@ -13,7 +13,15 @@ except ImportError:
     causal_conv1d_fn = None
     causal_conv1d_cuda = None
 
-import selective_scan_cuda
+# Prefer package-local CUDA ext; gracefully fall back to torch implementation if unavailable
+try:
+    from . import selective_scan_cuda  # packaged extension (built alongside this module)
+except Exception:
+    try:
+        import selective_scan_cuda  # top-level (site-packages) if available
+    except Exception:
+        # CPU/torch fallback to keep training runnable without the compiled extension
+        from . import selective_scan_torch as selective_scan_cuda
 
 
 class SelectiveScanFn(torch.autograd.Function):

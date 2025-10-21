@@ -1,0 +1,2 @@
+export HF_ENDPOINT=https://hf-mirror.com
+hf download fla-hub/gla-1.3B-100B --local-dir /home/user/mzs_h/model/
