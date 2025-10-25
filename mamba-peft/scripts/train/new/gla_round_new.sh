@@ -263,8 +263,7 @@ ROUND_E3=(
   "E3_QKVO_plus_G_only_r4a4.yaml"
   "E3_QKVO_plus_GK_only_r4a4.yaml"
 )
-ROUND_E1=(
-
+ROUND_E1=( #66个
   # ======================
   # 0. 统一基线（多锚点）
   # ======================
@@ -350,17 +349,17 @@ ROUND_E1=(
   "E1_QKVO_lr5e-5_r8_alpha16.yaml"
   "E1_QKVO_lr2e-4_r8_alpha16.yaml"
   "E1_QKVO_loradrop0.05_r8_alpha16.yaml"
-  # "E1_QKVO_loradrop0.1_r8_alpha16.yaml"        # （一般可删除：与 0.05 高度重叠时可并线）
+   "E1_QKVO_loradrop0.1_r8_alpha16.yaml"        # （一般可删除：与 0.05 高度重叠时可并线）
   "E1_QKVO_wd0.01_r8_alpha16.yaml"
   # "E1_QKVO_plus_G_plus_GK_lr1e-4_r8_alpha16.yaml"  # （推荐删除：策略×模块交互先收敛结构主干）
 
   # ============================================
   # 6. 高容量探针（集中于此）
   # ============================================
-  # "E1_QKVO_r16_alpha24.yaml"                   # （一般可删除：r16 先固定 α=32 作上限探针）
+   "E1_QKVO_r16_alpha24.yaml"                   # （一般可删除：r16 先固定 α=32 作上限探针）
   "E1_QKVO_r16_alpha32.yaml"
-  # "E1_QKVO_DoRA_r16_alpha32.yaml"              # （一般可删除：高容量先确认是否必要，再做方法对照）
-  # "E1_QKVO_RSLoRA_r16_alpha32.yaml"            # （一般可删除：同上）
+   "E1_QKVO_DoRA_r16_alpha32.yaml"              # （一般可删除：高容量先确认是否必要，再做方法对照）
+   "E1_QKVO_RSLoRA_r16_alpha32.yaml"            # （一般可删除：同上）
 
   # ==========================================================
   # 7. O-MLP 家族（与主干对齐）
