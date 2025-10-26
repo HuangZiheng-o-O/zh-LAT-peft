@@ -3,9 +3,8 @@ from typing import Tuple, Optional
 
 import torch
 
-from mamba_ssm_peft import get_mamba_peft_model
+from mamba_ssm_peft import get_mamba_peft_model, load_mamba, load_tokenizer
 from mamba_ssm_peft.peft.sd_lora import SdLoraModel
-from mamba_ssm_peft import load_mamba, load_tokenizer
 
 
 def _dtype_from_prec(prec: str):

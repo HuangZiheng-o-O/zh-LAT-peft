@@ -524,6 +524,7 @@ for _k in \
   GPU_PLAN \
   CUDA_VISIBLE_DEVICES \
   DATA \
+  NUM_DATA_WORKERS \
   FORCE_SEED \
   SEED \
   HP_DATA HP_BATCH_SIZE HP_LR HP_EPOCHS HP_PREC HP_SEED \
@@ -727,6 +728,10 @@ make_tmp_cfg_with_data() {
   local out="$outdir/$(basename "$src")"
   cp "$src" "$out"
   printf '\n# injected by gla_round_new.sh\ndata: %s\n' "$DATA" >>"$out"
+  # Highest priority num_data_workers injection (default 8 if unset)
+  local ndw
+  ndw="${NUM_DATA_WORKERS:-8}"
+  printf 'num_data_workers: %s\n' "$ndw" >>"$out"
   printf '%s\n' "$out"
 }
 

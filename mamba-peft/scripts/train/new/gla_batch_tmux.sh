@@ -200,7 +200,7 @@ echo ""
 echo "tmux session '$SESSION_NAME' has finished or been detached."
 echo "To re-attach: tmux attach -t \"$SESSION_NAME\""
 echo "Master log is at: $MASTER_LOG"
-
+echo "tail -n 50 $MASTER_LOG"
 
 # Runner will clean up its temp launchers at exit; we can also clean the runner script when session ends.
 tmux send-keys -t "$SESSION_NAME" "trap 'rm -f \"$RUNNER\"' EXIT" C-m >/dev/null 2>&1 || true
