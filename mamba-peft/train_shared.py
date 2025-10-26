@@ -67,6 +67,9 @@ def build_and_run_trainer(
         train_data_module.dataset = torch.utils.data.Subset(train_data_module.dataset, range(8))
         val_data_module.dataset = torch.utils.data.Subset(val_data_module.dataset, range(2))
 
+    # Prefer non-reentrant checkpointing to avoid 'inputs have no grad' issues with frozen LoRA bases
+    _gc_kwargs = {"use_reentrant": False} if gradient_checkpointing else None
+
     trainer = MambaTrainer(
         model=model,
         train_dataset=train_data_module.dataset,
@@ -78,6 +81,7 @@ def build_and_run_trainer(
             per_device_eval_batch_size=1,
             gradient_accumulation_steps=gradient_accumulation_steps,
             gradient_checkpointing=gradient_checkpointing,
+            gradient_checkpointing_kwargs=_gc_kwargs,
             optim=cfg.get("optim", "adamw_torch"),
             output_dir=output_dir,
             logging_steps=logging_steps,
