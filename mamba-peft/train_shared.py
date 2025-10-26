@@ -37,6 +37,8 @@ def build_and_run_trainer(
     val_data: Optional[str],
     val_data_split: str,
     debug: bool,
+    gradient_checkpointing: bool = False,
+    logits_to_keep: int | None = None,
 ):
     print_trainable_parameter_names(model)
     print("Loaded model")
@@ -75,6 +77,7 @@ def build_and_run_trainer(
             per_device_train_batch_size=batch_size,
             per_device_eval_batch_size=1,
             gradient_accumulation_steps=gradient_accumulation_steps,
+            gradient_checkpointing=gradient_checkpointing,
             optim=cfg.get("optim", "adamw_torch"),
             output_dir=output_dir,
             logging_steps=logging_steps,
@@ -84,6 +87,7 @@ def build_and_run_trainer(
             info={
                 "trainable_params": get_trainable_parameters_ratio(model),
                 "cfg_path": cfg_path,
+                "logits_to_keep": logits_to_keep,
             },
             save_strategy="steps" if not no_save else "no",
             evaluation_strategy="steps" if not skip_eval else "no",

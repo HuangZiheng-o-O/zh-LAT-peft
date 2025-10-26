@@ -524,6 +524,8 @@ for _k in \
   GPU_PLAN \
   CUDA_VISIBLE_DEVICES \
   DATA \
+  GRADIENT_CHECKPOINTING \
+  LOGITS_TO_KEEP \
   NUM_DATA_WORKERS \
   FORCE_SEED \
   SEED \
@@ -732,6 +734,18 @@ make_tmp_cfg_with_data() {
   local ndw
   ndw="${NUM_DATA_WORKERS:-8}"
   printf 'num_data_workers: %s\n' "$ndw" >>"$out"
+  # Optional gradient checkpointing (enable only when explicitly set truthy)
+  if [[ -n "${GRADIENT_CHECKPOINTING:-}" ]]; then
+    case "${GRADIENT_CHECKPOINTING,,}" in
+      1|true|yes|on)
+        printf 'gradient_checkpointing: true\n' >>"$out"
+        ;;
+    esac
+  fi
+  # Optional logits_to_keep (only if provided)
+  if [[ -n "${LOGITS_TO_KEEP:-}" ]]; then
+    printf 'logits_to_keep: %s\n' "$LOGITS_TO_KEEP" >>"$out"
+  fi
   printf '%s\n' "$out"
 }
 
