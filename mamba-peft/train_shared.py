@@ -1,0 +1,105 @@
+from pathlib import Path
+from typing import Optional, Dict
+
+import numpy as np
+import torch
+import yaml
+
+from trainer.mamba_trainer import MambaTrainer, MambaTrainingArguments
+from dataset import load_dataset
+from mamba_ssm_peft import get_trainable_parameters_ratio, print_trainable_parameter_names
+from mamba_ssm_peft.utils.decoder import create_decoder
+
+
+def build_and_run_trainer(
+    *,
+    model,
+    tokenizer,
+    output_dir: str,
+    cfg: Dict,
+    cfg_path: str,
+    learning_rate: float,
+    total_steps: int,
+    logging_steps: int,
+    gradient_accumulation_steps: int,
+    num_data_workers: int,
+    batch_size: int,
+    eval_epochs: int,
+    skip_eval: bool,
+    no_save: bool,
+    eval_steps_override: Optional[int],
+    save_steps_override: Optional[int],
+    eval_gen: Optional[Dict],
+    resume_from_checkpoint: bool,
+    min_eval_metric_after_epoch,
+    seed: int,
+    data: str,
+    val_data: Optional[str],
+    val_data_split: str,
+    debug: bool,
+):
+    print_trainable_parameter_names(model)
+    print("Loaded model")
+
+    train_data_module = load_dataset(data, tokenizer, "train", return_module=True)
+
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    with open(Path(output_dir) / "cfg.yaml", "w") as f:
+        yaml.dump(cfg, f)
+
+    if eval_gen is not None:
+        eval_generator = create_decoder(tokenizer, **eval_gen)
+    else:
+        eval_generator = None
+
+    val_data_module = load_dataset(
+        val_data if val_data is not None else data,
+        tokenizer,
+        val_data_split,
+        mode="lm" if eval_gen is None else "gen",
+        return_module=True,
+    )
+    compute_metrics = val_data_module.dataset.compute_metrics
+
+    if debug:
+        train_data_module.dataset = torch.utils.data.Subset(train_data_module.dataset, range(8))
+        val_data_module.dataset = torch.utils.data.Subset(val_data_module.dataset, range(2))
+
+    trainer = MambaTrainer(
+        model=model,
+        train_dataset=train_data_module.dataset,
+        tokenizer=tokenizer,
+        args=MambaTrainingArguments(
+            learning_rate=float(learning_rate),
+            max_steps=total_steps,
+            per_device_train_batch_size=batch_size,
+            per_device_eval_batch_size=1,
+            gradient_accumulation_steps=gradient_accumulation_steps,
+            optim=cfg.get("optim", "adamw_torch"),
+            output_dir=output_dir,
+            logging_steps=logging_steps,
+            dataloader_num_workers=num_data_workers,
+            dataloader_prefetch_factor=2,
+            eval_accumulation_steps=128,
+            info={
+                "trainable_params": get_trainable_parameters_ratio(model),
+                "cfg_path": cfg_path,
+            },
+            save_strategy="steps" if not no_save else "no",
+            evaluation_strategy="steps" if not skip_eval else "no",
+            save_steps=(save_steps_override if save_steps_override is not None else int(eval_epochs * np.ceil(len(train_data_module.dataset) / batch_size))),
+            eval_steps=(eval_steps_override if eval_steps_override is not None else int(eval_epochs * np.ceil(len(train_data_module.dataset) / batch_size))),
+            dataloader_drop_last=True,
+            report_to="none",
+            seed=seed,
+        ),
+        compute_metrics=compute_metrics,
+        data_collator=train_data_module.data_collator,
+        eval_dataset=val_data_module.dataset,
+        eval_generator=eval_generator,
+        min_eval_metric_after_epoch=min_eval_metric_after_epoch,
+    )
+
+    trainer.train(resume_from_checkpoint=resume_from_checkpoint)
+
+
