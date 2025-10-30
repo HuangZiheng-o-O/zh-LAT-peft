@@ -374,7 +374,7 @@ ROUND_E4=(
 : "${ROUND_E8[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E8=()
 : "${ROUND_E9[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E9=()
 : "${ROUND_E10[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E10=()
-ROUND_E4=(
+ROUND_E10=(
   "E1_QKVO_r8_alpha16.yaml"
   "E2_OMLP_r8_alpha16.yaml"
 )
