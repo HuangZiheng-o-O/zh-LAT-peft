@@ -265,7 +265,7 @@ ROUND_E3=(
 )
 
 
-ROUND_E1 = ( #52
+ROUND_E1=( #52
     # 0. Baselines (multi-anchors)
     "E1_QKVO_r8_alpha8.yaml"
     "E1_QKVO_r8_alpha12.yaml"
