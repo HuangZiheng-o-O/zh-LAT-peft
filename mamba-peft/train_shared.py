@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 from typing import Optional, Dict
 
 import numpy as np
@@ -70,6 +71,10 @@ def build_and_run_trainer(
     # Prefer non-reentrant checkpointing to avoid 'inputs have no grad' issues with frozen LoRA bases
     _gc_kwargs = {"use_reentrant": False} if gradient_checkpointing else None
 
+    # Env-only switch (no YAML needed): SAVE_OPTIMIZER_STATE=1|true|yes|on to enable saving optimizer/scheduler/rng
+    _sos_env = str(os.environ.get("SAVE_OPTIMIZER_STATE", "")).lower()
+    _save_optimizer_state = _sos_env in ("1", "true", "yes", "on")
+
     trainer = MambaTrainer(
         model=model,
         train_dataset=train_data_module.dataset,
@@ -93,6 +98,7 @@ def build_and_run_trainer(
                 "cfg_path": cfg_path,
                 "logits_to_keep": logits_to_keep,
             },
+            save_optimizer_state=_save_optimizer_state,
             save_strategy="steps" if not no_save else "no",
             evaluation_strategy="steps" if not skip_eval else "no",
             save_steps=(save_steps_override if save_steps_override is not None else int(eval_epochs * np.ceil(len(train_data_module.dataset) / batch_size))),

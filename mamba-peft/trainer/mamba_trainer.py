@@ -29,8 +29,9 @@ from trainer.trainer_utils import BadEvalEarlyStop, MambaEvalPrediction, TrainLo
 class MambaTrainingArguments(TrainingArguments):
     info: Dict[str, Any] = field(default=None)
     save_full_model: bool = False
-    # Control whether to save optimizer state (optimizer.pt) and scheduler state during checkpointing
-    save_optimizer_state: bool = True
+    # Control whether to save optimizer state (optimizer.pt), scheduler state and rng_state during checkpointing
+    # Default False to minimize disk usage unless explicitly enabled
+    save_optimizer_state: bool = False
 
 
 class MambaTrainer(Trainer):
@@ -182,6 +183,17 @@ class MambaTrainer(Trainer):
         except Exception:
             pass
         return super()._save_optimizer_and_scheduler(output_dir)
+
+    # Also guard RNG state saving with the same switch, so rng_state.pth is skipped together
+    def _save_rng_state(self, output_dir: str):
+        if not getattr(self.args, "save_optimizer_state", True):
+            try:
+                os.makedirs(output_dir, exist_ok=True)
+            except Exception:
+                pass
+            # Skip writing rng_state.pth
+            return
+        return super()._save_rng_state(output_dir)
     
     def load_model(self, path):
         self.model = load_mamba(path)["model"]
