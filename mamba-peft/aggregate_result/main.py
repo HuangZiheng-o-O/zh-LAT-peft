@@ -32,6 +32,18 @@ def resolve_dataset_filter(s: Optional[str]) -> Optional[str]:
     return t if t else None
 
 
+def _run(exp_dir: Path, norm_ds: str, out_dir: Path):
+    try:
+        rep = aggregate_experiment(exp_dir, norm_ds, out_dir)
+        return {"ok": True, "exp": exp_dir.name, "out": str(out_dir)}
+    except Exception as e:
+        return {"ok": False, "exp": exp_dir.name, "error": str(e)}
+
+
+def run_task(t):
+    return _run(*t)
+
+
 def main():
     args = parse_args()
     base_dir = Path(args.base_dir)
@@ -60,15 +72,8 @@ def main():
         for exp in exp_dirs:
             tasks.append((exp, norm, out_dir / exp.name))
 
-    def _run(exp_dir: Path, norm_ds: str, out_dir: Path):
-        try:
-            rep = aggregate_experiment(exp_dir, norm_ds, out_dir)
-            return {"ok": True, "exp": exp_dir.name, "out": str(out_dir)}
-        except Exception as e:
-            return {"ok": False, "exp": exp_dir.name, "error": str(e)}
-
     with ProcessPoolExecutor(max_workers=args.workers) as ex:
-        results = list(ex.map(lambda t: _run(*t), tasks))
+        results = list(ex.map(run_task, tasks))
 
     ok, bad = 0, 0
     for r in results:
