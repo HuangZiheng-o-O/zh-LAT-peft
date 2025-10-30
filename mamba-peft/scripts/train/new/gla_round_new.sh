@@ -263,60 +263,34 @@ ROUND_E3=(
   "E3_QKVO_plus_G_only_r4a4.yaml"
   "E3_QKVO_plus_GK_only_r4a4.yaml"
 )
-ROUND_E1=( #66个
+
+ROUND_E1=( # 57个
   # ======================
   # 0. 统一基线（多锚点）
   # ======================
-  "E1_QKVO_r8_alpha16.yaml"
   "E1_QKVO_r8_alpha8.yaml"
-  "E1_QKVO_r10_alpha16.yaml"
-  "E2_OMLP_r8_alpha16.yaml"
-
-  # =====================================================
-  # 1. QKVO 容量主干
-  # =====================================================
-
-  # 1.1 r=8 的 α 扫描
   "E1_QKVO_r8_alpha12.yaml"
   "E1_QKVO_r8_alpha16.yaml"
   "E1_QKVO_r8_alpha20.yaml"
-  # "E1_QKVO_r8_alpha24.yaml"                     # （推荐删除：高α边界信号稀疏，ROI偏低，先保 r8@{12,16,20}）
-
-  # 1.2 等比扩展 α=2r
   "E1_QKVO_r4_alpha8.yaml"
-  "E1_QKVO_r6_alpha12.yaml"                     # （一般可删除：与 r4/r8/r10/r12 的跨度价值重叠度高）
-  "E1_QKVO_r8_alpha16.yaml"
   "E1_QKVO_r10_alpha20.yaml"
-#  "E1_QKVO_r12_alpha24.yaml"
+
 
   # 1.3 方法在锚点上的横评
-  "E1_QKVO_DoRA_r8_alpha16.yaml"
-  "E1_QKVO_RSLoRA_r8_alpha16.yaml"
-  # "E1_QKVO_DoRA_r10_alpha20.yaml"              # （一般可删除：已有人群在 r10@α=16 做方法对照，α=2r 版本可延后）
-  # "E1_QKVO_RSLoRA_r10_alpha20.yaml"            # （一般可删除：同上）
-  "E1_QKVO_DoRA_r12_alpha24.yaml"
-  "E1_QKVO_RSLoRA_r12_alpha24.yaml"
-  # "E1_QKVO_DoRA_r8_alpha8.yaml"                # （推荐删除：低α下方法差异小且质量偏低，先让容量主干收敛）
-  # "E1_QKVO_RSLoRA_r8_alpha8.yaml"              # （推荐删除：同上）
+  #结果没有表现统计学意义 删除了
+#  "E1_QKVO_DoRA_r8_alpha16.yaml"
+#  "E1_QKVO_RSLoRA_r8_alpha16.yaml"
+
 
   # ==========================================
   # 2. 模块消融（统一容量：r=8；α多点）
   # ==========================================
-   "E1_QKVO_plus_G_r8_alpha8.yaml"              # （一般可删除：G 主看 a=16；a=8 的价值由 +G+GK@a=8 代表）
-  # "E1_QKVO_plus_G_r8_alpha12.yaml"             # （一般可删除：与 a=16 结论高度一致时可并线）
+  "E1_QKVO_plus_G_r8_alpha8.yaml"
   "E1_QKVO_plus_G_r8_alpha16.yaml"
-  # "E1_QKVO_plus_G_r8_alpha20.yaml"             # （一般可删除：先聚焦 a=16 主干）
-
-   "E1_QKVO_plus_GK_r8_alpha8.yaml"             # （一般可删除：GK 在低α不稳，优先看 a=16）
-  # "E1_QKVO_plus_GK_r8_alpha12.yaml"            # （一般可删除）
+  "E1_QKVO_plus_GK_r8_alpha8.yaml"
   "E1_QKVO_plus_GK_r8_alpha16.yaml"
-  # "E1_QKVO_plus_GK_r8_alpha20.yaml"            # （一般可删除）
-
   "E1_QKVO_plus_G_plus_GK_r8_alpha8.yaml"
-  # "E1_QKVO_plus_G_plus_GK_r8_alpha12.yaml"     # （推荐删除：与 a=8/a=16 重叠，收敛信号稀薄）
   "E1_QKVO_plus_G_plus_GK_r8_alpha16.yaml"
-  # "E1_QKVO_plus_G_plus_GK_r8_alpha20.yaml"     # （一般可删除）
-
   "E1_QKVO_plus_MLP_r8_alpha16.yaml"
   "E1_QKVO_plus_G_plus_GK_plus_MLP_r8_alpha16.yaml"
 
@@ -329,8 +303,6 @@ ROUND_E1=( #66个
   "E1_QKVO_plus_GK_RSLoRA_r8_alpha16.yaml"
   "E1_QKVO_plus_G_plus_GK_DoRA_r8_alpha16.yaml"
   "E1_QKVO_plus_G_plus_GK_RSLoRA_r8_alpha16.yaml"
-  # "E1_QKVO_plus_G_DoRA_r10_alpha16.yaml"       # （一般可删除：容量不变跨r复验可留到跨数据集阶段）
-  # "E1_QKVO_plus_GK_DoRA_r10_alpha16.yaml"      # （一般可删除：同上）
 
   # ==============================================
   # 4. 层级定位（证明性，统一 α=16）
@@ -339,25 +311,22 @@ ROUND_E1=( #66个
   "E1_QKVO_last6_r8_alpha16.yaml"
   "E2_OMLP_last6_r8_alpha16.yaml"
   "E2_OMLP_middle6_r8_alpha16.yaml"
-  # "E1_QKVO_plus_GK_last6_r8_alpha16.yaml"      # （推荐删除：层位×模块的交互先避免混杂）
+
 
   # ====================================================
   # 5. 训练策略（与结构解耦）
   # ====================================================
   "E1_QKVO_dropout0_r8_alpha16.yaml"
-  # "E1_QKVO_lr1e-4_r8_alpha16.yaml"             # （推荐删除：当前小集显著拉胯；跨数据集再开专轮更合适）
   "E1_QKVO_lr5e-5_r8_alpha16.yaml"
   "E1_QKVO_lr2e-4_r8_alpha16.yaml"
   "E1_QKVO_loradrop0.05_r8_alpha16.yaml"
-   "E1_QKVO_loradrop0.1_r8_alpha16.yaml"        # （一般可删除：与 0.05 高度重叠时可并线）
   "E1_QKVO_wd0.01_r8_alpha16.yaml"
-  # "E1_QKVO_plus_G_plus_GK_lr1e-4_r8_alpha16.yaml"  # （推荐删除：策略×模块交互先收敛结构主干）
 
   # ============================================
   # 6. 高容量探针（集中于此）
   # ============================================
    "E1_QKVO_r16_alpha24.yaml"                   # （一般可删除：r16 先固定 α=32 作上限探针）
-  "E1_QKVO_r16_alpha32.yaml"
+   "E1_QKVO_r16_alpha32.yaml"
    "E1_QKVO_DoRA_r16_alpha32.yaml"              # （一般可删除：高容量先确认是否必要，再做方法对照）
    "E1_QKVO_RSLoRA_r16_alpha32.yaml"            # （一般可删除：同上）
 
@@ -436,6 +405,10 @@ ROUND_E4=(
 : "${ROUND_E8[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E8=()
 : "${ROUND_E9[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E9=()
 : "${ROUND_E10[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E10=()
+ROUND_E4=(
+  "E1_QKVO_r8_alpha16.yaml"
+  "E2_OMLP_r8_alpha16.yaml"
+)
 
 ###############################################################################
 #                           DO NOT EDIT BELOW UNLESS                          #
@@ -727,7 +700,21 @@ get_round_configs() {
 # Create a temp YAML with injected data: <DATA>, leaving original YAML intact.
 make_tmp_cfg_with_data() {
   local src="$1"; local outdir="$2"
-  local out="$outdir/$(basename "$src")"
+  local base
+  base="$(basename "$src")"
+  local name ext
+  name="${base%.*}"; ext="${base##*.}"
+  local out
+  out="$outdir/${name}.${ext}"
+  # Ensure unique filename if duplicates exist in the same round
+  if [[ -e "$out" ]]; then
+    local k=1
+    while :; do
+      local cand="$outdir/${name}__rep${k}.${ext}"
+      if [[ ! -e "$cand" ]]; then out="$cand"; break; fi
+      k=$((k+1))
+    done
+  fi
   cp "$src" "$out"
   printf '\n# injected by gla_round_new.sh\ndata: %s\n' "$DATA" >>"$out"
   # Highest priority num_data_workers injection (default 8 if unset)
