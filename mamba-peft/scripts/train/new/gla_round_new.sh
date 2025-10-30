@@ -264,118 +264,87 @@ ROUND_E3=(
   "E3_QKVO_plus_GK_only_r4a4.yaml"
 )
 
-ROUND_E1=( # 57个
-  # ======================
-  # 0. 统一基线（多锚点）
-  # ======================
-  "E1_QKVO_r8_alpha8.yaml"
-  "E1_QKVO_r8_alpha12.yaml"
-  "E1_QKVO_r8_alpha16.yaml"
-  "E1_QKVO_r8_alpha20.yaml"
-  "E1_QKVO_r4_alpha8.yaml"
-  "E1_QKVO_r10_alpha20.yaml"
 
+ROUND_E1 = ( #52
+    # 0. Baselines (multi-anchors)
+    "E1_QKVO_r8_alpha8.yaml"
+    "E1_QKVO_r8_alpha12.yaml"
+    "E1_QKVO_r8_alpha16.yaml"
+    "E1_QKVO_r8_alpha20.yaml"
+    "E1_QKVO_r4_alpha8.yaml"
+    "E1_QKVO_r10_alpha20.yaml"
 
-  # 1.3 方法在锚点上的横评
-  #结果没有表现统计学意义 删除了
-#  "E1_QKVO_DoRA_r8_alpha16.yaml"
-#  "E1_QKVO_RSLoRA_r8_alpha16.yaml"
+    # 1.3 Methods @ anchor (removed for no statistical significance)
+    # "E1_QKVO_DoRA_r8_alpha16.yaml"
+    # "E1_QKVO_RSLoRA_r8_alpha16.yaml"
 
+    # 2. Structural ablations @ r=8 (α sweep)
+    "E1_QKVO_plus_G_r8_alpha8.yaml"
+    "E1_QKVO_plus_G_r8_alpha16.yaml"
+    "E1_QKVO_plus_GK_r8_alpha8.yaml"
+    "E1_QKVO_plus_GK_r8_alpha16.yaml"
+    "E1_QKVO_plus_G_plus_GK_r8_alpha8.yaml"
+    "E1_QKVO_plus_G_plus_GK_r8_alpha16.yaml"
+    "E1_QKVO_plus_MLP_r8_alpha16.yaml"  # MLP branch (no α=8 counterpart)
+    "E1_QKVO_plus_G_plus_GK_plus_MLP_r8_alpha16.yaml"
 
-  # ==========================================
-  # 2. 模块消融（统一容量：r=8；α多点）
-  # ==========================================
-  "E1_QKVO_plus_G_r8_alpha8.yaml"
-  "E1_QKVO_plus_G_r8_alpha16.yaml"
-  "E1_QKVO_plus_GK_r8_alpha8.yaml"
-  "E1_QKVO_plus_GK_r8_alpha16.yaml"
-  "E1_QKVO_plus_G_plus_GK_r8_alpha8.yaml"
-  "E1_QKVO_plus_G_plus_GK_r8_alpha16.yaml"
-  "E1_QKVO_plus_MLP_r8_alpha16.yaml"
-  "E1_QKVO_plus_G_plus_GK_plus_MLP_r8_alpha16.yaml"
+    # 3. Module × Method matrix @ r=8 α=16
+    "E1_QKVO_plus_G_DoRA_r8_alpha16.yaml"
+    "E1_QKVO_plus_G_RSLoRA_r8_alpha16.yaml"
+    "E1_QKVO_plus_GK_DoRA_r8_alpha16.yaml"
+    "E1_QKVO_plus_GK_RSLoRA_r8_alpha16.yaml"
+    "E1_QKVO_plus_G_plus_GK_DoRA_r8_alpha16.yaml"
+    "E1_QKVO_plus_G_plus_GK_RSLoRA_r8_alpha16.yaml"
 
-  # ============================================================
-  # 3. 模块 × 方法 × 容量（小矩阵）
-  # ============================================================
-  "E1_QKVO_plus_G_DoRA_r8_alpha16.yaml"
-  "E1_QKVO_plus_G_RSLoRA_r8_alpha16.yaml"
-  "E1_QKVO_plus_GK_DoRA_r8_alpha16.yaml"
-  "E1_QKVO_plus_GK_RSLoRA_r8_alpha16.yaml"
-  "E1_QKVO_plus_G_plus_GK_DoRA_r8_alpha16.yaml"
-  "E1_QKVO_plus_G_plus_GK_RSLoRA_r8_alpha16.yaml"
+    # 4. Layer-wise localization (α=16)
+    "E1_QKVO_first6_r8_alpha16.yaml"
+    "E1_QKVO_last6_r8_alpha16.yaml"
+    "E2_OMLP_last6_r8_alpha16.yaml"
+    "E2_OMLP_middle6_r8_alpha16.yaml"
 
-  # ==============================================
-  # 4. 层级定位（证明性，统一 α=16）
-  # ==============================================
-  "E1_QKVO_first6_r8_alpha16.yaml"
-  "E1_QKVO_last6_r8_alpha16.yaml"
-  "E2_OMLP_last6_r8_alpha16.yaml"
-  "E2_OMLP_middle6_r8_alpha16.yaml"
+    # 5. Training strategy (decoupled from structure)
+    "E1_QKVO_dropout0_r8_alpha16.yaml"
+    "E1_QKVO_lr5e-5_r8_alpha16.yaml"
+    "E1_QKVO_lr2e-4_r8_alpha16.yaml"
+    "E1_QKVO_loradrop0.05_r8_alpha16.yaml"
+    "E1_QKVO_wd0.01_r8_alpha16.yaml"
 
+    # 7. O-MLP family (aligned backbone)
+    # 7.1 α sweep @ r=8
+    "E2_OMLP_r8_alpha8.yaml"
+    "E2_OMLP_r8_alpha16.yaml"
+    "E2_OMLP_r8_alpha24.yaml"
+    # 7.2 rank sweep @ α=2r
+    "E2_OMLP_r6_alpha12.yaml"
+    "E2_OMLP_r12_alpha24.yaml"
+    # 7.3 gating interactions (r=8 α=16)
+    "E2_OMLP_plus_G_r8_alpha16.yaml"
+    "E2_OMLP_plus_GK_r8_alpha16.yaml"   # secondary check; can be optional in ablations
+    "E2_OMLP_plus_G_plus_GK_r8_alpha16.yaml"
 
-  # ====================================================
-  # 5. 训练策略（与结构解耦）
-  # ====================================================
-  "E1_QKVO_dropout0_r8_alpha16.yaml"
-  "E1_QKVO_lr5e-5_r8_alpha16.yaml"
-  "E1_QKVO_lr2e-4_r8_alpha16.yaml"
-  "E1_QKVO_loradrop0.05_r8_alpha16.yaml"
-  "E1_QKVO_wd0.01_r8_alpha16.yaml"
-
-  # ============================================
-  # 6. 高容量探针（集中于此）
-  # ============================================
-   "E1_QKVO_r16_alpha24.yaml"                   # （一般可删除：r16 先固定 α=32 作上限探针）
-   "E1_QKVO_r16_alpha32.yaml"
-   "E1_QKVO_DoRA_r16_alpha32.yaml"              # （一般可删除：高容量先确认是否必要，再做方法对照）
-   "E1_QKVO_RSLoRA_r16_alpha32.yaml"            # （一般可删除：同上）
-
-  # ==========================================================
-  # 7. O-MLP 家族（与主干对齐）
-  # ==========================================================
-  # 7.1 α 扫描（r=8）
-  "E2_OMLP_r8_alpha8.yaml"
-  "E2_OMLP_r8_alpha16.yaml"
-  "E2_OMLP_r8_alpha24.yaml"
-
-  # 7.2 Rank 扫描（α=2r）
-  "E2_OMLP_r6_alpha12.yaml"
-  "E2_OMLP_r12_alpha24.yaml"
-
-  # 7.3 与门控交互（统一 r=8, a=16）
-  "E2_OMLP_plus_G_r8_alpha16.yaml"
-  "E2_OMLP_plus_GK_r8_alpha16.yaml"            # （一般可删除：优先验证 +G 与 +G+GK）
-  "E2_OMLP_plus_G_plus_GK_r8_alpha16.yaml"
-
-  # =================================================================
-  # 8. 细粒度目标集（r=8,a=16 三方法横评 + 少量 α 反证）
-  # =================================================================
-  # 8.1 Gating-only
-  "E3_GATINGONLY_r8_alpha16.yaml"
-  "E3_GATINGONLY_DoRA_r8_alpha16.yaml"
-  "E3_GATINGONLY_RSLoRA_r8_alpha16.yaml"
-
-  # 8.2 QK-only
-  "E6_QKONLY_r8_alpha16.yaml"
-  "E6_QKONLY_DoRA_r8_alpha16.yaml"
-  "E6_QKONLY_RSLoRA_r8_alpha16.yaml"
-
-  # 8.3 KV-only
-  "E7_KVONLY_r8_alpha16.yaml"
-  "E7_KVONLY_DoRA_r8_alpha16.yaml"
-  "E7_KVONLY_RSLoRA_r8_alpha16.yaml"
-
-  # 8.4 QK + Gating
-  "E8_QK_plus_GATING_r8_alpha16.yaml"
-  "E8_QK_plus_GATING_DoRA_r8_alpha16.yaml"
-  "E8_QK_plus_GATING_RSLoRA_r8_alpha16.yaml"
-
-  # 8.5 O + Head
-  "E9_OplusHEAD_r8_alpha16.yaml"
-  "E9_OplusHEAD_DoRA_r8_alpha16.yaml"
-  "E9_OplusHEAD_RSLoRA_r8_alpha16.yaml"
-
+    # 8. Fine-grained target sets (r=8 α=16; 3 methods each)
+    # 8.1 Gating-only
+    "E3_GATINGONLY_r8_alpha16.yaml"
+    "E3_GATINGONLY_DoRA_r8_alpha16.yaml"
+    "E3_GATINGONLY_RSLoRA_r8_alpha16.yaml"
+    # 8.2 QK-only
+    "E6_QKONLY_r8_alpha16.yaml"
+    "E6_QKONLY_DoRA_r8_alpha16.yaml"
+    "E6_QKONLY_RSLoRA_r8_alpha16.yaml"
+    # 8.3 KV-only
+    "E7_KVONLY_r8_alpha16.yaml"
+    "E7_KVONLY_DoRA_r8_alpha16.yaml"
+    "E7_KVONLY_RSLoRA_r8_alpha16.yaml"
+    # 8.4 QK + Gating
+    "E8_QK_plus_GATING_r8_alpha16.yaml"
+    "E8_QK_plus_GATING_DoRA_r8_alpha16.yaml"
+    "E8_QK_plus_GATING_RSLoRA_r8_alpha16.yaml"
+    # 8.5 O + Head
+    "E9_OplusHEAD_r8_alpha16.yaml"
+    "E9_OplusHEAD_DoRA_r8_alpha16.yaml"
+    "E9_OplusHEAD_RSLoRA_r8_alpha16.yaml"
 )
+
 
 #: "${ROUND_E1[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E1=()
 # 可选占位：若后续需要支持 E3/E4/...，在此处定义各自的数组（可为空，脚本会自动跳过空数组）。
