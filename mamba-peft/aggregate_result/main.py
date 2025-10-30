@@ -23,6 +23,8 @@ def parse_args() -> argparse.Namespace:
                    help="Output directory to write aggregated reports.")
     p.add_argument("--workers", type=int, default=None,
                    help="Parallel workers (defaults to cpu count)")
+    p.add_argument("--small", action="store_true",
+                   help="If set, do not include checkpoint_path/cfg_path in dataset summaries.")
     return p.parse_args()
 
 
@@ -89,7 +91,7 @@ def main():
     for ds in dataset_dirs:
         try:
             out_ds_dir = out_root / ds.name
-            csv = summarize_dataset(out_ds_dir, ds.name, dataset_train_dir=ds)
+            csv = summarize_dataset(out_ds_dir, ds.name, dataset_train_dir=ds, small=args.small)
             ds_summaries[ds.name] = str(csv)
         except Exception as e:
             ds_summaries[ds.name] = f"ERROR: {e}"

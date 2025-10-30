@@ -175,7 +175,7 @@ def choose_best_row_for_task(task: str, df: pd.DataFrame, exp_train_dir: Path) -
     return _best_for_accuracy_tasks(df, exp_train_dir)
 
 
-def summarize_dataset(dataset_out_dir: Path, dataset_name: str, dataset_train_dir: Optional[Path] = None) -> Path:
+def summarize_dataset(dataset_out_dir: Path, dataset_name: str, dataset_train_dir: Optional[Path] = None, small: bool = False) -> Path:
     """Aggregate per-experiment best rows into a dataset-level summary table.
     dataset_out_dir: out_root/<dataset_dir>
     dataset_name: can be glue-tvt_cola_seed87 or cola
@@ -195,10 +195,11 @@ def summarize_dataset(dataset_out_dir: Path, dataset_name: str, dataset_train_di
             record[k] = v
         record["experiment"] = exp_out.name
         record["step"] = best.step
-        record["checkpoint_path"] = best.checkpoint_path
-        cfgp = _cfg_path_for(exp_train_dir)
-        if cfgp:
-            record["cfg_path"] = cfgp
+        if not small:
+            record["checkpoint_path"] = best.checkpoint_path
+            cfgp = _cfg_path_for(exp_train_dir)
+            if cfgp:
+                record["cfg_path"] = cfgp
         rows.append(record)
 
     if not rows:
