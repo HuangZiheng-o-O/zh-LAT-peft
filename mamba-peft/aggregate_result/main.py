@@ -10,6 +10,7 @@ from typing import List, Optional
 from .fs_utils import find_dataset_dirs, find_experiment_dirs
 from .glue_metrics import normalize_dataset_name
 from .aggregator import aggregate_experiment
+from .dataset_aggregator import summarize_dataset
 
 
 def parse_args() -> argparse.Namespace:
@@ -83,7 +84,17 @@ def main():
             bad += 1
             print(f"ERROR {r['exp']}: {r['error']}")
 
-    summary = {"ok": ok, "bad": bad, "total": len(results)}
+    # Build dataset-level summaries
+    ds_summaries = {}
+    for ds in dataset_dirs:
+        try:
+            out_ds_dir = out_root / ds.name
+            csv = summarize_dataset(out_ds_dir, ds.name, dataset_train_dir=ds)
+            ds_summaries[ds.name] = str(csv)
+        except Exception as e:
+            ds_summaries[ds.name] = f"ERROR: {e}"
+
+    summary = {"ok": ok, "bad": bad, "total": len(results), "dataset_summaries": ds_summaries}
     with open(out_root / "aggregate_summary.json", "w") as f:
         json.dump(summary, f, indent=2)
     print(f"\nAggregate done. ok={ok} bad={bad} total={len(results)}")

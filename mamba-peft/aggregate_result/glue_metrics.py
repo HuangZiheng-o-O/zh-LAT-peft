@@ -11,7 +11,7 @@ class TaskMetricSpec:
     higher_is_better: bool = True
 
 
-# Mapping based on the GLUE benchmark definitions (CoLA=MCC; MRPC/QQP=F1/Acc; others=Accuracy)
+# Mapping based on the GLUE benchmark definitions (CoLA=MCC; MRPC/QQP=F1/Acc; STS-B=Pearson/Spearman; others=Accuracy)
 GLUE_TASK_METRICS: Dict[str, TaskMetricSpec] = {
     # binary acceptability: matthews_correlation
     "cola": TaskMetricSpec(primary="eval_matthews_correlation", secondary=None, higher_is_better=True),
@@ -25,6 +25,8 @@ GLUE_TASK_METRICS: Dict[str, TaskMetricSpec] = {
     "wnli": TaskMetricSpec(primary="eval_accuracy", secondary=None, higher_is_better=True),
     # sentiment
     "sst2": TaskMetricSpec(primary="eval_accuracy", secondary=None, higher_is_better=True),
+    # semantic textual similarity: Pearson primary, Spearman secondary
+    "stsb": TaskMetricSpec(primary="eval_pearson", secondary="eval_spearman", higher_is_better=True),
 }
 
 
@@ -54,8 +56,13 @@ def select_score(row: Dict[str, Any], spec: TaskMetricSpec) -> Optional[float]:
     """Return the score from a log_history row per task metric spec, or None if absent."""
     if spec.primary in row and row[spec.primary] is not None:
         return float(row[spec.primary])
-    if spec.secondary and (spec.secondary in row) and row[spec.secondary] is not None:
-        return float(row[spec.secondary])
+    if spec.secondary:
+        # handle STS-B spearman naming variants
+        sec = spec.secondary
+        if sec not in row and sec == "eval_spearman" and ("eval_spearmanr" in row):
+            sec = "eval_spearmanr"
+        if (sec in row) and row[sec] is not None:
+            return float(row[sec])
     return None
 
 
