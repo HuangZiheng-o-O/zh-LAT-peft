@@ -90,6 +90,18 @@ def build_and_run_trainer(
         except Exception as _e:
             print(f"[SwanLab] disabled (import/init failed): {_e}")
 
+    # Optional DataLoader/Eval memory tuning via env (defaults preserve old behavior)
+    def _env_bool(name: str, default: bool) -> bool:
+        v = os.environ.get(name)
+        if v is None:
+            return default
+        return str(v).lower() in ("1", "true", "yes", "on")
+
+    _prefetch = int(os.environ.get("DATALOADER_PREFETCH_FACTOR", 2))
+    _pin_memory = _env_bool("DATALOADER_PIN_MEMORY", True)
+    _persist_workers = _env_bool("DATALOADER_PERSISTENT_WORKERS", False)
+    _eval_acc_steps = int(os.environ.get("EVAL_ACCUMULATION_STEPS", 128))
+
     trainer = MambaTrainer(
         model=model,
         train_dataset=train_data_module.dataset,
@@ -106,8 +118,10 @@ def build_and_run_trainer(
             output_dir=output_dir,
             logging_steps=logging_steps,
             dataloader_num_workers=num_data_workers,
-            dataloader_prefetch_factor=2,
-            eval_accumulation_steps=128,
+            dataloader_prefetch_factor=_prefetch,
+            dataloader_pin_memory=_pin_memory,
+            dataloader_persistent_workers=_persist_workers,
+            eval_accumulation_steps=_eval_acc_steps,
             info={
                 "trainable_params": get_trainable_parameters_ratio(model),
                 "cfg_path": cfg_path,

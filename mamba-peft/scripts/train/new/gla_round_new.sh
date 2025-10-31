@@ -602,29 +602,6 @@ if (( NUM_GPUS < 1 )); then
 fi
 
 # -------------------------
-# Log sampling helper: pass only first N seconds each minute
-# -------------------------
-stream_sampler() {
-  local pass_secs="${SAMPLE_PASS_SECS:-5}"
-  local period_secs="${SAMPLE_PERIOD_SECS:-60}"
-  local line
-  while IFS= read -r line; do
-    # Always pass critical lines
-    if echo "$line" | grep -Ei 'killed|exception|traceback|out of memory|oom|fatal|error' >/dev/null 2>&1; then
-      echo "$line"
-      continue
-    fi
-    # Gate by current wall clock seconds in minute
-    local ss
-    ss="$(date +%S)"
-    # avoid octal by forcing base-10
-    if (( 10#${ss} < pass_secs )); then
-      echo "$line"
-    fi
-  done
-}
-
-# -------------------------
 # Per-GPU concurrency plan
 # -------------------------
 # GPU_PLAN: comma/space separated integers per detected GPU, e.g. "3,3,3,3,0,3,3".
@@ -838,10 +815,6 @@ run_round () {
   # Make a temp dir for this round's YAML copies with injected data
   local TMP_CFG_DIR
   TMP_CFG_DIR="$(mktemp -d /tmp/gla_data_XXXXXX)"
-  declare -a PIDS=()
-  # optional assoc maps (bash >= 4)
-  declare -A PID_TO_GPU=()
-  declare -A PID_TO_CFG=()
   for i in "${!RESOLVED_CFGS[@]}"; do
     local CFG="${RESOLVED_CFGS[$i]}"
     # choose slot by index cycling when fewer jobs than slots
@@ -850,36 +823,15 @@ run_round () {
     local CFG_INJ
     CFG_INJ="$(make_tmp_cfg_with_data "$CFG" "$TMP_CFG_DIR")"
     echo "[GPU ${GPU}] ${CFG_INJ}  (HP_SEED=${FORCE_SEED}; data=${DATA}; ignoring seed in name/YAML)"
-    if command -v stdbuf >/dev/null 2>&1; then
-      HP_SEED=${FORCE_SEED} CUDA_VISIBLE_DEVICES="$GPU" \
-        stdbuf -oL -eL python train.py --cfg "$CFG_INJ" --overwrite 2>&1 | stream_sampler &
-    else
-      HP_SEED=${FORCE_SEED} CUDA_VISIBLE_DEVICES="$GPU" \
-        python train.py --cfg "$CFG_INJ" --overwrite 2>&1 | stream_sampler &
-    fi
+    HP_SEED=${FORCE_SEED} CUDA_VISIBLE_DEVICES="$GPU" \
+      python train.py --cfg "$CFG_INJ" --overwrite &
     PIDS+=("$!")
-    PID_TO_GPU["$!"]="$GPU"
-    PID_TO_CFG["$!"]="$CFG_INJ"
   done
 
   local any_failed=0
   for pid in "${PIDS[@]}"; do
     if ! wait "$pid"; then
-      status=$?
       any_failed=1
-      # decode signal-based exits
-      if (( status >= 128 )); then
-        sig=$(( status - 128 ))
-        echo "[WARN] job pid=$pid (GPU=${PID_TO_GPU[$pid]:-?} cfg=$(basename "${PID_TO_CFG[$pid]:-?}")) exited by signal $sig" >&2
-        if (( sig == 9 )); then
-          # probable OOM kill; try to show kernel hint if allowed
-          if command -v dmesg >/dev/null 2>&1; then
-            dmesg | tail -n 50 | grep -i -E 'killed process|out of memory|oom' || true
-          fi
-        fi
-      else
-        echo "[WARN] job pid=$pid (GPU=${PID_TO_GPU[$pid]:-?} cfg=$(basename "${PID_TO_CFG[$pid]:-?}")) exited with code $status" >&2
-      fi
     fi
   done
 
