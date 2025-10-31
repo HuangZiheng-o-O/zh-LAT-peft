@@ -287,7 +287,7 @@ ROUND_E1=( #52
     "E1_QKVO_plus_G_plus_GK_r8_alpha16.yaml"
     "E1_QKVO_plus_MLP_r8_alpha16.yaml"  # MLP branch (no α=8 counterpart)
     "E1_QKVO_plus_G_plus_GK_plus_MLP_r8_alpha16.yaml"
-
+#############
     # 3. Module × Method matrix @ r=8 α=16
     "E1_QKVO_plus_G_DoRA_r8_alpha16.yaml"
     "E1_QKVO_plus_G_RSLoRA_r8_alpha16.yaml"
@@ -299,48 +299,50 @@ ROUND_E1=( #52
     # 4. Layer-wise localization (α=16)
     "E1_QKVO_first6_r8_alpha16.yaml"
     "E1_QKVO_last6_r8_alpha16.yaml"
+  #############
+
     "E2_OMLP_last6_r8_alpha16.yaml"
     "E2_OMLP_middle6_r8_alpha16.yaml"
 
     # 5. Training strategy (decoupled from structure)
-    "E1_QKVO_dropout0_r8_alpha16.yaml"
-    "E1_QKVO_lr5e-5_r8_alpha16.yaml"
-    "E1_QKVO_lr2e-4_r8_alpha16.yaml"
-    "E1_QKVO_loradrop0.05_r8_alpha16.yaml"
-    "E1_QKVO_wd0.01_r8_alpha16.yaml"
+#    "E1_QKVO_dropout0_r8_alpha16.yaml"
+#    "E1_QKVO_lr5e-5_r8_alpha16.yaml"
+#    "E1_QKVO_lr2e-4_r8_alpha16.yaml"
+#    "E1_QKVO_loradrop0.05_r8_alpha16.yaml"
+#    "E1_QKVO_wd0.01_r8_alpha16.yaml"
 
     # 7. O-MLP family (aligned backbone)
     # 7.1 α sweep @ r=8
     "E2_OMLP_r8_alpha8.yaml"
     "E2_OMLP_r8_alpha16.yaml"
-    "E2_OMLP_r8_alpha24.yaml"
     # 7.2 rank sweep @ α=2r
-    "E2_OMLP_r6_alpha12.yaml"
-    "E2_OMLP_r12_alpha24.yaml"
+#    "E2_OMLP_r12_alpha24.yaml"
     # 7.3 gating interactions (r=8 α=16)
     "E2_OMLP_plus_G_r8_alpha16.yaml"
     "E2_OMLP_plus_GK_r8_alpha16.yaml"   # secondary check; can be optional in ablations
     "E2_OMLP_plus_G_plus_GK_r8_alpha16.yaml"
 
-    # 8. Fine-grained target sets (r=8 α=16; 3 methods each)
-    # 8.1 Gating-only
+    # 8.1 Fine-grained target sets (r=8 α=16; 3 methods each)
     "E3_GATINGONLY_r8_alpha16.yaml"
+    "E6_QKONLY_r8_alpha16.yaml"
+    "E7_KVONLY_r8_alpha16.yaml"
+    "E8_QK_plus_GATING_r8_alpha16.yaml"
+    "E9_OplusHEAD_r8_alpha16.yaml"
+
+    # 8.2 DoRA RSLoRA
+
     "E3_GATINGONLY_DoRA_r8_alpha16.yaml"
     "E3_GATINGONLY_RSLoRA_r8_alpha16.yaml"
-    # 8.2 QK-only
-    "E6_QKONLY_r8_alpha16.yaml"
+
     "E6_QKONLY_DoRA_r8_alpha16.yaml"
     "E6_QKONLY_RSLoRA_r8_alpha16.yaml"
-    # 8.3 KV-only
-    "E7_KVONLY_r8_alpha16.yaml"
+
     "E7_KVONLY_DoRA_r8_alpha16.yaml"
     "E7_KVONLY_RSLoRA_r8_alpha16.yaml"
-    # 8.4 QK + Gating
-    "E8_QK_plus_GATING_r8_alpha16.yaml"
+
     "E8_QK_plus_GATING_DoRA_r8_alpha16.yaml"
     "E8_QK_plus_GATING_RSLoRA_r8_alpha16.yaml"
-    # 8.5 O + Head
-    "E9_OplusHEAD_r8_alpha16.yaml"
+
     "E9_OplusHEAD_DoRA_r8_alpha16.yaml"
     "E9_OplusHEAD_RSLoRA_r8_alpha16.yaml"
 )
@@ -371,8 +373,69 @@ ROUND_E4=(
 : "${ROUND_E5[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E5=()
 : "${ROUND_E6[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E6=()
 : "${ROUND_E7[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E7=()
+ROUND_E7=( #6
+    # 0. Baselines (multi-anchors)
+
+    "E1_QKVO_r8_alpha16.yaml"
+
+    # 1.3 Methods @ anchor (removed for no statistical significance)
+    # "E1_QKVO_DoRA_r8_alpha16.yaml"
+    # "E1_QKVO_RSLoRA_r8_alpha16.yaml"
+
+    # 2. Structural ablations @ r=8 (α sweep)
+
+    "E1_QKVO_plus_G_r8_alpha16.yaml"
+    "E1_QKVO_plus_GK_r8_alpha16.yaml"
+    "E1_QKVO_plus_G_plus_GK_r8_alpha16.yaml"
+    "E1_QKVO_plus_MLP_r8_alpha16.yaml"  # MLP branch (no α=8 counterpart)
+    "E1_QKVO_plus_G_plus_GK_plus_MLP_r8_alpha16.yaml"
+)
 : "${ROUND_E8[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E8=()
+ROUND_E8=(#12
+    "E2_OMLP_last6_r8_alpha16.yaml"
+    "E2_OMLP_middle6_r8_alpha16.yaml"
+
+    # 5. Training strategy (decoupled from structure)
+#    "E1_QKVO_dropout0_r8_alpha16.yaml"
+#    "E1_QKVO_lr5e-5_r8_alpha16.yaml"
+#    "E1_QKVO_lr2e-4_r8_alpha16.yaml"
+#    "E1_QKVO_loradrop0.05_r8_alpha16.yaml"
+#    "E1_QKVO_wd0.01_r8_alpha16.yaml"
+
+    # 7. O-MLP family (aligned backbone)
+    # 7.1 α sweep @ r=8
+    "E2_OMLP_r8_alpha8.yaml"
+    "E2_OMLP_r8_alpha16.yaml"
+    # 7.2 rank sweep @ α=2r
+#    "E2_OMLP_r12_alpha24.yaml"
+    # 7.3 gating interactions (r=8 α=16)
+    "E2_OMLP_plus_G_r8_alpha16.yaml"
+    "E2_OMLP_plus_GK_r8_alpha16.yaml"   # secondary check; can be optional in ablations
+    "E2_OMLP_plus_G_plus_GK_r8_alpha16.yaml"
+
+    # 8.1 Fine-grained target sets (r=8 α=16; 3 methods each)
+    "E3_GATINGONLY_r8_alpha16.yaml"
+    "E6_QKONLY_r8_alpha16.yaml"
+    "E7_KVONLY_r8_alpha16.yaml"
+    "E8_QK_plus_GATING_r8_alpha16.yaml"
+    "E9_OplusHEAD_r8_alpha16.yaml"
+
+)
 : "${ROUND_E9[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E9=()
+ROUND_E9=(
+    "E1_QKVO_plus_G_DoRA_r8_alpha16.yaml"
+    "E1_QKVO_plus_G_RSLoRA_r8_alpha16.yaml"
+    "E1_QKVO_plus_GK_DoRA_r8_alpha16.yaml"
+    "E1_QKVO_plus_GK_RSLoRA_r8_alpha16.yaml"
+    "E1_QKVO_plus_G_plus_GK_DoRA_r8_alpha16.yaml"
+    "E1_QKVO_plus_G_plus_GK_RSLoRA_r8_alpha16.yaml"
+
+    # 4. Layer-wise localization (α=16)
+    "E1_QKVO_first6_r8_alpha16.yaml"
+    "E1_QKVO_last6_r8_alpha16.yaml"
+)
+
+
 : "${ROUND_E10[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E10=()
 ROUND_E10=(
   "E1_QKVO_r8_alpha16.yaml"
@@ -537,6 +600,29 @@ if (( NUM_GPUS < 1 )); then
   echo "ERROR: No GPUs detected (after considering GPU_IDS/CUDA_VISIBLE_DEVICES)." >&2
   exit 1
 fi
+
+# -------------------------
+# Log sampling helper: pass only first N seconds each minute
+# -------------------------
+stream_sampler() {
+  local pass_secs="${SAMPLE_PASS_SECS:-5}"
+  local period_secs="${SAMPLE_PERIOD_SECS:-60}"
+  local line
+  while IFS= read -r line; do
+    # Always pass critical lines
+    if echo "$line" | grep -Ei 'killed|exception|traceback|out of memory|oom|fatal|error' >/dev/null 2>&1; then
+      echo "$line"
+      continue
+    fi
+    # Gate by current wall clock seconds in minute
+    local ss
+    ss="$(date +%S)"
+    # avoid octal by forcing base-10
+    if (( 10#${ss} < pass_secs )); then
+      echo "$line"
+    fi
+  done
+}
 
 # -------------------------
 # Per-GPU concurrency plan
@@ -752,6 +838,10 @@ run_round () {
   # Make a temp dir for this round's YAML copies with injected data
   local TMP_CFG_DIR
   TMP_CFG_DIR="$(mktemp -d /tmp/gla_data_XXXXXX)"
+  declare -a PIDS=()
+  # optional assoc maps (bash >= 4)
+  declare -A PID_TO_GPU=()
+  declare -A PID_TO_CFG=()
   for i in "${!RESOLVED_CFGS[@]}"; do
     local CFG="${RESOLVED_CFGS[$i]}"
     # choose slot by index cycling when fewer jobs than slots
@@ -760,15 +850,36 @@ run_round () {
     local CFG_INJ
     CFG_INJ="$(make_tmp_cfg_with_data "$CFG" "$TMP_CFG_DIR")"
     echo "[GPU ${GPU}] ${CFG_INJ}  (HP_SEED=${FORCE_SEED}; data=${DATA}; ignoring seed in name/YAML)"
-    HP_SEED=${FORCE_SEED} CUDA_VISIBLE_DEVICES="$GPU" \
-      python train.py --cfg "$CFG_INJ" --overwrite &
+    if command -v stdbuf >/dev/null 2>&1; then
+      HP_SEED=${FORCE_SEED} CUDA_VISIBLE_DEVICES="$GPU" \
+        stdbuf -oL -eL python train.py --cfg "$CFG_INJ" --overwrite 2>&1 | stream_sampler &
+    else
+      HP_SEED=${FORCE_SEED} CUDA_VISIBLE_DEVICES="$GPU" \
+        python train.py --cfg "$CFG_INJ" --overwrite 2>&1 | stream_sampler &
+    fi
     PIDS+=("$!")
+    PID_TO_GPU["$!"]="$GPU"
+    PID_TO_CFG["$!"]="$CFG_INJ"
   done
 
   local any_failed=0
   for pid in "${PIDS[@]}"; do
     if ! wait "$pid"; then
+      status=$?
       any_failed=1
+      # decode signal-based exits
+      if (( status >= 128 )); then
+        sig=$(( status - 128 ))
+        echo "[WARN] job pid=$pid (GPU=${PID_TO_GPU[$pid]:-?} cfg=$(basename "${PID_TO_CFG[$pid]:-?}")) exited by signal $sig" >&2
+        if (( sig == 9 )); then
+          # probable OOM kill; try to show kernel hint if allowed
+          if command -v dmesg >/dev/null 2>&1; then
+            dmesg | tail -n 50 | grep -i -E 'killed process|out of memory|oom' || true
+          fi
+        fi
+      else
+        echo "[WARN] job pid=$pid (GPU=${PID_TO_GPU[$pid]:-?} cfg=$(basename "${PID_TO_CFG[$pid]:-?}")) exited with code $status" >&2
+      fi
     fi
   done
 

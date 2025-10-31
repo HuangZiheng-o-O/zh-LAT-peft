@@ -75,6 +75,21 @@ def build_and_run_trainer(
     _sos_env = str(os.environ.get("SAVE_OPTIMIZER_STATE", "")).lower()
     _save_optimizer_state = _sos_env in ("1", "true", "yes", "on")
 
+    # Optional SwanLab logging via Transformers callback (enabled by env vars only)
+    callbacks = []
+    _sl_enable = str(os.environ.get("SWANLAB_ENABLE", "")).lower() in ("1", "true", "yes", "on", "cloud", "local")
+    if _sl_enable:
+        try:
+            from swanlab.integration.transformers import SwanLabCallback  # type: ignore
+            sl_project = os.environ.get("SWANLAB_PROJECT", "mamba-peft")
+            exp_prefix = os.environ.get("SWANLAB_EXPERIMENT_PREFIX", "")
+            exp_name = Path(output_dir).name
+            if exp_prefix:
+                exp_name = f"{exp_prefix}_{exp_name}"
+            callbacks.append(SwanLabCallback(project=sl_project, experiment_name=exp_name))
+        except Exception as _e:
+            print(f"[SwanLab] disabled (import/init failed): {_e}")
+
     trainer = MambaTrainer(
         model=model,
         train_dataset=train_data_module.dataset,
@@ -112,6 +127,7 @@ def build_and_run_trainer(
         eval_dataset=val_data_module.dataset,
         eval_generator=eval_generator,
         min_eval_metric_after_epoch=min_eval_metric_after_epoch,
+        callbacks=callbacks or None,
     )
 
     trainer.train(resume_from_checkpoint=resume_from_checkpoint)

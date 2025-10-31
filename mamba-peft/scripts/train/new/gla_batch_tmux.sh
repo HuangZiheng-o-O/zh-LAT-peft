@@ -115,6 +115,12 @@ HDR
   printf 'GPU_IDS=%q\n' "${GPU_IDS:-}"
   printf 'GPU_PLAN=%q\n' "${GPU_PLAN:-}"
   printf 'PISSA_FAST=%q\n' "${PISSA_FAST:-0}"
+  # SwanLab env (optional)
+  printf 'SWANLAB_ENABLE=%q\n' "${SWANLAB_ENABLE:-}"
+  printf 'SWANLAB_MODE=%q\n' "${SWANLAB_MODE:-}"
+  printf 'SWANLAB_PROJECT=%q\n' "${SWANLAB_PROJECT:-}"
+  printf 'SWANLAB_EXPERIMENT_PREFIX=%q\n' "${SWANLAB_EXPERIMENT_PREFIX:-}"
+  printf 'SWANLAB_LOGDIR=%q\n' "${SWANLAB_LOGDIR:-}"
 
   echo 'mkdir -p "$LOG_DIR"'
 
@@ -156,6 +162,9 @@ for item in "${JOBS[@]}"; do
     cd "$SCRIPT_DIR"
     GPU_IDS="$GPU_IDS" GPU_PLAN="$GPU_PLAN" DATA="$data" \
       HP_PISSA_FAST="$PISSA_FAST" \
+      SWANLAB_ENABLE="$SWANLAB_ENABLE" SWANLAB_MODE="$SWANLAB_MODE" \
+      SWANLAB_PROJECT="$SWANLAB_PROJECT" SWANLAB_EXPERIMENT_PREFIX="$SWANLAB_EXPERIMENT_PREFIX" \
+      SWANLAB_LOGDIR="$SWANLAB_LOGDIR" \
       bash "$tmp_launcher" "$SUITE" "$ROUND" 2>&1 | tee "$log_file"
   )
   status=$?
