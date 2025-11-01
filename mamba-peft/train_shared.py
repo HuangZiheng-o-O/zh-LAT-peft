@@ -79,16 +79,16 @@ def build_and_run_trainer(
     callbacks = []
     _sl_enable = str(os.environ.get("SWANLAB_ENABLE", "")).lower() in ("1", "true", "yes", "on", "cloud", "local")
     if _sl_enable:
-        try:
-            from swanlab.integration.transformers import SwanLabCallback  # type: ignore
-            sl_project = os.environ.get("SWANLAB_PROJECT", "mamba-peft")
-            exp_prefix = os.environ.get("SWANLAB_EXPERIMENT_PREFIX", "")
-            exp_name = Path(output_dir).name
-            if exp_prefix:
-                exp_name = f"{exp_prefix}_{exp_name}"
-            callbacks.append(SwanLabCallback(project=sl_project, experiment_name=exp_name))
-        except Exception as _e:
-            print(f"[SwanLab] disabled (import/init failed): {_e}")
+        # try:
+        from swanlab.integration.transformers import SwanLabCallback  # type: ignore
+        sl_project = os.environ.get("SWANLAB_PROJECT", "mamba-peft")
+        exp_prefix = os.environ.get("SWANLAB_EXPERIMENT_PREFIX", "")
+        exp_name = Path(output_dir).name
+        if exp_prefix:
+            exp_name = f"{exp_prefix}_{exp_name}"
+        callbacks.append(SwanLabCallback(project=sl_project, experiment_name=exp_name))
+        # except Exception as _e:
+        #     print(f"[SwanLab] disabled (import/init failed): {_e}")
 
     # Optional DataLoader/Eval memory tuning via env (defaults preserve old behavior)
     def _env_bool(name: str, default: bool) -> bool:
