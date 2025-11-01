@@ -102,6 +102,27 @@ def build_and_run_trainer(
     _persist_workers = _env_bool("DATALOADER_PERSISTENT_WORKERS", False)
     _eval_acc_steps = int(os.environ.get("EVAL_ACCUMULATION_STEPS", 128))
 
+    # Auto memory tuning for very large datasets (dataset-size aware; does not rely on task name)
+    try:
+        dataset_size = len(train_data_module.dataset)
+    except Exception:
+        dataset_size = 0
+    _auto_on = _env_bool("MEMORY_TUNING_AUTO", True)
+    _threshold = int(os.environ.get("MEMORY_TUNING_THRESHOLD_SAMPLES", 200000))
+    if _auto_on and dataset_size >= _threshold:
+        # Only adjust when user did not explicitly override via envs
+        if os.environ.get("DATALOADER_PREFETCH_FACTOR") is None:
+            _prefetch = 1
+        if os.environ.get("DATALOADER_PIN_MEMORY") is None:
+            _pin_memory = False
+        if os.environ.get("DATALOADER_PERSISTENT_WORKERS") is None:
+            _persist_workers = False
+        if os.environ.get("EVAL_ACCUMULATION_STEPS") is None:
+            _eval_acc_steps = 32
+        # Be conservative with CPU workers
+        if num_data_workers > 2:
+            num_data_workers = 1
+
     trainer = MambaTrainer(
         model=model,
         train_dataset=train_data_module.dataset,

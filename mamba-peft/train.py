@@ -138,12 +138,14 @@ def run_train(
         # Keep legacy assertion semantics intact
         assert (is_sdlora and is_sdlora_detected) or ((not is_sdlora) and (not is_sdlora_detected))
 
+    # Build a single training dataset module early, reuse for GA init and steps computation
+    train_data_module_for_len = load_dataset(data, tokenizer, "train", return_module=True)
+
     if not is_gla_model:
         # Optional LoRA-GA initialization (module-only, stable-scaling & layerwise supported)
-        train_data_module_for_ga = load_dataset(data, tokenizer, "train", return_module=True)
-        maybe_apply_loraga_ga_init(model, train_data_module_for_ga, peft, debug=debug)
+        maybe_apply_loraga_ga_init(model, train_data_module_for_len, peft, debug=debug)
 
-    its_per_epoch = int(np.ceil(len(load_dataset(data, tokenizer, "train", return_module=True).dataset) / batch_size))
+    its_per_epoch = int(np.ceil(len(train_data_module_for_len.dataset) / batch_size))
     # Allow runtime overrides to quickly constrain training length/frequency
     env = os.environ
     logging_steps = min(50, its_per_epoch)
