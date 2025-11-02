@@ -295,7 +295,6 @@ ROUND_E1=( #52
     "E1_QKVO_plus_GK_RSLoRA_r8_alpha16.yaml"
     "E1_QKVO_plus_G_plus_GK_DoRA_r8_alpha16.yaml"
     "E1_QKVO_plus_G_plus_GK_RSLoRA_r8_alpha16.yaml"
-
     # 4. Layer-wise localization (α=16)
     "E1_QKVO_first6_r8_alpha16.yaml"
     "E1_QKVO_last6_r8_alpha16.yaml"
@@ -330,19 +329,14 @@ ROUND_E1=( #52
     "E9_OplusHEAD_r8_alpha16.yaml"
 
     # 8.2 DoRA RSLoRA
-
     "E3_GATINGONLY_DoRA_r8_alpha16.yaml"
     "E3_GATINGONLY_RSLoRA_r8_alpha16.yaml"
-
     "E6_QKONLY_DoRA_r8_alpha16.yaml"
     "E6_QKONLY_RSLoRA_r8_alpha16.yaml"
-
     "E7_KVONLY_DoRA_r8_alpha16.yaml"
     "E7_KVONLY_RSLoRA_r8_alpha16.yaml"
-
     "E8_QK_plus_GATING_DoRA_r8_alpha16.yaml"
     "E8_QK_plus_GATING_RSLoRA_r8_alpha16.yaml"
-
     "E9_OplusHEAD_DoRA_r8_alpha16.yaml"
     "E9_OplusHEAD_RSLoRA_r8_alpha16.yaml"
 )
