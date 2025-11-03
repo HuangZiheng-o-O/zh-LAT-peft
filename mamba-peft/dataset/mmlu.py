@@ -48,7 +48,7 @@ class MmluDataset(NluDatasetBase):
         acc = float(np.mean(predictions_ind == references_ind))
 
         return {
-            "accurcacy": acc,
+            "accuracy": acc,
         }
 
 

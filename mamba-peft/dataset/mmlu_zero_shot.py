@@ -147,7 +147,7 @@ class MmluZeroShotDataset(NluDatasetBase):
         acc = float(np.mean(predictions_ind == references_ind))
 
         return {
-            "accurcacy": acc,
+            "accuracy": acc,
         }
         # references = np.concatenate(eval_preds.label_ids)
         # predictions = np.concatenate(eval_preds.predictions).argmax(-1)
@@ -163,7 +163,7 @@ class MmluZeroShotDataset(NluDatasetBase):
         # out_of_cls = int(np.sum(predictions_int_valid == self.out_of_cls_index))
 
         # return {
-        #     "accurcacy": acc,
+        #     "accuracy": acc,
         #     "out_of_cls": out_of_cls
         # }
 

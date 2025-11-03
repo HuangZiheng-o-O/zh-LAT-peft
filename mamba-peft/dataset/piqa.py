@@ -1,6 +1,7 @@
 
 import transformers
 from transformers.models.auto import AutoTokenizer
+from datasets import load_dataset
 
 from dataset.collator import DataCollator
 from .base import NluDatasetBase
@@ -57,7 +58,7 @@ class PiqaDataset(NluDatasetBase):
         acc = float(np.mean(predictions_ind == references_ind))
 
         return {
-            "accurcacy": acc,
+            "accuracy": acc,
         }
 
 

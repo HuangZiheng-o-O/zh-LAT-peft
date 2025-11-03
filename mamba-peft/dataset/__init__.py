@@ -154,9 +154,16 @@ def load_dataset(data, tokenizer, split, return_module=False, **kwargs):
             **kwargs
         )
     elif data.startswith("arc"):
+        # Require explicit ARC variant: 'arc-easy' or 'arc-challenge'
+        if data in ("arc-easy", "arc-challenge"):
+            arc_name = data
+        else:
+            raise ValueError(
+                "ARC dataset requires data to be 'arc-easy' or 'arc-challenge' (got: %s)" % data
+            )
         data_module = ArcDataModule(
             tokenizer=tokenizer,
-            # name=data,
+            name=arc_name,
             split=split,
             **kwargs
         )
