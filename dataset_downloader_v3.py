@@ -28,7 +28,8 @@ try:
 except Exception:
     pass
 
-from huggingface_hub import snapshot_download, hf_hub_download, HfHubHTTPError
+from huggingface_hub import snapshot_download, hf_hub_download
+from huggingface_hub.utils import HfHubHTTPError
 import requests
 
 _TV_OK = None  # torchvision lazy import flag
