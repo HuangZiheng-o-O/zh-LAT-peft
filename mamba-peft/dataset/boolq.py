@@ -24,7 +24,7 @@ class BoolQDataset(NluDatasetBase):
     def get_hf_dataset(self):
         if self.hf_dataset is None:
             self.hf_dataset = load_dataset(
-                self.path)[
+                self.path, trust_remote_code=True)[
                 {"train": "train", "val": "validation"}[self.split]
             ]
 

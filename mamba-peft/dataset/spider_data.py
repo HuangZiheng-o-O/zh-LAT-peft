@@ -1,9 +1,9 @@
 from pathlib import Path
 import requests
 import transformers
-from transformers import TapexTokenizer
 from transformers.models.auto import AutoTokenizer
-from datasets import load_dataset, concatenate_datasets
+from datasets import load_dataset
+from huggingface_hub import snapshot_download
 
 from dataset.collator import DataCollator
 from metrics.spider.lib.evaluation import Evaluator, Schema, get_schema, get_sql
@@ -28,9 +28,11 @@ class SpiderDataset(NlgDatasetBase):
 
         super().__init__(tokenizer, path, split, prompt_prefix=prompt_prefix + tokenizer.sep_token,  
                          use_cache=use_cache, max_seqlen=max_seqlen, **kwargs)
+        self._snapshot_dir = None
+        self._db_dir = None
         
     def get_sql_hardness(self, sql, db):
-        db_dir = "data/xlangai_spider/spider/database"
+        db_dir = self._db_dir or (Path("data") / self.path.replace("/", "_") / "spider" / "database")
         db = Path(db_dir) / db / (db + ".sqlite")
         schema = Schema(get_schema(str(db)))
         try:
@@ -40,7 +42,7 @@ class SpiderDataset(NlgDatasetBase):
             return "unknown"
 
         return Evaluator.eval_hardness(None, sql_proc)
-
+    
     def get_cache_name(self):
         name = self.path.replace('/', '_')
 
@@ -83,33 +85,67 @@ class SpiderDataset(NlgDatasetBase):
         return out
 
     def load_table_dataset(self):
-        table_file = Path("data") / self.path.replace("/", "_") / "spider" / "tables.json"
+        # Ensure snapshot
+        local_root = Path("data") / self.path.replace("/", "_")
+        local_root.mkdir(parents=True, exist_ok=True)
+        snap = Path(snapshot_download(repo_id=self.path, repo_type="dataset", local_dir=str(local_root), local_dir_use_symlinks=False))
+        self._snapshot_dir = snap
+        # Find tables.json anywhere
+        cand = list(snap.rglob("**/tables.json"))
+        assert cand, f"tables.json not found under {snap}"
+        table_file = cand[0]
+        # Infer db dir: prefer a sibling 'database' under the same tree
+        db_dir = table_file.parent / "database"
+        if not db_dir.exists():
+            # search up to find a directory named 'database'
+            db_cand = list(snap.rglob("**/database"))
+            if db_cand:
+                db_dir = db_cand[0]
+        self._db_dir = db_dir
 
         with open(table_file, "r") as f:
             dbs = json.load(f)
 
         out = {db["db_id"]: self.get_schema(db) for db in dbs}
-
         return out
 
     def load_hf_dataset_split(self):
         assert self.has_test_split
+        # Snapshot files locally and load via json/parquet
+        local_root = Path("data") / self.path.replace("/", "_")
+        local_root.mkdir(parents=True, exist_ok=True)
+        snap = Path(snapshot_download(repo_id=self.path, repo_type="dataset", local_dir=str(local_root), local_dir_use_symlinks=False))
+
+        def find_files(keywords):
+            def _match(exts):
+                out = []
+                for hint in keywords:
+                    for ext in exts:
+                        out += list(snap.rglob(f"**/*{hint}*.{ext}"))
+                return out
+            files_parquet = _match(["parquet"]) 
+            files_jsonl  = _match(["jsonl"]) 
+            files_json   = _match(["json"]) 
+            if files_parquet: return "parquet", sorted(set(files_parquet))
+            if files_jsonl:  return "json", sorted(set(files_jsonl))
+            if files_json:   return "json", sorted(set(files_json))
+            return None, []
 
         if self.split == "test":
-            return load_dataset(self.path)["validation"]
+            # Spider 没有公开 test 标签，沿用 validation/dev
+            builder, files = find_files(["validation", "valid", "dev"])
+            assert files, f"spider dev/validation files not found under {snap}"
+            ds = load_dataset(builder, data_files={"train": [str(p) for p in files]})["train"]
+            return ds
         else:
-            # prefix, split, *seed_id = self.split.split("-")
-            # assert prefix == "train"
-            # assert len(seed_id) == 0
-            data = load_dataset(self.path)["train"]
-            return data.train_test_split(test_size=0.2, seed=self.shuffle_seeds[0])[{"train": "train", "val": "test"}[self.split]]
+            builder, files = find_files(["train", "train_spider", "training"])
+            assert files, f"spider train files not found under {snap}"
+            ds = load_dataset(builder, data_files={"train": [str(p) for p in files]})["train"]
+            return ds.train_test_split(test_size=0.2, seed=self.shuffle_seeds[0])[{"train": "train", "val": "test"}[self.split]]
 
     def get_hf_dataset(self):
         if self.hf_dataset is None:
-            self.hf_dataset = [
-                self.load_hf_dataset_split(),
-                self.load_table_dataset(),
-            ]
+            self.hf_dataset = [self.load_hf_dataset_split(), self.load_table_dataset()]
 
             if self.hardness is not None:
                 self.hf_dataset[0] = self.hf_dataset[0].filter(
@@ -126,7 +162,7 @@ class SpiderDataset(NlgDatasetBase):
 
         table = self.hf_dataset[1][db_id]
 
-        input = f"Question: {question}\Schema: {table}\n"
+        input = f"Question: {question}\\Schema: {table}\n"
         label = query.lower().strip()
         
         return input, label
@@ -175,3 +211,6 @@ class SpiderDataModule:
     def __init__(self, tokenizer: transformers.PreTrainedTokenizer, **kwargs):
         self.dataset = SpiderDataset(tokenizer=tokenizer, **kwargs)
         self.data_collator = DataCollator(tokenizer=tokenizer)
+
+
+

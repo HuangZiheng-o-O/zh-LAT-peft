@@ -365,6 +365,50 @@ ROUND_E4=(
 
 )
 : "${ROUND_E5[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E5=()
+ROUND_E5=( #27
+  # 0. Baselines (anchor)
+  "E1_QKVO_r8_alpha16.yaml"
+
+  # Structural ablations @ r=8 α=16
+  "E1_QKVO_plus_G_r8_alpha16.yaml"
+  "E1_QKVO_plus_GK_r8_alpha16.yaml"
+  "E1_QKVO_plus_G_plus_GK_r8_alpha16.yaml"
+  "E1_QKVO_plus_G_plus_GK_plus_MLP_r8_alpha16.yaml"
+
+    #  O-MLP (α=16)
+  "E2_OMLP_r8_alpha16.yaml"
+  "E2_OMLP_plus_G_r8_alpha16.yaml"
+  "E2_OMLP_plus_GK_r8_alpha16.yaml"
+  "E2_OMLP_plus_G_plus_GK_r8_alpha16.yaml"
+
+  # Layer-wise localization (α=16)
+  "E1_QKVO_first6_r8_alpha16.yaml"
+  "E1_QKVO_last6_r8_alpha16.yaml"
+  "E2_OMLP_last6_r8_alpha16.yaml"
+  "E2_OMLP_middle6_r8_alpha16.yaml"
+
+  "E1_QKVO_plus_MLP_r8_alpha16.yaml"
+
+
+  # 8.1 Fine-grained target sets (r=8 α=16)
+  "E3_GATINGONLY_r8_alpha16.yaml"
+  "E6_QKONLY_r8_alpha16.yaml"
+  "E7_KVONLY_r8_alpha16.yaml"
+  "E8_QK_plus_GATING_r8_alpha16.yaml"
+  "E9_OplusHEAD_r8_alpha16.yaml"
+
+  # 3. Module × Method (DoRA only) @ r=8 α=16
+#  "E1_QKVO_plus_G_DoRA_r8_alpha16.yaml"
+#  "E1_QKVO_plus_GK_DoRA_r8_alpha16.yaml"
+#  "E1_QKVO_plus_G_plus_GK_DoRA_r8_alpha16.yaml"
+
+  # 8.2 DoRA only (r=8 α=16)
+#  "E3_GATINGONLY_DoRA_r8_alpha16.yaml"
+#  "E6_QKONLY_DoRA_r8_alpha16.yaml"
+#  "E7_KVONLY_DoRA_r8_alpha16.yaml"
+#  "E8_QK_plus_GATING_DoRA_r8_alpha16.yaml"
+#  "E9_OplusHEAD_DoRA_r8_alpha16.yaml"
+)
 : "${ROUND_E6[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E6=()
 : "${ROUND_E7[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E7=()
 ROUND_E7=( #6

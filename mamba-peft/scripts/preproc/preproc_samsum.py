@@ -1,7 +1,7 @@
 
 import argparse
 
-from dataset.samsum import SamSumDataset
+from dataset.samsum_data import SamSumDataset
 from mamba_ssm_peft import load_mamba_tokenizer
 
 

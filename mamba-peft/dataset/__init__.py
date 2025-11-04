@@ -6,15 +6,15 @@ from dataset.alpaca_eval import AlpacaEvalDataModule
 from dataset.arc import ArcDataModule
 from dataset.boolq import BoolQDataModule
 from dataset.cifar import CifarDataModule
-from dataset.dart import DartDataModule
+from dataset.dart_data import DartDataModule
 from dataset.glue import GlueDataModule
 from dataset.mmlu import MmluDataModule
 from dataset.mmlu_zero_shot import MmluZeroShotDataModule
 from dataset.mnist import MnistDataModule
 from dataset.piqa import PiqaDataModule
 from dataset.random_data import RandomDataModule
-from dataset.samsum import SamSumDataModule
-from dataset.spider import SpiderDataModule
+from dataset.samsum_data import SamSumDataModule
+from dataset.spider_data import SpiderDataModule
 
 
 def load_dataset(data, tokenizer, split, return_module=False, **kwargs):

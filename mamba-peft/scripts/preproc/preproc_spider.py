@@ -1,7 +1,7 @@
 
 import argparse
 
-from dataset.spider import SpiderDataset
+from dataset.spider_data import SpiderDataset
 from mamba_ssm_peft import load_mamba_tokenizer
 
 

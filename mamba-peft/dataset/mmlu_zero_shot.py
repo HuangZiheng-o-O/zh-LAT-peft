@@ -103,7 +103,7 @@ class MmluZeroShotDataset(NluDatasetBase):
         return f"cache_{self.split}{suffix}"
 
     def _load_task(self, task):
-        return load_dataset(self.path, task)[self.hf_split]
+        return load_dataset(self.path, task, trust_remote_code=True)[self.hf_split]
 
     def get_hf_dataset(self):
         if self.hf_dataset is None:

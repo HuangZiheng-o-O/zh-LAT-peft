@@ -28,7 +28,7 @@ class ArcDataset(NluDatasetBase):
     def get_hf_dataset(self):
         if self.hf_dataset is None:
             self.hf_dataset = load_dataset(
-                self.path, {"arc-easy": "ARC-Easy", "arc-challenge": "ARC-Challenge"}[self.name])[
+                self.path, {"arc-easy": "ARC-Easy", "arc-challenge": "ARC-Challenge"}[self.name], trust_remote_code=True)[
                 {"train": "train", "val": "test"}[self.split]
             ]
 

@@ -106,13 +106,13 @@ class GlueDataset(NluDatasetBase):
     def _load_dataset(self, split):
         if self.name == "mnli" and split == "val":
             hf_dataset = concatenate_datasets([
-                load_dataset(self.path, "mnli_matched")["validation"],
-                load_dataset(self.path, "mnli_mismatched")["validation"],
+                load_dataset(self.path, "mnli_matched", trust_remote_code=True)["validation"],
+                load_dataset(self.path, "mnli_mismatched", trust_remote_code=True)["validation"],
             ])
         else:
             target_split = {"train": "train", "val": "validation", "test": "test"}[split]
             try:
-                hf_dataset = load_dataset(self.path, self.name)[target_split]
+                hf_dataset = load_dataset(self.path, self.name, trust_remote_code=True)[target_split]
             except Exception:
                 # Offline fallback: try local or alternative ids/paths
                 fallback_candidates = [
@@ -125,7 +125,7 @@ class GlueDataset(NluDatasetBase):
                     if not cand:
                         continue
                     try:
-                        hf_dataset = load_dataset(cand, self.name)[target_split]
+                        hf_dataset = load_dataset(cand, self.name, trust_remote_code=True)[target_split]
                         break
                     except Exception as e:
                         last_err = e

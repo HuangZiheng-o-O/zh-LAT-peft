@@ -18,7 +18,7 @@ class AlpacaDataset(NlgDatasetBase):
 
     def get_hf_dataset(self):
         if self.hf_dataset is None:
-            self.hf_dataset = load_dataset(self.path)[self.split]
+            self.hf_dataset = load_dataset(self.path, trust_remote_code=True)[self.split]
 
         return self.hf_dataset
 
