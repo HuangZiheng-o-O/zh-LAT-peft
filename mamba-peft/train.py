@@ -247,10 +247,20 @@ def main():
     env = os.environ
     def _maybe(v, cast):
         return cast(v) if v is not None and v != "" else None
-    # Data override: accept raw task (e.g., rte) or full id (glue-tvt_rte)
+    # Data override (GLUE-aware but now generalized to other datasets)
     data_env = env.get("HP_DATA")
     if data_env:
-        cfg["data"] = data_env if data_env.startswith("glue") else f"glue-tvt_{data_env}"
+        glue_tasks = {"rte", "mrpc", "cola", "sst2", "qnli", "qqp", "mnli", "wnli"}
+        accepted_prefixes = ("glue", "samsum", "dart", "spider", "mnist", "cifar", "piqa", "boolq", "arc")
+        if data_env in glue_tasks:
+            cfg["data"] = f"glue-tvt_{data_env}"
+        elif data_env == "cifar":
+            cfg["data"] = "cifar-tvt"
+        elif data_env == "spider":
+            cfg["data"] = "spider-tvt"
+        else:
+            # use as-is for fully qualified names like samsum/dart/spider-tvt/arc-easy/arc-challenge etc.
+            cfg["data"] = data_env if data_env.startswith(accepted_prefixes) else data_env
     bs_env = _maybe(env.get("HP_BATCH_SIZE"), int)
     if bs_env is not None:
         cfg["batch_size"] = bs_env
@@ -266,6 +276,36 @@ def main():
     seed_env = _maybe(env.get("HP_SEED"), int)
     if seed_env is not None:
         cfg["seed"] = seed_env
+
+    # Optional override of validation split via env (train|val|test)
+    val_split_env = env.get("HP_VAL_SPLIT")
+    if val_split_env in {"train", "val", "test"}:
+        cfg["val_data_split"] = val_split_env
+
+    # Auto-inject eval_gen for generation tasks or when explicitly requested by env
+    def _truthy(x: str | None) -> bool:
+        if x is None:
+            return False
+        return str(x).lower() in ("1", "true", "yes", "on")
+
+    data_name = str(cfg.get("data", ""))
+    # Known generation tasks in this repo
+    is_gen_task = any([
+        data_name.startswith("samsum"),
+        data_name.startswith("dart"),
+        data_name.startswith("spider"),  # e.g., spider-tvt
+    ])
+    force_eval_gen = _truthy(env.get("EVAL_GEN"))
+    if (cfg.get("eval_gen") is None) and (is_gen_task or force_eval_gen):
+        # Defaults with env overrides
+        max_len = _maybe(env.get("EVAL_GEN_MAX_LENGTH"), int) or 1024
+        min_len = _maybe(env.get("EVAL_GEN_MIN_LENGTH"), int) or 5
+        num_beams = _maybe(env.get("EVAL_GEN_NUM_BEAMS"), int) or 5
+        cfg["eval_gen"] = {
+            "max_length": int(max_len),
+            "min_length": int(min_len),
+            "num_beams": int(num_beams),
+        }
 
     output_dir = get_output_path_for_cfg(args.cfg, cfg)
 
