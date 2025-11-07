@@ -1,0 +1,120 @@
+================================================================================
+DART 训练修复 - 快速命令序列
+================================================================================
+
+在远程服务器上依次执行以下命令：
+
+1. 激活环境并切换目录
+--------------------------------------------------------------------------------
+conda activate mzsz
+cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft
+
+
+2. 清理损坏的缓存文件
+--------------------------------------------------------------------------------
+rm -fv data/GEM_dart/cache_GEM_dart_train.pkl
+rm -fv data/GEM_dart/cache_GEM_dart_train_gen.pkl
+rm -fv data/GEM_dart/parts/cache_GEM_dart_train_part_*.pkl
+
+
+3. 验证 parallel_processor_fs.py 已更新（可选，检查是否包含错误处理）
+--------------------------------------------------------------------------------
+grep "Error processing idx=" utils/parallel_processor_fs.py
+
+
+4. 快速测试数据集加载（可选但推荐）
+--------------------------------------------------------------------------------
+python - <<'EOF'
+import os, sys
+sys.path.insert(0, "/home/user/mzs_h/code/zh-LAT-peft/mamba-peft")
+os.environ["DART_LOCAL_DIR"] = "/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/data/GEM_dart"
+
+from transformers import AutoTokenizer
+from dataset.dart_data import DartDataset
+
+tokenizer = AutoTokenizer.from_pretrained(
+    "/home/user/mzs_h/model/second-gla-1.3B-100B/gla-1.3B-100B",
+    trust_remote_code=True
+)
+
+# 测试前10个样本
+ds = DartDataset(tokenizer, split="train", use_cache=False, subset_size=10)
+print(f"✓ Loaded {len(ds)} samples")
+sample = ds[0]
+print(f"✓ First sample: input_ids={sample['input_ids'].shape}, label_ids={sample['label_ids'].shape}")
+EOF
+
+
+5. 重新运行训练
+--------------------------------------------------------------------------------
+cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
+
+PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+TOKENIZERS_PARALLELISM=false OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+NUM_DATA_WORKERS=4 \
+GRADIENT_CHECKPOINTING=true \
+LOGITS_TO_KEEP=1 \
+HP_EVAL_STEPS=2000 HP_SAVE_STEPS=2000 HP_LOGGING_STEPS=200 \
+EVAL_GEN=1 EVAL_GEN_MAX_LENGTH=128 EVAL_GEN_MIN_LENGTH=5 EVAL_GEN_NUM_BEAMS=5 \
+./gla_batch_tmux.sh --suite E10 --round all \
+  --pairs "87:dart" \
+  --gpus "1" \
+  --gpu-plan "1"
+
+
+================================================================================
+预期输出（训练启动时）
+================================================================================
+
+如果一切正常，你应该看到：
+
+1. 并行处理开始：
+   Parallel processing: 0it [00:00, ?it/s]
+
+2. 缓存文件生成：
+   Wrote data/GEM_dart/parts/cache_GEM_dart_train_part_000.pkl
+   Wrote data/GEM_dart/parts/cache_GEM_dart_train_part_001.pkl
+   ...
+   Wrote data/GEM_dart/parts/cache_GEM_dart_train_part_015.pkl
+
+3. 聚合：
+   Aggregating...
+   Aggregating: 100%|██████████| 16/16 [00:00<00:00, ...]
+
+4. 如果有样本失败（现在会显示）：
+   [Worker 0] Error processing idx=123: AssertionError: ...
+   Warning: 5/30526 samples returned None (will be filtered out)
+
+5. 训练开始：
+   trainable params: 2,752,512 || all params: 1,368,266,752 || trainable%: 0.201...
+   Loaded model
+   [训练循环开始，不再报 num_samples=0]
+
+
+================================================================================
+如果仍然失败
+================================================================================
+
+如果清理缓存后仍然报 num_samples=0，请：
+
+1. 查看日志中是否有 "[Worker X] Error processing idx=..." 的错误信息
+2. 将完整的错误日志发给我分析
+3. 检查是否所有样本都被过滤（会显示 "Warning: X/30526 samples returned None"）
+
+修改后的 parallel_processor_fs.py 会显示详细的错误信息，帮助快速定位问题。
+
+
+================================================================================
+最小化命令（如果你很确定）
+================================================================================
+
+如果你想跳过验证步骤，直接执行：
+
+conda activate mzsz
+cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft
+rm -f data/GEM_dart/cache_GEM_dart_train*.pkl data/GEM_dart/parts/cache_GEM_dart_train_part_*.pkl
+cd scripts/train/new
+PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True TOKENIZERS_PARALLELISM=false OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 NUM_DATA_WORKERS=4 GRADIENT_CHECKPOINTING=true LOGITS_TO_KEEP=1 HP_EVAL_STEPS=2000 HP_SAVE_STEPS=2000 HP_LOGGING_STEPS=200 EVAL_GEN=1 EVAL_GEN_MAX_LENGTH=128 EVAL_GEN_MIN_LENGTH=5 EVAL_GEN_NUM_BEAMS=5 ./gla_batch_tmux.sh --suite E10 --round all --pairs "87:dart" --gpus "1" --gpu-plan "1"
+
+================================================================================
+
