@@ -64,205 +64,6 @@ set -euo pipefail
 #)
 Round_all=()
 
-# --- E1 Series: QKVO Fine-tuning Experiments ---
-#!/usr/bin/env bash
-
-# --- E1 Series: QKVO Fine-tuning Experiments (Unified & Reordered) ---
-# 组织原则（控制变量）：
-# 1) 以固定 (r, alpha) 的“基线”统一参照；
-# 2) 单变量扫描：先在固定 rank 下扫描 alpha，再在 alpha=2r 策略下只改变 rank；
-# 3) 仅改“目标模块”的消融；随后考察“模块×alpha”的互作；
-# 4) 仅改“被微调层范围”的层级定位；
-# 5) 仅改“算法/训练策略”的 LoRA 变体与超参；
-# 6) 在“冠军配置”(r=8, a=16) 上复验算法与模块；
-# 7) MLP 在更高容量下的复查；最后做高容量对照与混杂项保留。
-#ROUND_E1=(
-#
-#  # ======================
-#  # 0. 统一基线（对照起点）
-#  # ======================
-#  "E1_QKVO_r8_alpha8.yaml"
-#  "E2_OMLP_r8_alpha8.yaml"
-#
-#  # =====================================================
-#  # 1. 纯 QKVO 容量扫描（主干：先 alpha@r=8，再等比 alpha=2r，再插值 r=10）
-#  #    目标：建立容量-性能主干曲线，并插入 A/B 变体作为配对对照
-#  # =====================================================
-#
-#  # 1.1 Alpha 扫描（r=8，改 alpha）
-#  "E1_QKVO_r8_alpha12.yaml"
-#  "E1_QKVO_r8_alpha16.yaml"        # 关键点：alpha=2r
-#  "E1_QKVO_r8_alpha20.yaml"
-#
-#  # 1.2 Rank×Alpha 等比扩展（alpha=2r）
-#  "E1_QKVO_r4_alpha8.yaml"
-#  "E1_QKVO_r12_alpha24.yaml"
-#  "E1_QKVO_r16_alpha32.yaml"
-#
-#  # 1.3 r=10 插值（配套 Base / DoRA / RSLoRA）
-#  "E1_QKVO_r10_alpha16.yaml"
-#  "E1_QKVO_DoRA_r10_alpha16.yaml"
-#  "E1_QKVO_RSLoRA_r10_alpha16.yaml"
-#  "E1_QKVO_r10_alpha20.yaml"
-#  "E1_QKVO_DoRA_r10_alpha20.yaml"
-#  "E1_QKVO_RSLoRA_r10_alpha20.yaml"
-#
-#  # 1.4 在强基线 r=12, a=24 上移植 DoRA / RSLoRA（补充配对，不重复 Base）
-#  "E1_QKVO_DoRA_r12_alpha24.yaml"
-#  "E1_QKVO_RSLoRA_r12_alpha24.yaml"
-#
-#  # ==========================================
-#  # 2. 模块消融（r=8, a=8）
-#  #    目标：分解增益来源（QKVO 基础上 +G/+GK/+MLP 及其组合）
-#  # ==========================================
-#  "E1_QKVO_plus_G_r8_alpha8.yaml"
-#  "E1_QKVO_plus_GK_r8_alpha8.yaml"
-#  "E1_QKVO_plus_MLP_r8_alpha8.yaml"
-#  "E1_QKVO_plus_G_plus_GK_r8_alpha8.yaml"
-#  "E1_QKVO_plus_G_plus_GK_plus_MLP_r8_alpha8.yaml"
-#
-#  # （用于 O-MLP 的对照消融，沿用 r=8, a=8）
-#  "E4_OONLY_r8_alpha8.yaml"     # E4 系列但用于 E2 的消融对比
-#  "E5_MLPONLY_r8_alpha8.yaml"   # E5 系列但用于 E2 的消融对比
-#
-#  # ============================================================
-#  # 3. 模块 × Alpha 互作（固定 r=8；考察更优 alpha 区间的协同/激活）
-#  # ============================================================
-#  "E1_QKVO_plus_G_plus_GK_r8_alpha12.yaml"
-#  "E1_QKVO_plus_G_plus_GK_r8_alpha16.yaml"   # +G+GK @ alpha=2r
-#  "E1_QKVO_plus_MLP_r8_alpha16.yaml"         # 检查 MLP 在更高 alpha 是否显效
-#
-#  # （与 +GK 的增量价值复验；统一对齐到 alpha=16）
-#  "E1_QKVO_plus_GK_r8_alpha16.yaml"
-#  "E1_QKVO_plus_GK_DoRA_r8_alpha16.yaml"
-#
-#  # ==============================================
-#  # 4. 层级定位（仅变“微调层范围”，容量固定 r=8, a=8）
-#  # ==============================================
-#  "E1_QKVO_first6_r8_alpha8.yaml"
-#  "E1_QKVO_last6_r8_alpha8.yaml"
-#  "E2_OMLP_last6_r8_alpha8.yaml"
-#  "E2_OMLP_middle6_r8_alpha8.yaml"
-#  "E1_QKVO_plus_GK_last6_r8_alpha8.yaml"   # 混杂/保留项移入层级定位，便于同类对照
-#
-#  # ====================================================
-#  # 5. 算法 / 训练策略变体（在基线容量 r=8, a=8 下对齐比较）
-#  # ====================================================
-#  "E1_QKVO_DoRA_r8_alpha8.yaml"
-#  "E1_QKVO_RSLoRA_r8_alpha8.yaml"
-#  "E1_QKVO_lr1e-4_r8_alpha8.yaml"
-#  "E1_QKVO_dropout0_r8_alpha8.yaml"
-#  "E2_OMLP_DoRA_r8_alpha8.yaml"
-#  "E2_OMLP_RSLoRA_r8_alpha8.yaml"
-#  "E2_OMLP_dropout0_r8_alpha8.yaml"
-#  "E2_OMLP_lr1e-4_r8_alpha8.yaml"
-#
-#  # ==========================================================
-#  # 6. 冠军配置复验（a=16 视为更优容量点；含 a=8 的对照回看）
-#  # ==========================================================
-#  "E1_QKVO_DoRA_r8_alpha16.yaml"
-#  "E1_QKVO_RSLoRA_r8_alpha16.yaml"
-#  "E1_QKVO_plus_G_plus_GK_RSLoRA_r8_alpha8.yaml"  # 对照：同组合在 a=8 的表现
-#  "E1_QKVO_plus_G_plus_GK_DORA_r8_alpha8.yaml"    # 对照：同组合在 a=8 的表现（DoRA）
-#
-#  # ============================================
-#  # 7. 高容量对照（r=16 相关；与 r=8 系列对齐比较）
-#  # ============================================
-#  "E1_QKVO_plus_MLP_r16_alpha16.yaml"       # MLP 在更高容量下的复查
-#  "E1_QKVO_plus_G_plus_GK_r16_alpha16.yaml"
-#  "QKVO_plus_G_r16_a16.yaml"
-#  "E1_QKVO_R16_r16_alpha16.yaml"            # 命名看似异常，保留原文件名
-#
-#  # ==========================================================
-#  # 8. O-MLP 家族扫描与交互（E2 系列集中整理，避免分散）
-#  # ==========================================================
-#
-#  # 8.1 Alpha 扫描（r=8）
-#  "E2_OMLP_r8_alpha4.yaml"
-#  "E2_OMLP_r8_alpha16.yaml"
-#  "E2_OMLP_r8_alpha24.yaml"
-#
-#  # 8.2 Rank 扫描（策略 alpha=r）
-#  "E2_OMLP_r4_alpha4.yaml"
-#  "E2_OMLP_r6_alpha6.yaml"
-#  "E2_OMLP_r16_alpha16.yaml"
-#
-#  # 8.3 与门控模块的交互（r=8, a=8）
-#  "E2_OMLP_plus_G_r8_a8.yaml"
-#  "E2_OMLP_plus_GK_r8_alpha8.yaml"
-#  "E2_OMLP_plus_G_plus_GK_r8_alpha8.yaml"
-#
-#  # =================================================================
-#  # 9. 统一容量的新打点集合（r=8, a=16）——贴合 GLA 结构的细粒度目标集
-#  #    每条结构给 Base 与 DoRA 配对，便于最小充分对照
-#  # =================================================================
-#
-#  # 9.1 Gating-only（g_proj, gk_proj[0], gk_proj[1]）
-#  "E3_GATINGONLY_r8_alpha16.yaml"
-#  "E3_GATINGONLY_DoRA_r8_alpha16.yaml"
-#
-#  # 9.2 QK-only（q_proj, k_proj）
-#  "E6_QKONLY_r8_alpha16.yaml"
-#  "E6_QKONLY_DoRA_r8_alpha16.yaml"
-#
-#  # 9.3 KV-only（k_proj, v_proj）
-#  "E7_KVONLY_r8_alpha16.yaml"
-#  "E7_KVONLY_DoRA_r8_alpha16.yaml"
-#
-#  # 9.4 Attn + Gating（q_proj, k_proj, g_proj, gk_proj[0], gk_proj[1]）
-#  "E8_QK_plus_GATING_r8_alpha16.yaml"
-#  "E8_QK_plus_GATING_DoRA_r8_alpha16.yaml"
-#
-#  # 9.5 O + Head（o_proj, lm_head）
-#  "E9_OplusHEAD_r8_alpha16.yaml"
-#  "E9_OplusHEAD_DoRA_r8_alpha16.yaml"
-#)
-#
-# bash /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new/gla_round_new.sh E2 all
-
-
-ROUND_E2=(
-  "E1_QKVO_r8_alpha16.yaml"
-  "E1_QKVO_r8_alpha12.yaml"
-  "E1_QKVO_r8_alpha20.yaml"
-  "E1_QKVO_r16_alpha32.yaml"
-  "E1_QKVO_DoRA_r8_alpha16.yaml"
-
-  "E1_QKVO_RSLoRA_r8_alpha16.yaml"
-  "E1_QKVO_DoRA_r12_alpha24.yaml"
-  "E1_QKVO_RSLoRA_r12_alpha24.yaml"
-  "E1_QKVO_plus_G_r8_alpha16.yaml"
-  "E1_QKVO_plus_GK_r8_alpha16.yaml"
-
-  "E1_QKVO_plus_G_plus_GK_r8_alpha16.yaml"
-  "E1_QKVO_plus_MLP_r8_alpha16.yaml"
-  "E1_QKVO_first6_r8_alpha16.yaml"
-  "E1_QKVO_last6_r8_alpha16.yaml"
-  "E1_QKVO_dropout0_r8_alpha16.yaml"
-
-  "E1_QKVO_wd0.01_r8_alpha16.yaml"
-  "E2_OMLP_r8_alpha16.yaml"
-
-
-)
-ROUND_E3=(
-  # Mixed budget: QKVO r8a16 main, Gates (g/gk) as auxiliaries
-  "E3_QKVO_main_Gates_aux_r8a16_r2a2.yaml"
-  "E3_QKVO_main_Gates_aux_r8a16_r4a4.yaml"
-  "E3_QKVO_main_Gates_aux_r8a16_r4a8.yaml"
-
-  # Mixed budget: add MLP as auxiliary (with/without Gates)
-  "E3_QKVO_main_MLP_aux_r8a16_r4a8.yaml"
-  "E3_QKVO_main_GatesMLP_aux_r8a16_r4a8.yaml"
-
-  # Method variants at fixed mixed Gates r4a4
-  "E3_QKVO_main_Gates_aux_RSLoRA_r8a16_r4a4.yaml"
-  "E3_QKVO_main_Gates_aux_DoRA_r8a16_r4a4.yaml"
-
-  # Diagnostic: add only G vs only GK on top of QKVO r8a16
-  "E3_QKVO_plus_G_only_r4a4.yaml"
-  "E3_QKVO_plus_GK_only_r4a4.yaml"
-)
 
 
 ROUND_E1=( #52
@@ -341,10 +142,52 @@ ROUND_E1=( #52
     "E9_OplusHEAD_RSLoRA_r8_alpha16.yaml"
 )
 
+ROUND_E2=(
+  "E1_QKVO_r8_alpha16.yaml"
+  "E1_QKVO_r8_alpha12.yaml"
+  "E1_QKVO_r8_alpha20.yaml"
+  "E1_QKVO_r16_alpha32.yaml"
+  "E1_QKVO_DoRA_r8_alpha16.yaml"
+
+  "E1_QKVO_RSLoRA_r8_alpha16.yaml"
+  "E1_QKVO_DoRA_r12_alpha24.yaml"
+  "E1_QKVO_RSLoRA_r12_alpha24.yaml"
+  "E1_QKVO_plus_G_r8_alpha16.yaml"
+  "E1_QKVO_plus_GK_r8_alpha16.yaml"
+
+  "E1_QKVO_plus_G_plus_GK_r8_alpha16.yaml"
+  "E1_QKVO_plus_MLP_r8_alpha16.yaml"
+  "E1_QKVO_first6_r8_alpha16.yaml"
+  "E1_QKVO_last6_r8_alpha16.yaml"
+  "E1_QKVO_dropout0_r8_alpha16.yaml"
+
+  "E1_QKVO_wd0.01_r8_alpha16.yaml"
+  "E2_OMLP_r8_alpha16.yaml"
+)
+
 
 #: "${ROUND_E1[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E1=()
 # 可选占位：若后续需要支持 E3/E4/...，在此处定义各自的数组（可为空，脚本会自动跳过空数组）。
 : "${ROUND_E3[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E3=()
+ROUND_E3=(
+  # Mixed budget: QKVO r8a16 main, Gates (g/gk) as auxiliaries
+  "E3_QKVO_main_Gates_aux_r8a16_r2a2.yaml"
+  "E3_QKVO_main_Gates_aux_r8a16_r4a4.yaml"
+  "E3_QKVO_main_Gates_aux_r8a16_r4a8.yaml"
+
+  # Mixed budget: add MLP as auxiliary (with/without Gates)
+  "E3_QKVO_main_MLP_aux_r8a16_r4a8.yaml"
+  "E3_QKVO_main_GatesMLP_aux_r8a16_r4a8.yaml"
+
+  # Method variants at fixed mixed Gates r4a4
+  "E3_QKVO_main_Gates_aux_RSLoRA_r8a16_r4a4.yaml"
+  "E3_QKVO_main_Gates_aux_DoRA_r8a16_r4a4.yaml"
+
+  # Diagnostic: add only G vs only GK on top of QKVO r8a16
+  "E3_QKVO_plus_G_only_r4a4.yaml"
+  "E3_QKVO_plus_GK_only_r4a4.yaml"
+)
+
 : "${ROUND_E4[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E4=()
 ROUND_E4=(
   # LoRA baseline (QKVO) and +G+GK
@@ -365,7 +208,7 @@ ROUND_E4=(
 
 )
 : "${ROUND_E5[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E5=()
-ROUND_E5=( #27
+ROUND_E5=( #18
   # 0. Baselines (anchor)
   "E1_QKVO_r8_alpha16.yaml"
 
@@ -394,7 +237,7 @@ ROUND_E5=( #27
   "E3_GATINGONLY_r8_alpha16.yaml"
   "E6_QKONLY_r8_alpha16.yaml"
   "E7_KVONLY_r8_alpha16.yaml"
-  "E8_QK_plus_GATING_r8_alpha16.yaml"
+#  "E8_QK_plus_GATING_r8_alpha16.yaml"
   "E9_OplusHEAD_r8_alpha16.yaml"
 
   # 3. Module × Method (DoRA only) @ r=8 α=16

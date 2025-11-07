@@ -23,6 +23,20 @@ echo "------------------------------------------"
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
 
 # 3. 运行训练
+conda activate mzsz
+cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
+export DART_LOCAL_DIR=/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/data/GEM_dart/
+
+EVAL_GEN=1 \
+EVAL_GEN_MAX_LENGTH=1024 \
+EVAL_GEN_MIN_LENGTH=5 \
+EVAL_GEN_NUM_BEAMS=5 \
+HP_EVAL_STEPS=2000 \
+HP_SAVE_STEPS=2000 \
+HP_LOGGING_STEPS=200 \
+SWANLAB_ENABLE=1 \
+SWANLAB_MODE=cloud \
+SWANLAB_PROJECT="gla-mamba-dart-new-1-4090" \
 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
 TOKENIZERS_PARALLELISM=false \
 OMP_NUM_THREADS=1 \
@@ -30,13 +44,6 @@ MKL_NUM_THREADS=1 \
 NUM_DATA_WORKERS=4 \
 GRADIENT_CHECKPOINTING=true \
 LOGITS_TO_KEEP=1 \
-HP_EVAL_STEPS=2000 \
-HP_SAVE_STEPS=2000 \
-HP_LOGGING_STEPS=200 \
-EVAL_GEN=1 \
-EVAL_GEN_MAX_LENGTH=128 \
-EVAL_GEN_MIN_LENGTH=5 \
-EVAL_GEN_NUM_BEAMS=5 \
 ./gla_batch_tmux.sh --suite E10 --round all \
   --pairs "87:dart" \
   --gpus "1" \
