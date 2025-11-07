@@ -33,7 +33,13 @@ class ParallelProcessorFS:
 
                 counter.value += 1
 
-            out[idx] = self.func(idx)
+            try:
+                out[idx] = self.func(idx)
+            except Exception as e:
+                print(f"[Worker {worker_idx}] Error processing idx={idx}: {type(e).__name__}: {e}")
+                import traceback
+                traceback.print_exc()
+                out[idx] = None
 
             if pbar is not None:
                 pbar.update(idx - idx_last)
@@ -54,7 +60,16 @@ class ParallelProcessorFS:
             for k, v in out.items():
                 output_all[k] = v
 
+        # Count None values before filtering
+        none_count = sum(1 for o in output_all if o is None)
+        if none_count > 0:
+            print(f"Warning: {none_count}/{self.size} samples returned None (will be filtered out)")
+        
         output_all = [o for o in output_all if o is not None]
+        
+        if len(output_all) == 0:
+            print(f"ERROR: All {self.size} samples were filtered out (all returned None)")
+            print(f"Check worker logs above for errors during processing")
 
         with open(self.output_file, "wb") as f:
             pickle.dump(output_all, f)

@@ -1,9 +1,11 @@
 import transformers
+import os
 from transformers.models.auto import AutoTokenizer
-from datasets import load_dataset
+from datasets import load_dataset, Dataset
 from huggingface_hub import snapshot_download
 from pathlib import Path
 from huggingface_hub import hf_hub_download
+import json
 
 from dataset.collator import DataCollator
 from .base import NlgDatasetBase
@@ -18,7 +20,7 @@ class DartDataset(NlgDatasetBase):
         self.df = None
         self.input_formatter = None
         prompt_prefix = "Generate text for the following RDF triples:\n"
-        self.sep_token = tokenizer.sep_token
+        self.sep_token = tokenizer.sep_token or getattr(tokenizer, "eos_token", "</s>")
         # prompt_prefix = None
 
         super().__init__(tokenizer, path, split, prompt_prefix=prompt_prefix,
@@ -28,17 +30,34 @@ class DartDataset(NlgDatasetBase):
 
     def get_cache_name(self):
         name = super().get_cache_name()
+        name = name.replace("/", "_").replace(" ", "_")  # 避免再次出现 "GEM dart" 这种文件名
         if self.mode == "gen":
-            name = name + "_gen"
+            name += "_gen"
         return name
 
     def __len__(self):
         return len(self.data) if self.data is not None else len(self.load_df())
 
     def _snapshot_local_root(self) -> Path:
-        """Download GEM/dart snapshot to a deterministic local directory and return the snapshot dir."""
+        """Prefer local directory if provided/offline, otherwise snapshot GEM/dart to data/ and return dir."""
+        # 1) explicit override
+        env_dir = os.environ.get("DART_LOCAL_DIR") or os.environ.get("HP_DART_LOCAL_DIR")
+        if env_dir and Path(env_dir).exists():
+            return Path(env_dir)
+
         local_root = Path("data") / self.path.replace("/", "_")
         local_root.mkdir(parents=True, exist_ok=True)
+
+        # 2) offline or local files already present → use local_root directly
+        offline = str(os.environ.get("HF_HUB_OFFLINE", "")).lower() in ("1", "true", "yes", "on")
+        has_local_files = any((local_root / name).exists() for name in [
+            "train.json", "validation.json", "dev.json", "test.json",
+            "train.parquet", "validation.parquet", "test.parquet",
+        ]) or any(local_root.rglob("*.json")) or any(local_root.rglob("*.parquet"))
+        if offline or has_local_files:
+            return local_root
+
+        # 3) fallback to snapshot download
         snap = snapshot_download(repo_id=self.path, repo_type="dataset", local_dir=str(local_root), local_dir_use_symlinks=False)
         return Path(snap)
 
@@ -114,7 +133,10 @@ class DartDataset(NlgDatasetBase):
             ds = load_dataset(builder, data_files={"train": [str(p) for p in files]})["train"]
             prefix, split, *seed_id = self.split.split("-")
             assert prefix == "train" and len(seed_id) == 0
-            return ds.train_test_split(test_size=0.2, seed=self.shuffle_seeds[0])[{"train": "train", "val": "test"}[split]]
+            ds = ds.train_test_split(test_size=0.2, seed=self.shuffle_seeds[0])[{"train": "train", "val": "test"}[split]]
+            if len(ds) == 0:
+                raise AssertionError(f"GEM/dart split '{self.split}' resolved to 0 samples. Please verify train files under {snap_dir}.")
+            return ds
         else:
             want = {"train": "train", "val": "val", "test": "test"}[self.split]
             builder, files = self._find_split_files(snap_dir, want)
@@ -129,6 +151,21 @@ class DartDataset(NlgDatasetBase):
                     builder, files = self._download_candidates("val" if want == "test" else want, snap_dir / "_files")
             assert files, f"GEM/dart {want} files not found under {snap_dir}"
             ds = load_dataset(builder, data_files={"train": [str(p) for p in files]})["train"]
+            if len(ds) == 0:
+                # Try alternate splits present locally to avoid silent empty datasets
+                alt_order = ("val", "train", "test") if want == "train" else ("train", "val", "test")
+                for alt in alt_order:
+                    b2, f2 = self._find_split_files(snap_dir, alt)
+                    if not f2:
+                        b2, f2 = self._download_candidates(alt, snap_dir / "_files")
+                    if f2:
+                        ds_alt = load_dataset(b2, data_files={"train": [str(p) for p in f2]})["train"]
+                        if len(ds_alt) > 0:
+                            print(f"[DART] Warning: split '{want}' empty. Falling back to '{alt}' ({len(ds_alt)} samples).")
+                            ds = ds_alt
+                            break
+                if len(ds) == 0:
+                    raise AssertionError(f"GEM/dart split '{want}' resolved to 0 samples. Please verify files under {snap_dir}.")
             return ds
 
     def load_df(self):
@@ -136,18 +173,173 @@ class DartDataset(NlgDatasetBase):
             # load via file-based builder
             data = self.load_hf_dataset_split()
             df = data.to_pandas()
-            df = pd.concat([df["tripleset"], df['annotations'].apply(pd.Series)], axis=1)
+
+            # Build source/text lists robustly from various schemas
+            def build_lists(row):
+                # Prefer standard annotations
+                if "annotations" in row and row["annotations"] is not None:
+                    ann = row["annotations"]
+                    # Handle both list and numpy.ndarray (pandas may convert lists to arrays)
+                    if isinstance(ann, (list, np.ndarray)):
+                        texts = []
+                        sources = []
+                        for a in ann:
+                            if isinstance(a, dict):
+                                t = a.get("text") or a.get("target") or a.get("reference")
+                                s = a.get("source", "")
+                                if isinstance(t, str) and t.strip():
+                                    texts.append(t)
+                                    sources.append(s)
+                            elif isinstance(a, str):
+                                texts.append(a)
+                                sources.append("")
+                        return sources, texts
+                    if isinstance(ann, dict):
+                        # dict-of-lists or dict-of-str
+                        texts = ann.get("text") or ann.get("target") or ann.get("targets") or []
+                        sources = ann.get("source") or [""] * (len(texts) if isinstance(texts, list) else 1)
+                        if isinstance(texts, str):
+                            texts = [texts]
+                        if isinstance(sources, str):
+                            sources = [sources]
+                        if isinstance(texts, list) and not isinstance(sources, list):
+                            sources = [""] * len(texts)
+                        return sources, texts
+
+                # Alternative fields when annotations missing
+                texts = None
+                if "references" in row and isinstance(row["references"], list):
+                    cand = []
+                    for r in row["references"]:
+                        if isinstance(r, dict) and "text" in r:
+                            cand.append(r["text"])
+                        elif isinstance(r, str):
+                            cand.append(r)
+                    texts = cand
+                # WebNLG-style keys occasionally present in merged corpora
+                if texts is None and isinstance(row.get("verbalizations"), list):
+                    cand = []
+                    for r in row["verbalizations"]:
+                        if isinstance(r, dict) and isinstance(r.get("text"), str):
+                            cand.append(r["text"])
+                        elif isinstance(r, str):
+                            cand.append(r)
+                    texts = cand
+                if texts is None and isinstance(row.get("lexicalizations"), list):
+                    cand = []
+                    for r in row["lexicalizations"]:
+                        if isinstance(r, dict) and isinstance(r.get("text"), str):
+                            cand.append(r["text"])
+                        elif isinstance(r, str):
+                            cand.append(r)
+                    texts = cand
+                if texts is None and isinstance(row.get("targets"), list):
+                    texts = [t for t in row["targets"] if isinstance(t, str)]
+                if texts is None and isinstance(row.get("target"), str):
+                    texts = [row["target"]]
+                if texts is None and isinstance(row.get("text"), str):
+                    texts = [row["text"]]
+                if texts is None and isinstance(row.get("output"), str):
+                    texts = [row["output"]]
+                if texts is None and isinstance(row.get("outputs"), list):
+                    texts = [t for t in row["outputs"] if isinstance(t, str)]
+                if texts is None:
+                    texts = []
+                sources = [""] * len(texts)
+                return sources, texts
+
+            # Apply normalizer row-wise
+            built = df.apply(build_lists, axis=1, result_type="reduce")
+            # built is a Series of tuples (sources, texts)
+            sources_col = built.apply(lambda x: x[0])
+            texts_col = built.apply(lambda x: x[1])
+            out = pd.DataFrame({
+                "tripleset": df["tripleset"] if "tripleset" in df.columns else [[] for _ in range(len(df))],
+                "source": sources_col,
+                "text": texts_col,
+            })
+
+            # Ensure list[str] for both columns (hardened)
+            def to_str_list(x):
+                if isinstance(x, list):
+                    out = []
+                    for e in x:
+                        if isinstance(e, (str, int, float)) or e is None:
+                            s = "" if e is None else str(e)
+                            if s.strip() != "":
+                                out.append(s)
+                    return out
+                if isinstance(x, (str, int, float)) or x is None:
+                    s = "" if x is None else str(x)
+                    return [s] if s.strip() != "" else []
+                return []
+            out["source"] = out.get("source", pd.Series([[]] * len(out))).apply(to_str_list)
+            out["text"]   = out.get("text",   pd.Series([[]] * len(out))).apply(to_str_list)
+
+            # 强制保证两列都存在（即使上面全空也要有空列表）
+            if "source" not in out.columns:
+                out["source"] = [[]] * len(out)
+            if "text" not in out.columns:
+                out["text"] = [[]] * len(out)
+
+            # Drop records without any reference text
+            out = out[out["text"].apply(lambda lst: isinstance(lst, list) and len(lst) > 0)].reset_index(drop=True)
+            if len(out) == 0:
+                # Final fallback: if nothing matched, try to harvest any string-like field as text
+                text_like_cols = [c for c in df.columns if c.lower() in ("reference", "references", "target", "targets", "text", "output", "outputs")]
+                rows_fallback = []
+                for _, r in df.iterrows():
+                    texts_fb = []
+                    for c in text_like_cols:
+                        v = r.get(c)
+                        if isinstance(v, str) and v.strip():
+                            texts_fb.append(v)
+                        elif isinstance(v, list):
+                            texts_fb += [t for t in v if isinstance(t, str) and t.strip()]
+                    if texts_fb:
+                        rows_fallback.append({
+                            "tripleset": r["tripleset"] if "tripleset" in df.columns else [],
+                            "source": [""] * len(texts_fb),
+                            "text": texts_fb,
+                        })
+                if rows_fallback:
+                    out = pd.DataFrame(rows_fallback)
+            df = out
 
             if self.mode == "lm":
-                # make separate entries for multiple annotations during training
-                df = df.explode(["source", "text"])
+                # 手动展开：把每个样本的多参考拆成多行
+                rows = []
+                for idx, row in df.iterrows():
+                    tripleset = row["tripleset"]
+                    sources = row["source"] if isinstance(row["source"], list) else [row["source"]]
+                    texts = row["text"] if isinstance(row["text"], list) else [row["text"]]
+                    # 确保 sources 和 texts 长度一致
+                    max_len = max(len(sources), len(texts))
+                    sources = sources + [""] * (max_len - len(sources))
+                    texts = texts + [""] * (max_len - len(texts))
+                    for s, t in zip(sources, texts):
+                        if isinstance(t, str) and t.strip():
+                            rows.append({"tripleset": tripleset, "source": str(s) if s else "", "text": str(t)})
+                df = pd.DataFrame(rows)
+                # 最终确保列存在且为字符串
+                if len(df) == 0:
+                    df = pd.DataFrame(columns=["tripleset", "source", "text"])
+                df["source"] = df["source"].astype(str)
+                df["text"] = df["text"].astype(str)
             
             self.df = df
 
         return self.df
 
     def linearize_triples(self, triples):
-        return " | ".join([" : ".join(t) for t in triples])
+        def as_str(x):
+            s = "" if x is None else str(x)
+            return s.replace("\n", " ").strip()
+
+        # Handle numpy.ndarray (pandas may convert lists to arrays)
+        if triples is None or (isinstance(triples, (list, np.ndarray)) and len(triples) == 0):
+            triples = []
+        return " | ".join([" : ".join(as_str(ti) for ti in t) for t in triples])
 
     # https://github.com/microsoft/AdaMix/blob/d361e9d6a24cb44d6d6169337128a0cf6feb6e1d/NLG/src/format_converting_webnlg.py
     def get_input_label(self, idx):
@@ -160,6 +352,11 @@ class DartDataset(NlgDatasetBase):
         input = self.linearize_triples(triples)
         
         if self.mode == "lm":
+            # Defensive fallback: guarantee scalar strings
+            if isinstance(text, list):
+                text = next((t for t in text if isinstance(t, str) and t.strip()), "")
+            if isinstance(source, list):
+                source = next((s for s in source if isinstance(s, str)), "")
             assert isinstance(source, str) and isinstance(text, str)
             label = text
         else:
