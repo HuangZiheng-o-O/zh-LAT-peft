@@ -363,7 +363,7 @@ class DartDataset(NlgDatasetBase):
             # need to handle multiple references
             assert isinstance(source, list) and isinstance(text, list)
             assert not any(self.sep_token in t for t in text)
-            label = self.tokenizer.sep_token.join(text)
+            label = self.sep_token.join(text)
 
         return input, label
     
