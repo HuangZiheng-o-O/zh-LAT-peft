@@ -113,15 +113,16 @@ class MambaBeamSearchDecoder(MambaDecoderBase):
         device = input_ids.device
 
         # instantiate beam scorer
-        if BeamSearchScorer is None:
+        _BeamSearchScorer = BeamSearchScorer
+        if _BeamSearchScorer is None:
             # Try lazy import from submodule if not resolved above
             try:
                 from transformers.generation.beam_search import BeamSearchScorer as _BSS  # type: ignore
-                BeamSearchScorer = _BSS
+                _BeamSearchScorer = _BSS
             except Exception as e:
                 raise ImportError("BeamSearchScorer is not available in this transformers version") from e
 
-        beam_scorer = BeamSearchScorer(
+        beam_scorer = _BeamSearchScorer(
             batch_size=1,
             num_beams=self.num_beams,
             device=device,
