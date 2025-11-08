@@ -4,6 +4,7 @@ from multiprocessing import Process, Value
 from pathlib import Path
 import pickle
 from tqdm import tqdm
+import os
 
 
 class ParallelProcessorFS:
@@ -47,9 +48,13 @@ class ParallelProcessorFS:
 
         if pbar is not None:
             pbar.close()
-        with open(self.worker_files[worker_idx], "wb") as f:
+        # Atomic write: write to tmp then replace
+        final_path = self.worker_files[worker_idx]
+        tmp_path = final_path.with_name(f"{final_path.name}.tmp.{os.getpid()}")
+        with open(tmp_path, "wb") as f:
             pickle.dump(out, f)
-        print(f"Wrote {self.worker_files[worker_idx]}")
+        os.replace(tmp_path, final_path)
+        print(f"Wrote {final_path}")
 
     def aggregate_result(self):
         output_all = [None] * self.size

@@ -5,6 +5,8 @@ import torch
 from pathlib import Path
 from tqdm import tqdm
 import pickle
+import os
+import time
 
 from utils.parallel_processor_fs import ParallelProcessorFS
 
@@ -42,31 +44,66 @@ class DatasetBase(ABC):
 
             cache_file = Path("data") / path.replace("/", "_") / f"{cache_file_stem}.pkl"
             if not cache_file.exists():
-                if num_parallel_workers > 0:
-                    assert subset_size is None
-                    data_ind = list(range(len(self)))
+                # Cooperative lock to prevent multiple processes writing the same cache concurrently
+                cache_file.parent.mkdir(parents=True, exist_ok=True)
+                lock_file = cache_file.with_suffix(cache_file.suffix + ".lock")
 
-                    self.data = ParallelProcessorFS(self.preproc, len(data_ind), num_parallel_workers, cache_file).run()
+                got_lock = False
+                try:
+                    # O_EXCL to ensure single writer
+                    fd = os.open(str(lock_file), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                    with os.fdopen(fd, "w") as lf:
+                        lf.write(f"pid={os.getpid()} time={time.time()}\n")
+                    got_lock = True
+                except FileExistsError:
+                    got_lock = False
+
+                if got_lock:
+                    try:
+                        if num_parallel_workers > 0:
+                            assert subset_size is None
+                            data_ind = list(range(len(self)))
+                            self.data = ParallelProcessorFS(self.preproc, len(data_ind), num_parallel_workers, cache_file).run()
+                        else:
+                            data_ind = list(range(len(self)))
+                            
+                            if subset_size is not None:
+                                random.Random(0).shuffle(data_ind)
+                                data_ind = data_ind[:subset_size]
+
+                            self.data = [self.preproc(idx) for idx in tqdm(data_ind)]
+                            self.data = [d for d in self.data if d is not None]
+
+                            if use_cache:
+                                with open(cache_file, "wb") as f:
+                                    pickle.dump(self.data, f)
+                    finally:
+                        # Release lock
+                        try:
+                            if lock_file.exists():
+                                os.remove(lock_file)
+                        except Exception:
+                            pass
                 else:
-                    data_ind = list(range(len(self)))
-                    
-                    if subset_size is not None:
-                        random.Random(0).shuffle(data_ind)
-                        data_ind = data_ind[:subset_size]
-
-                    self.data = [self.preproc(idx) for idx in tqdm(data_ind)]
-                    self.data = [d for d in self.data if d is not None]
-
-                    if use_cache:
-                        cache_file.parent.mkdir(parents=True, exist_ok=True)
-                        with open(cache_file, "wb") as f:
-                            pickle.dump(self.data, f)
+                    # Waiter: spin until cache file materializes (another process is writing it)
+                    while not cache_file.exists():
+                        time.sleep(2)
+                    with open(cache_file, "rb") as f:
+                        self.data = pickle.load(f)
             else:
                 with open(cache_file, "rb") as f:
                     self.data = pickle.load(f)
 
     def get_cache_name(self):
-        return f"cache_{self.path.replace('/', ' ')}_{self.split}"
+        base = f"cache_{self.path.replace('/', ' ')}_{self.split}"
+        # Optional namespacing to avoid cross-job collisions (set in env)
+        tag = os.environ.get("DATA_CACHE_TAG") or os.environ.get("CACHE_TAG")
+        if tag:
+            # sanitize tag
+            safe = "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in str(tag))
+            if safe:
+                base += f"_{safe}"
+        return base
 
     def encode(self, seq):
         return torch.LongTensor(self.tokenizer.encode(seq))
