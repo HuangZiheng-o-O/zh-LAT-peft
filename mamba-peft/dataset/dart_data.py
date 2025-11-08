@@ -430,8 +430,11 @@ class DartDataset(NlgDatasetBase):
     
     def compute_metrics(self, eval_preds):
         if self.mode == "gen":
-            predictions = eval_preds.preds
-            references = eval_preds.labels
+            predictions = getattr(eval_preds, "preds", [])
+            references = getattr(eval_preds, "labels", [])
+            # Defensive: skip metric computation if no samples
+            if not predictions or not references:
+                return {}
             references = [r.split(self.sep_token) for r in references]  # split to get all refs
 
             meteor = evaluate.load("meteor")

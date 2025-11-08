@@ -90,9 +90,14 @@ class DatasetBase(ABC):
                         time.sleep(2)
                     with open(cache_file, "rb") as f:
                         self.data = pickle.load(f)
-            else:
-                with open(cache_file, "rb") as f:
-                    self.data = pickle.load(f)
+        else:
+            # Build data in-memory without writing cache
+            data_ind = list(range(len(self)))
+            if subset_size is not None:
+                random.Random(0).shuffle(data_ind)
+                data_ind = data_ind[:subset_size]
+            self.data = [self.preproc(idx) for idx in tqdm(data_ind)]
+            self.data = [d for d in self.data if d is not None]
 
     def get_cache_name(self):
         base = f"cache_{self.path.replace('/', ' ')}_{self.split}"

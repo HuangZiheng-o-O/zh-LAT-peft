@@ -147,7 +147,13 @@ class MambaTrainer(Trainer):
         return (lm_loss, logits_valid, label_ids_valid)
         
     def generation_step(self, generator, model, inputs):
-        input_ids, label_ids = inputs["input_ids"], inputs["label_ids"]
+        # Defensive: handle None or malformed batches gracefully
+        if inputs is None:
+            return ([], [])
+        input_ids = inputs.get("input_ids") if isinstance(inputs, dict) else None
+        label_ids = inputs.get("label_ids") if isinstance(inputs, dict) else None
+        if input_ids is None or label_ids is None:
+            return ([], [])
         out_seq = generator(model, input_ids)
         output_ids = out_seq
         return (output_ids, label_ids)
@@ -241,8 +247,17 @@ class MambaTrainer(Trainer):
             label_ids_all = []
 
             for step, inputs in enumerate(tqdm(dataloader, desc="Evaluate")):
+                if inputs is None:
+                    continue
                 pred_ids, label_ids = self.generation_step(generator, model, inputs)
-                input_ids_all += [*inputs["input_ids"]]
+                # Skip empty results
+                if not pred_ids or not label_ids:
+                    continue
+                # inputs may be a dict-like batch
+                batch_input_ids = inputs.get("input_ids") if isinstance(inputs, dict) else None
+                if batch_input_ids is None:
+                    continue
+                input_ids_all += [*batch_input_ids]
                 pred_ids_all += [*pred_ids]
                 label_ids_all += [*label_ids]
 
