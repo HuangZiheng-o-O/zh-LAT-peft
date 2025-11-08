@@ -76,8 +76,11 @@ class ParallelProcessorFS:
             print(f"ERROR: All {self.size} samples were filtered out (all returned None)")
             print(f"Check worker logs above for errors during processing")
 
-        with open(self.output_file, "wb") as f:
+        # Atomic write of final aggregated cache to avoid partial/corrupted files
+        tmp_path = self.output_file.with_suffix(self.output_file.suffix + f".tmp.{os.getpid()}")
+        with open(tmp_path, "wb") as f:
             pickle.dump(output_all, f)
+        os.replace(tmp_path, self.output_file)
 
         return output_all
             

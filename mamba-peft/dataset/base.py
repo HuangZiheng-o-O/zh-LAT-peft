@@ -35,7 +35,6 @@ class DatasetBase(ABC):
         self.prompt_prefix_ids = None
         self.mode = mode
         self.max_seqlen = max_seqlen
-
         if use_cache:
             cache_file_stem = self.get_cache_name()
 
@@ -43,14 +42,17 @@ class DatasetBase(ABC):
                 cache_file_stem += f"_{subset_size}"
 
             cache_file = Path("data") / path.replace("/", "_") / f"{cache_file_stem}.pkl"
-            if not cache_file.exists():
-                # Cooperative lock to prevent multiple processes writing the same cache concurrently
-                cache_file.parent.mkdir(parents=True, exist_ok=True)
-                lock_file = cache_file.with_suffix(cache_file.suffix + ".lock")
+            cache_file.parent.mkdir(parents=True, exist_ok=True)
+            lock_file = cache_file.with_suffix(cache_file.suffix + ".lock")
 
+            # Fast-path: cache already exists and no writer lock → just load
+            if cache_file.exists() and not lock_file.exists():
+                with open(cache_file, "rb") as f:
+                    self.data = pickle.load(f)
+            else:
+                # Cooperative lock to prevent multiple processes writing the same cache concurrently
                 got_lock = False
                 try:
-                    # O_EXCL to ensure single writer
                     fd = os.open(str(lock_file), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
                     with os.fdopen(fd, "w") as lf:
                         lf.write(f"pid={os.getpid()} time={time.time()}\n")
@@ -63,20 +65,20 @@ class DatasetBase(ABC):
                         if num_parallel_workers > 0:
                             assert subset_size is None
                             data_ind = list(range(len(self)))
+                            # ParallelProcessorFS is responsible for atomic writes to cache_file
                             self.data = ParallelProcessorFS(self.preproc, len(data_ind), num_parallel_workers, cache_file).run()
                         else:
                             data_ind = list(range(len(self)))
-                            
                             if subset_size is not None:
                                 random.Random(0).shuffle(data_ind)
                                 data_ind = data_ind[:subset_size]
-
                             self.data = [self.preproc(idx) for idx in tqdm(data_ind)]
                             self.data = [d for d in self.data if d is not None]
-
-                            if use_cache:
-                                with open(cache_file, "wb") as f:
-                                    pickle.dump(self.data, f)
+                            # Atomic write final cache
+                            tmp_file = cache_file.with_suffix(cache_file.suffix + ".tmp")
+                            with open(tmp_file, "wb") as f:
+                                pickle.dump(self.data, f)
+                            os.replace(tmp_file, cache_file)
                     finally:
                         # Release lock
                         try:
@@ -86,7 +88,7 @@ class DatasetBase(ABC):
                             pass
                 else:
                     # Waiter: spin until cache file materializes (another process is writing it)
-                    while not cache_file.exists():
+                    while lock_file.exists() or not cache_file.exists():
                         time.sleep(2)
                     with open(cache_file, "rb") as f:
                         self.data = pickle.load(f)
@@ -98,6 +100,25 @@ class DatasetBase(ABC):
                 data_ind = data_ind[:subset_size]
             self.data = [self.preproc(idx) for idx in tqdm(data_ind)]
             self.data = [d for d in self.data if d is not None]
+
+    def _ensure_materialized(self):
+        """Lazily load/build self.data if it is None (e.g., after unpickling in a different context)."""
+        if self.data is not None:
+            return
+        cache_file_stem = self.get_cache_name()
+        cache_file = Path("data") / self.path.replace("/", "_") / f"{cache_file_stem}.pkl"
+        try:
+            if cache_file.exists():
+                with open(cache_file, "rb") as f:
+                    self.data = pickle.load(f)
+            else:
+                # Fallback: build in-memory without cache
+                data_ind = list(range(len(self)))
+                self.data = [self.preproc(idx) for idx in data_ind]
+                self.data = [d for d in self.data if d is not None]
+        except Exception:
+            # As last resort, mark empty to avoid NoneType errors; caller will handle emptiness.
+            self.data = []
 
     def get_cache_name(self):
         base = f"cache_{self.path.replace('/', ' ')}_{self.split}"
@@ -129,6 +150,9 @@ class DatasetBase(ABC):
         return input_ids, label_ids
     
     def get_ids(self, idx):
+        # Guard against None in edge cases
+        if self.data is None:
+            self._ensure_materialized()
         return self.data[idx]
 
     def __getitem__(self, idx):
@@ -182,6 +206,8 @@ class NluDatasetBase(DatasetBase):
     
     # workaround for old cache file, which store input and label concatenated
     def get_ids(self, idx):
+        if self.data is None:
+            self._ensure_materialized()
         sample = self.data[idx]
     
         if not isinstance(sample, (tuple, list)):

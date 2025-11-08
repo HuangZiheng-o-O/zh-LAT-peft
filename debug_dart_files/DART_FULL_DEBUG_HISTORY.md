@@ -1,3 +1,8 @@
+## DART Full Debug History (continuous log)\n
+\n
+This document records high-signal incidents, root causes, and fixes across the DART dataset pipeline (data loading, caching, training, and evaluation), along with a comprehensive index of relevant Python and bash files that are useful for analysis and reproduction.\n
+\n
+
 ## DART 数据集全量排障与修复纪实（从首次报错到全面解决）
 
 本文件完整记录了过去一周围绕 DART（GEM/dart）训练流水线的所有问题、分析与修复。包含：错误现象、根因、代码改动、验证方式、脚本与命令、经验教训与复用清单。目标是让后续读者可以“一次读懂、一次复现”。
@@ -110,7 +115,96 @@
   - 修复：显式判断 `None` 或空：
     - `if triples is None or (isinstance(triples, (list, np.ndarray)) and len(triples) == 0): triples = []`
 
-
+### [2025-11-08] DataLoader first batch TypeError caused by dataset cache not being loaded\n
+\n
+- Symptoms\n
+  - Trainers and minimal probes crashed on the first batch with:\n
+\n
+```\n
+TypeError: 'NoneType' object is not subscriptable\n
+  File .../dataset/base.py, line 132, in get_ids\n
+    return self.data[idx]\n
+```\n
+\n
+  - Reproduced even with num_workers=0 and with a valid, large train set (`len(ds)=62659`).\n
+\n
+- Root cause\n
+  - In `DatasetBase.__init__` (when `use_cache=True`): if a cache file already exists before dataset instantiation and there is no active writer, the code did not load the cache into `self.data`. Only two paths were handled:\n
+    - “no cache yet” → build and write (sets `self.data`)\n
+    - “another process writing” → wait, then load (sets `self.data`)\n
+  - If the cache already existed, initialization skipped both paths and left `self.data=None`. `len(ds)` still worked (via `load_df()`), but `__getitem__` failed at the first batch.\n
+\n
+- Why it surfaced “only sometimes”\n
+  - First runs after cache clear: building path sets `self.data` → OK.\n
+  - Subsequent runs (cache present): init didn’t load existing cache → `self.data` stayed None until `__getitem__` attempted indexing.\n
+\n
+- Fix (elegant, minimal)\n
+  - Add a fast-path that, when `cache_file` exists and no lock file is present, loads the cache in `__init__` immediately.\n
+  - Keep cooperative locking for build cases; add atomic write (`.tmp` then `os.replace`) to prevent partial or corrupted caches.\n
+  - If another process is building (lock exists), wait until the lock clears and then load the finished cache.\n
+\n
+- Validation\n
+  - `python -u mamba-peft/tools/debug_train_start.py`: train/val both print batch0 keys and tensor shapes; no `NoneType` errors.\n
+  - Full training proceeds; evaluation no longer crashes from malformed batches.\n
+\n
+---\n
+\n
+## Relevant files index (Python and Bash)\n
+\n
+The following files are the most relevant to DART loading, preprocessing, caching, training, generation, evaluation, and orchestration. This list is intentionally exhaustive to aid future investigations.\n
+\n
+### Dataset and preprocessing (Python)\n
+- `mamba-peft/dataset/dart_data.py` — DART-specific dataset, split resolution, normalization of source/text, linearization, get_input_label, metrics.\n
+- `mamba-peft/dataset/dart.py` — Additional DART dataset utilities (if used by older paths).\n
+- `mamba-peft/dataset/base.py` — Base dataset class, cache building/loading, sample preprocessing, mode handling.\n
+- `mamba-peft/dataset/collator.py` — Data collator used by DataLoader and Trainer.\n
+- `mamba-peft/scripts/preproc/preproc_dart.py` — Optional standalone preprocessing script for DART.\n
+- `dataset_downloader_v3.py` — Helper for dataset downloads (if used to stage local data).\n
+\n
+### Parallel preprocessing and utilities (Python)\n
+- `mamba-peft/utils/parallel_processor_fs.py` — Parallel workers, atomic part-file writes, aggregation.\n
+- `mamba-peft/utils/utils.py` — General utilities.\n
+- `mamba-peft/utils/model_utils.py` — Model-related utilities used during setup/evaluation.\n
+\n
+### Training and orchestration (Python)\n
+- `mamba-peft/train.py` — Top-level training entry.\n
+- `mamba-peft/train_shared.py` — Trainer construction, argument plumbing, training/eval hooks.\n
+- `mamba-peft/trainer/mamba_trainer.py` — Custom Trainer (evaluation and generation hooks, logging, guards).\n
+- `mamba-peft/trainer/trainer_utils.py` — Trainer utility functions used by the training loop.\n
+- `prefetch_mamba.py` — Optional prefetch helpers.\n
+\n
+### Generation/decoding (Python)\n
+- `mamba-peft/mamba_ssm_peft/utils/decoder.py` — Beam search decoding; earlier scoping fix for BeamSearchScorer.\n
+- `mamba-peft/mamba_ssm_peft/utils/generation.py` — Generation utilities used during evaluation.\n
+- `mamba-peft/mamba_ssm_peft/utils/beam_search.py` — Beam search helpers.\n
+- `mamba-peft/mamba_ssm_peft/utils/hf.py` — HF integration helpers.\n
+\n
+### Debug and verification scripts (Python)\n
+- `mamba-peft/tools/debug_train_start.py` — Minimal probe for cache presence, `self.data` state, and first DataLoader batch.\n
+- `quick_check_dart_eval.py` (recommended placement: repo root) — End-to-end quick check for train/val dataset shapes and first batches, cached and uncached.\n
+\n
+### Bash scripts for training and preprocessing\n
+- `mamba-peft/scripts/train/new/gla_batch_tmux.sh` — Batch orchestrator; passes/exports critical env vars to runner scripts.\n
+- `mamba-peft/scripts/train/new/all.sh` — Training runner.\n
+- `mamba-peft/scripts/train/new/dart130m.sh` — DART-targeted training runner (example config).\n
+- `mamba-peft/scripts/train/gla_rounds.sh` — Round-based orchestrations (if used).\n
+- `mamba-peft/scripts/preproc/preproc_data.sh` — Data preprocessing driver.\n
+- `run_gla_finetune.sh` — Repo-level convenience script for finetuning runs.\n
+- `run_dart_training.sh` — Repo-level convenience script for DART runs.\n
+\n
+### Environment variables (high-signal for DART)\n
+- Data/cache control: `DART_LOCAL_DIR`, `DATA_CACHE_TAG` (or `CACHE_TAG`).\n
+- Trainer/eval cadence: `HP_EVAL_STEPS`, `HP_SAVE_STEPS`, `HP_LOGGING_STEPS`.\n
+- Generation: `EVAL_GEN`, `EVAL_GEN_MAX_LENGTH`, `EVAL_GEN_MIN_LENGTH`, `EVAL_GEN_NUM_BEAMS`.\n
+- Performance: `NUM_DATA_WORKERS`, `GRADIENT_CHECKPOINTING`, `LOGITS_TO_KEEP`, `PREFETCH_FACTOR`.\n
+- Torch/tokenizers: `PYTORCH_CUDA_ALLOC_CONF`, `TOKENIZERS_PARALLELISM`, `OMP_NUM_THREADS`, `MKL_NUM_THREADS`.\n
+\n
+---\n
+\n
+## Notes\n
+- When pre-warming caches (single-experiment phase), ensure the same `DATA_CACHE_TAG` and env are used as subsequent parallel runs, so all workers load the same cache fast-path.\n
+- After changes to dataset normalization (e.g., list flattening, sep token handling), clear only the affected split caches (e.g., `val_gen`) to expedite re-tests.\n
+\n
 ## 落盘的脚本与用法
 
 - 清理/验证/训练一体化脚本：
