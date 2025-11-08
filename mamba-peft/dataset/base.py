@@ -110,6 +110,11 @@ class DatasetBase(ABC):
 
     def preproc(self, idx):
         input, label = self.get_input_label(idx)
+        
+        # Handle case where get_input_label returns (None, None) for invalid samples
+        if input is None or label is None:
+            return None
+        
         input_prepoc, label_preproc = self.preproc_input_label(input, label)
         input_ids, label_ids = self.encode(input_prepoc), self.encode(label_preproc)
 

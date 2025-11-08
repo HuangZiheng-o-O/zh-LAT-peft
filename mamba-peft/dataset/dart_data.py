@@ -261,10 +261,22 @@ class DartDataset(NlgDatasetBase):
 
             # Ensure list[str] for both columns (hardened)
             def to_str_list(x):
+                # Handle numpy arrays first
+                if isinstance(x, np.ndarray):
+                    x = x.tolist()
+                
                 if isinstance(x, list):
                     out = []
                     for e in x:
-                        if isinstance(e, (str, int, float)) or e is None:
+                        # Recursively handle nested structures
+                        if isinstance(e, (list, np.ndarray)):
+                            # Flatten one level
+                            for sub_e in (e.tolist() if isinstance(e, np.ndarray) else e):
+                                if isinstance(sub_e, (str, int, float)) or sub_e is None:
+                                    s = "" if sub_e is None else str(sub_e)
+                                    if s.strip() != "":
+                                        out.append(s)
+                        elif isinstance(e, (str, int, float)) or e is None:
                             s = "" if e is None else str(e)
                             if s.strip() != "":
                                 out.append(s)
@@ -386,13 +398,32 @@ class DartDataset(NlgDatasetBase):
             if not isinstance(text, list):
                 text = [text] if text else []
             
+            # Flatten nested lists (defensive)
+            def flatten_once(lst):
+                result = []
+                for item in lst:
+                    if isinstance(item, (list, np.ndarray)):
+                        result.extend(item.tolist() if isinstance(item, np.ndarray) else item)
+                    else:
+                        result.append(item)
+                return result
+            
+            text = flatten_once(text)
+            source = flatten_once(source)
+            
             # Filter out any non-string elements
-            text = [t for t in text if isinstance(t, str) and t.strip()]
+            text = [str(t).strip() for t in text if t is not None and str(t).strip()]
             
             if len(text) == 0:
-                raise ValueError(f"Sample {idx} has no valid text references after filtering")
+                # Don't raise, return None so preproc filters it out
+                print(f"[DART] Warning: Sample {idx} has no valid text after filtering, skipping")
+                return None, None
             
-            assert not any(self.sep_token in t for t in text), f"Sample {idx}: sep_token '{self.sep_token}' found in text"
+            # Check for sep_token collision
+            if any(self.sep_token in t for t in text):
+                print(f"[DART] Warning: Sample {idx} contains sep_token '{self.sep_token}', replacing with space")
+                text = [t.replace(self.sep_token, " ") for t in text]
+            
             label = self.sep_token.join(text)
 
         return input, label
