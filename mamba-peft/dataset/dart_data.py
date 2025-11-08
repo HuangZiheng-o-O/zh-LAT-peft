@@ -305,6 +305,19 @@ class DartDataset(NlgDatasetBase):
                 if rows_fallback:
                     out = pd.DataFrame(rows_fallback)
             df = out
+            
+            # 最终确保 source 和 text 列是正确的列表格式（不是 numpy 数组）
+            # 这对 mode="gen" 很关键，因为后续会直接使用这些列表
+            def ensure_list(x):
+                if isinstance(x, np.ndarray):
+                    return x.tolist()
+                elif isinstance(x, list):
+                    return x
+                else:
+                    return [x] if x else []
+            
+            df["source"] = df["source"].apply(ensure_list)
+            df["text"] = df["text"].apply(ensure_list)
 
             if self.mode == "lm":
                 # 手动展开：把每个样本的多参考拆成多行
@@ -360,9 +373,26 @@ class DartDataset(NlgDatasetBase):
             assert isinstance(source, str) and isinstance(text, str)
             label = text
         else:
-            # need to handle multiple references
-            assert isinstance(source, list) and isinstance(text, list)
-            assert not any(self.sep_token in t for t in text)
+            # need to handle multiple references (generation mode)
+            # Ensure source and text are lists (not numpy arrays)
+            if isinstance(source, np.ndarray):
+                source = source.tolist()
+            if isinstance(text, np.ndarray):
+                text = text.tolist()
+            
+            # Ensure they are lists
+            if not isinstance(source, list):
+                source = [source] if source else []
+            if not isinstance(text, list):
+                text = [text] if text else []
+            
+            # Filter out any non-string elements
+            text = [t for t in text if isinstance(t, str) and t.strip()]
+            
+            if len(text) == 0:
+                raise ValueError(f"Sample {idx} has no valid text references after filtering")
+            
+            assert not any(self.sep_token in t for t in text), f"Sample {idx}: sep_token '{self.sep_token}' found in text"
             label = self.sep_token.join(text)
 
         return input, label
