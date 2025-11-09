@@ -18,6 +18,7 @@ except Exception:
 def get_logits_recurrent(model, input_ids, inference_params):
     batch_size = input_ids.shape[0]
     decoding = inference_params.seqlen_offset > 0
+    full_input_ids = input_ids
     if decoding:
         position_ids = torch.full(
             (batch_size, 1),
@@ -30,16 +31,42 @@ def get_logits_recurrent(model, input_ids, inference_params):
     else:
         position_ids = None
 
-    logits = model(
-        input_ids,
-        position_ids=position_ids,
-        inference_params=inference_params,
-        num_last_tokens=1,
-    ).logits.squeeze(dim=1)
+    # Default path: models that support num_last_tokens (e.g., Mamba)
+    logits_out = None
+    try:
+        logits_try = model(
+            input_ids,
+            position_ids=position_ids,
+            inference_params=inference_params,
+            num_last_tokens=1,
+        ).logits
+        # If model ignored num_last_tokens, it may return [B, seq_len, V]
+        if logits_try.dim() == 3 and logits_try.shape[1] != 1:
+            raise RuntimeError("num_last_tokens was ignored; got 3D logits with seq_len != 1")
+        logits_out = logits_try.squeeze(dim=1) if logits_try.dim() == 3 else logits_try
+    except Exception:
+        # Fallback A: models (like FLA/GLA) that support logits_to_keep=1
+        try:
+            logits_try2 = model(
+                full_input_ids if decoding else input_ids,
+                position_ids=None if decoding else position_ids,
+                inference_params=inference_params if hasattr(model, "allocate_inference_cache") else None,
+                logits_to_keep=1,
+            ).logits
+            if logits_try2.dim() == 3 and logits_try2.shape[1] == 1:
+                logits_out = logits_try2.squeeze(dim=1)
+            elif logits_try2.dim() == 3:
+                logits_out = logits_try2[:, -1]
+            else:
+                logits_out = logits_try2
+        except Exception:
+            # Fallback B: last-token from full forward (no cache). Slow but safe.
+            logits_full = model(full_input_ids).logits
+            logits_out = logits_full[:, -1]
 
     inference_params.seqlen_offset += input_ids.shape[1]
 
-    return logits
+    return logits_out
 
 
 def get_logits_parallel(model, input_ids, inference_params):

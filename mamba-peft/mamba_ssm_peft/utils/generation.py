@@ -181,12 +181,35 @@ def decode(
         else:
             position_ids = None
         if not cg or not decoding:
-            logits = model(
-                input_ids,
-                position_ids=position_ids,
-                inference_params=inference_params,
-                num_last_tokens=1,
-            ).logits.squeeze(dim=1)
+            # Primary path: models that support num_last_tokens
+            try:
+                logits_try = model(
+                    input_ids,
+                    position_ids=position_ids,
+                    inference_params=inference_params,
+                    num_last_tokens=1,
+                ).logits
+                if logits_try.dim() == 3 and logits_try.shape[1] != 1:
+                    raise RuntimeError("num_last_tokens ignored; got 3D logits with seq_len != 1")
+                logits = logits_try.squeeze(dim=1) if logits_try.dim() == 3 else logits_try
+            except Exception:
+                # Fallback for models like GLA: use logits_to_keep=1
+                try:
+                    logits_try2 = model(
+                        input_ids,
+                        position_ids=position_ids,
+                        inference_params=inference_params if hasattr(model, "allocate_inference_cache") else None,
+                        logits_to_keep=1,
+                    ).logits
+                    if logits_try2.dim() == 3 and logits_try2.shape[1] == 1:
+                        logits = logits_try2.squeeze(dim=1)
+                    elif logits_try2.dim() == 3:
+                        logits = logits_try2[:, -1]
+                    else:
+                        logits = logits_try2
+                except Exception:
+                    # Final fallback: compute from full forward and take last token
+                    logits = model(input_ids).logits[:, -1]
         else:
             logits = model._decoding_cache.run(
                 input_ids, position_ids, inference_params.seqlen_offset

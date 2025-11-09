@@ -4,7 +4,6 @@ import argparse
 from dataset.boolq import BoolQDataset
 from mamba_ssm_peft import load_mamba_tokenizer
 
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--workers", type=int, default=0)

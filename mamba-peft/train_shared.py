@@ -51,7 +51,16 @@ def build_and_run_trainer(
         yaml.dump(cfg, f)
 
     if eval_gen is not None:
-        eval_generator = create_decoder(tokenizer, **eval_gen)
+        # Detect FLA/GLA models and default to parallel logits during beam search
+        _eval_gen_cfg = dict(eval_gen)
+        try:
+            cls = model.__class__
+            is_gla_model = ("GLA" in getattr(cls, "__name__", "")) or ("fla." in getattr(cls, "__module__", ""))
+        except Exception:
+            is_gla_model = False
+        if is_gla_model and "mode" not in _eval_gen_cfg:
+            _eval_gen_cfg["mode"] = "parallel"
+        eval_generator = create_decoder(tokenizer, **_eval_gen_cfg)
     else:
         eval_generator = None
 
