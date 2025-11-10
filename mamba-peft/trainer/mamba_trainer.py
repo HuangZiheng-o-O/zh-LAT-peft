@@ -155,8 +155,17 @@ class MambaTrainer(Trainer):
         if input_ids is None or label_ids is None:
             return ([], [])
         out_seq = generator(model, input_ids)
-        output_ids = out_seq
-        return (output_ids, label_ids)
+        # Normalize outputs: accept tensor or Generate*Output, return lists of per-sample tensors
+        if hasattr(out_seq, "sequences"):
+            out_seq = out_seq.sequences
+        # Ensure 2D [batch, seqlen]
+        if out_seq.dim() == 1:
+            out_seq = out_seq.unsqueeze(0)
+        if label_ids.dim() == 1:
+            label_ids = label_ids.unsqueeze(0)
+        pred_list = [row for row in out_seq]  # list[Tensor]
+        label_list = [row for row in label_ids]  # list[Tensor]
+        return (pred_list, label_list)
 
     def save_model(self, output_dir, _internal_call):
         # Always ensure the target directory exists for downstream HF saves
