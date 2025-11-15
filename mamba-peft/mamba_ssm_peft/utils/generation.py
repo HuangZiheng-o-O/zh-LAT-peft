@@ -122,6 +122,7 @@ def decode(
     input_ids,
     model,
     max_length,
+    min_length=0,
     top_k=1,
     top_p=0.0,
     min_p=0.0,
@@ -241,7 +242,14 @@ def decode(
     scores, sequences = [], [input_ids]
     sequences_cat = input_ids
     while not should_stop(sequences[-1], inference_params):
-        scores.append(get_logits(sequences[-1], inference_params))
+        logits_step = get_logits(sequences[-1], inference_params)
+        # Enforce minimum generation length by masking eos until min_length is reached
+        if eos_token_id is not None and inference_params.seqlen_offset < max(min_length, 0):
+            try:
+                logits_step[:, eos_token_id] = float("-inf")
+            except Exception:
+                pass
+        scores.append(logits_step)
         inference_params.seqlen_offset += sequences[-1].shape[1]
         if repetition_penalty == 1.0:
             sampled_tokens = sample_tokens(scores[-1], inference_params)

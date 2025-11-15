@@ -110,6 +110,22 @@ class MambaBeamSearchDecoder(MambaDecoderBase):
         self.kwargs = kwargs
 
     def forward(self, model, input_ids):
+        # Fallback: If num_beams <= 1, run greedy decoding instead of beam search
+        if self.num_beams is None or self.num_beams <= 1:
+            from mamba_ssm_peft.utils.generation import decode
+            # Greedy decoding via top_k=1; note: min_length is not enforced in greedy path
+            outputs = decode(
+                input_ids=input_ids,
+                model=model,
+                max_length=input_ids.shape[1] + self.max_length,
+                min_length=self.min_length,
+                top_k=1,
+                eos_token_id=self.tokenizer.eos_token_id,
+            )
+            if not self.prepend_input_ids:
+                outputs.sequences = outputs.sequences[:, input_ids.shape[1]:]
+            return outputs if self.return_logits else outputs.sequences
+
         device = input_ids.device
 
         # instantiate beam scorer
