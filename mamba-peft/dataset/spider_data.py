@@ -13,6 +13,7 @@ from .base import NlgDatasetBase
 import json
 import numpy as np
 import pandas as pd
+from typing import List, Dict
 
 
 class SpiderDataset(NlgDatasetBase):
@@ -94,6 +95,26 @@ class SpiderDataset(NlgDatasetBase):
         out = " | ".join(tables_str)
         return out
 
+    def _examples_from_json_files(self, root: Path, filenames: List[str]) -> List[Dict[str, str]]:
+        """Read only necessary fields (question, db_id, query) to avoid Arrow schema issues in nested 'sql'."""
+        records: List[Dict[str, str]] = []
+        for name in filenames:
+            p = root / name
+            if not p.exists():
+                continue
+            with open(p, "r") as f:
+                try:
+                    arr = json.load(f)
+                except Exception:
+                    continue
+            for ex in arr:
+                records.append({
+                    "question": ex.get("question", ""),
+                    "db_id": ex.get("db_id", ""),
+                    "query": ex.get("query", ""),
+                })
+        return records
+
     def load_table_dataset(self):
         # Prefer local official Spider if provided, else snapshot to data/
         root = self._get_local_root()
@@ -129,39 +150,22 @@ class SpiderDataset(NlgDatasetBase):
             local_root = Path("data") / self.path.replace("/", "_")
             local_root.mkdir(parents=True, exist_ok=True)
             root = Path(snapshot_download(repo_id=self.path, repo_type="dataset", local_dir=str(local_root), local_dir_use_symlinks=False))
-
-        def find_files(keywords, prefer_explicit=None):
-            if prefer_explicit:
-                cand_files = [root / name for name in prefer_explicit]
-                cand_files = [p for p in cand_files if p.exists()]
-                if cand_files:
-                    builder = "json" if any(p.suffix in (".json", ".jsonl") for p in cand_files) else "parquet"
-                    return builder, cand_files
-            def _match(exts):
-                out = []
-                for hint in keywords:
-                    for ext in exts:
-                        out += list(root.rglob(f"**/*{hint}*.{ext}"))
-                return out
-            files_parquet = _match(["parquet"]) 
-            files_jsonl  = _match(["jsonl"]) 
-            files_json   = _match(["json"]) 
-            if files_parquet: return "parquet", sorted(set(files_parquet))
-            if files_jsonl:  return "json", sorted(set(files_jsonl))
-            if files_json:   return "json", sorted(set(files_json))
-            return None, []
-
+        from datasets import Dataset
         if self.split == "test":
-            # Spider 没有公开 test 标签，沿用 validation/dev
-            builder, files = find_files(["validation", "valid", "dev"], prefer_explicit=["dev.json", "dev_gold.sql"])
-            assert files, f"spider dev/validation files not found under {root}"
-            ds = load_dataset(builder, data_files={"train": [str(p) for p in files]})["train"]
-            return ds
+            # Use dev.json as evaluation split (Spider doesn't have public test)
+            recs = self._examples_from_json_files(root, ["dev.json"])
+            assert recs, f"spider dev.json not found or empty under {root}"
+            return Dataset.from_list(recs)
         else:
-            # Prefer official JSONs if present (train_spider + train_others)
-            builder, files = find_files(["train", "train_spider", "training"], prefer_explicit=["train_spider.json", "train_others.json"])
-            assert files, f"spider train files not found under {root}"
-            ds = load_dataset(builder, data_files={"train": [str(p) for p in files]})["train"]
+            # Train/Val from official train JSONs
+            recs = self._examples_from_json_files(root, ["train_spider.json", "train_others.json"])
+            if not recs:
+                # Fallback to any train*.json present
+                cand = sorted(list(root.rglob("**/train*.json")))
+                names = [str(p.relative_to(root)) for p in cand]
+                recs = self._examples_from_json_files(root, names)
+            assert recs, f"spider train files not found under {root}"
+            ds = Dataset.from_list(recs)
             return ds.train_test_split(test_size=0.2, seed=self.shuffle_seeds[0])[{"train": "train", "val": "test"}[self.split]]
 
     def get_hf_dataset(self):
@@ -183,7 +187,7 @@ class SpiderDataset(NlgDatasetBase):
 
         table = self.hf_dataset[1][db_id]
 
-        input = f"Question: {question}\\Schema: {table}\n"
+        input = f"Question: {question}\nSchema: {table}\n"
         label = query.lower().strip()
         
         return input, label
