@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 import requests
 import transformers
 from transformers.models.auto import AutoTokenizer
@@ -25,11 +26,20 @@ class SpiderDataset(NlgDatasetBase):
         assert self.has_test_split
         assert max_seqlen is not None
         prompt_prefix = "Create a sql request for the following question and schema:\n"
-
-        super().__init__(tokenizer, path, split, prompt_prefix=prompt_prefix + tokenizer.sep_token,  
+        # For Text-to-SQL literature (e.g., PICARD/T5 baselines), inputs are separated by textual labels/newlines,
+        # not by model-specific sep tokens. Use a plain newline-only prefix.
+        super().__init__(tokenizer, path, split, prompt_prefix=prompt_prefix,  
                          use_cache=use_cache, max_seqlen=max_seqlen, **kwargs)
         self._snapshot_dir = None
         self._db_dir = None
+    
+    def _get_local_root(self) -> Path | None:
+        env_dir = os.environ.get("SPIDER_LOCAL_DIR") or os.environ.get("HP_SPIDER_LOCAL_DIR")
+        if env_dir:
+            p = Path(env_dir)
+            if p.exists():
+                return p
+        return None
         
     def get_sql_hardness(self, sql, db):
         db_dir = self._db_dir or (Path("data") / self.path.replace("/", "_") / "spider" / "database")
@@ -85,20 +95,22 @@ class SpiderDataset(NlgDatasetBase):
         return out
 
     def load_table_dataset(self):
-        # Ensure snapshot
-        local_root = Path("data") / self.path.replace("/", "_")
-        local_root.mkdir(parents=True, exist_ok=True)
-        snap = Path(snapshot_download(repo_id=self.path, repo_type="dataset", local_dir=str(local_root), local_dir_use_symlinks=False))
-        self._snapshot_dir = snap
+        # Prefer local official Spider if provided, else snapshot to data/
+        root = self._get_local_root()
+        if root is None:
+            local_root = Path("data") / self.path.replace("/", "_")
+            local_root.mkdir(parents=True, exist_ok=True)
+            root = Path(snapshot_download(repo_id=self.path, repo_type="dataset", local_dir=str(local_root), local_dir_use_symlinks=False))
+        self._snapshot_dir = root
         # Find tables.json anywhere
-        cand = list(snap.rglob("**/tables.json"))
-        assert cand, f"tables.json not found under {snap}"
+        cand = list(root.rglob("**/tables.json"))
+        assert cand, f"tables.json not found under {root}"
         table_file = cand[0]
         # Infer db dir: prefer a sibling 'database' under the same tree
         db_dir = table_file.parent / "database"
         if not db_dir.exists():
             # search up to find a directory named 'database'
-            db_cand = list(snap.rglob("**/database"))
+            db_cand = list(root.rglob("**/database"))
             if db_cand:
                 db_dir = db_cand[0]
         self._db_dir = db_dir
@@ -111,17 +123,25 @@ class SpiderDataset(NlgDatasetBase):
 
     def load_hf_dataset_split(self):
         assert self.has_test_split
-        # Snapshot files locally and load via json/parquet
-        local_root = Path("data") / self.path.replace("/", "_")
-        local_root.mkdir(parents=True, exist_ok=True)
-        snap = Path(snapshot_download(repo_id=self.path, repo_type="dataset", local_dir=str(local_root), local_dir_use_symlinks=False))
+        # Prefer local official Spider if provided, else snapshot to data/
+        root = self._get_local_root()
+        if root is None:
+            local_root = Path("data") / self.path.replace("/", "_")
+            local_root.mkdir(parents=True, exist_ok=True)
+            root = Path(snapshot_download(repo_id=self.path, repo_type="dataset", local_dir=str(local_root), local_dir_use_symlinks=False))
 
-        def find_files(keywords):
+        def find_files(keywords, prefer_explicit=None):
+            if prefer_explicit:
+                cand_files = [root / name for name in prefer_explicit]
+                cand_files = [p for p in cand_files if p.exists()]
+                if cand_files:
+                    builder = "json" if any(p.suffix in (".json", ".jsonl") for p in cand_files) else "parquet"
+                    return builder, cand_files
             def _match(exts):
                 out = []
                 for hint in keywords:
                     for ext in exts:
-                        out += list(snap.rglob(f"**/*{hint}*.{ext}"))
+                        out += list(root.rglob(f"**/*{hint}*.{ext}"))
                 return out
             files_parquet = _match(["parquet"]) 
             files_jsonl  = _match(["jsonl"]) 
@@ -133,13 +153,14 @@ class SpiderDataset(NlgDatasetBase):
 
         if self.split == "test":
             # Spider 没有公开 test 标签，沿用 validation/dev
-            builder, files = find_files(["validation", "valid", "dev"])
-            assert files, f"spider dev/validation files not found under {snap}"
+            builder, files = find_files(["validation", "valid", "dev"], prefer_explicit=["dev.json", "dev_gold.sql"])
+            assert files, f"spider dev/validation files not found under {root}"
             ds = load_dataset(builder, data_files={"train": [str(p) for p in files]})["train"]
             return ds
         else:
-            builder, files = find_files(["train", "train_spider", "training"])
-            assert files, f"spider train files not found under {snap}"
+            # Prefer official JSONs if present (train_spider + train_others)
+            builder, files = find_files(["train", "train_spider", "training"], prefer_explicit=["train_spider.json", "train_others.json"])
+            assert files, f"spider train files not found under {root}"
             ds = load_dataset(builder, data_files={"train": [str(p) for p in files]})["train"]
             return ds.train_test_split(test_size=0.2, seed=self.shuffle_seeds[0])[{"train": "train", "val": "test"}[self.split]]
 
