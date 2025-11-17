@@ -179,11 +179,11 @@ class SpiderDataset(NlgDatasetBase):
         return self.hf_dataset
 
     def get_input_label(self, idx):
-        self.get_hf_dataset()
+        hf_ds, _ = self.get_hf_dataset()
 
-        question = self.hf_dataset[0]["question"][idx]
-        db_id = self.hf_dataset[0]["db_id"][idx]
-        query = self.hf_dataset[0]["query"][idx]
+        question = hf_ds["question"][idx]
+        db_id = hf_ds["db_id"][idx]
+        query = hf_ds["query"][idx]
 
         table = self.hf_dataset[1][db_id]
 
@@ -193,12 +193,25 @@ class SpiderDataset(NlgDatasetBase):
         return input, label
     
     def preproc(self, idx):
+        """
+        Build one training/eval example.
+        We:
+        - Use the base class to create (input_ids, label_ids)
+        - Attach metadata with db_id and canonical SQL query (lower+strip) so that
+          generation metrics can safely use the ground-truth SQL without relying
+          on decoded labels or fragile index assumptions.
+        """
         inputs_labels = super().preproc(idx)
 
         if inputs_labels is None:
             return None
 
-        return inputs_labels, {"db_id": self.hf_dataset[0]["db_id"][idx]}
+        hf_ds, _ = self.get_hf_dataset()
+        meta = {
+            "db_id": hf_ds["db_id"][idx],
+            "query": str(hf_ds["query"][idx]).lower().strip(),
+        }
+        return inputs_labels, meta
     
     def get_ids(self, idx):
         return self.data[idx][0]
@@ -208,14 +221,33 @@ class SpiderDataset(NlgDatasetBase):
     
     def compute_metrics(self, eval_preds, eval_mask=None):
         if self.mode == "gen":
+            # Ensure dataset and HF view are initialized (handles lazy reload cases)
+            if self.data is None:
+                # Import from base without circular import
+                from .base import DatasetBase  # type: ignore
+                DatasetBase._ensure_materialized(self)  # type: ignore[attr-defined]
+
             metric = SpiderMetric()
 
-            db_ids = [self.get_db_id(i) for i in range(len(self))]
-            assert len(db_ids) == len(eval_preds.preds)
-            assert len(db_ids) == len(eval_preds.labels)
+            size = len(self)
+            # Guard against legacy caches that don't carry 'query' in metadata
+            sample_meta = self.data[0][1] if (self.data and len(self.data) > 0) else {}
+            if "query" not in sample_meta:
+                raise RuntimeError(
+                    "SpiderDataset.compute_metrics expected per-sample metadata with 'query', "
+                    "but current cache is missing it. Please clear the Spider cache directory "
+                    "(e.g., data/xlangai_spider_*/cache_*.pkl) or set DATA_CACHE_TAG to a new "
+                    "value and rerun so the dataset can be rebuilt."
+                )
+
+            # For each in-memory example, use the attached db_id + canonical SQL query.
+            db_ids = [self.data[i][1]["db_id"] for i in range(size)]
+            gt_queries = [self.data[i][1]["query"] for i in range(size)]
+
+            assert len(db_ids) == len(eval_preds.preds) == len(gt_queries)
 
             predictions = list(zip(eval_preds.preds, db_ids))
-            references = list(zip(eval_preds.labels, db_ids))
+            references = list(zip(gt_queries, db_ids))
 
             if eval_mask is not None:
                 predictions = [predictions[i] for i in eval_mask]
