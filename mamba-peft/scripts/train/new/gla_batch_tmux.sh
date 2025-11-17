@@ -106,40 +106,43 @@ on_exit(){ for f in "${cleanup_tmpfiles[@]:-}"; do rm -f "$f" 2>/dev/null || tru
 trap on_exit EXIT
 HDR
 
-  printf 'SCRIPT_DIR=%q\n' "$SCRIPT_DIR"
-  printf 'LAUNCHER=%q\n' "$LAUNCHER"
-  printf 'SUITE=%q\n' "$SUITE"
-  printf 'ROUND=%q\n' "$ROUND"
-  printf 'LOG_DIR=%q\n' "$LOG_DIR"
+  printf 'export SCRIPT_DIR=%q\n' "$SCRIPT_DIR"
+  printf 'export LAUNCHER=%q\n' "$LAUNCHER"
+  printf 'export SUITE=%q\n' "$SUITE"
+  printf 'export ROUND=%q\n' "$ROUND"
+  printf 'export LOG_DIR=%q\n' "$LOG_DIR"
   # Capture GPU env into the runner so tmux sessions get the right values even if tmux server env differs
-  printf 'GPU_IDS=%q\n' "${GPU_IDS:-}"
-  printf 'GPU_PLAN=%q\n' "${GPU_PLAN:-}"
-  printf 'PISSA_FAST=%q\n' "${PISSA_FAST:-0}"
+  printf 'export GPU_IDS=%q\n' "${GPU_IDS:-}"
+  printf 'export GPU_PLAN=%q\n' "${GPU_PLAN:-}"
+  printf 'export PISSA_FAST=%q\n' "${PISSA_FAST:-0}"
   # SwanLab env (optional)
-  printf 'SWANLAB_ENABLE=%q\n' "${SWANLAB_ENABLE:-}"
-  printf 'SWANLAB_MODE=%q\n' "${SWANLAB_MODE:-}"
-  printf 'SWANLAB_PROJECT=%q\n' "${SWANLAB_PROJECT:-}"
-  printf 'SWANLAB_EXPERIMENT_PREFIX=%q\n' "${SWANLAB_EXPERIMENT_PREFIX:-}"
-  printf 'SWANLAB_LOGDIR=%q\n' "${SWANLAB_LOGDIR:-}"
+  printf 'export SWANLAB_ENABLE=%q\n' "${SWANLAB_ENABLE:-}"
+  printf 'export SWANLAB_MODE=%q\n' "${SWANLAB_MODE:-}"
+  printf 'export SWANLAB_PROJECT=%q\n' "${SWANLAB_PROJECT:-}"
+  printf 'export SWANLAB_EXPERIMENT_PREFIX=%q\n' "${SWANLAB_EXPERIMENT_PREFIX:-}"
+  printf 'export SWANLAB_LOGDIR=%q\n' "${SWANLAB_LOGDIR:-}"
   # HP_* hyperparameters (eval_steps, logging_steps, etc.)
-  printf 'HP_EVAL_STEPS=%q\n' "${HP_EVAL_STEPS:-}"
-  printf 'HP_SAVE_STEPS=%q\n' "${HP_SAVE_STEPS:-}"
-  printf 'HP_LOGGING_STEPS=%q\n' "${HP_LOGGING_STEPS:-}"
-  printf 'HP_VAL_SPLIT=%q\n' "${HP_VAL_SPLIT:-}"
-  printf 'HP_DATA=%q\n' "${HP_DATA:-}"
+  printf 'export HP_EVAL_STEPS=%q\n' "${HP_EVAL_STEPS:-}"
+  printf 'export HP_SAVE_STEPS=%q\n' "${HP_SAVE_STEPS:-}"
+  printf 'export HP_LOGGING_STEPS=%q\n' "${HP_LOGGING_STEPS:-}"
+  printf 'export HP_VAL_SPLIT=%q\n' "${HP_VAL_SPLIT:-}"
+  printf 'export HP_DATA=%q\n' "${HP_DATA:-}"
   # EVAL_GEN parameters for generation tasks
-  printf 'EVAL_GEN=%q\n' "${EVAL_GEN:-}"
-  printf 'EVAL_GEN_MAX_LENGTH=%q\n' "${EVAL_GEN_MAX_LENGTH:-}"
-  printf 'EVAL_GEN_MIN_LENGTH=%q\n' "${EVAL_GEN_MIN_LENGTH:-}"
-  printf 'EVAL_GEN_NUM_BEAMS=%q\n' "${EVAL_GEN_NUM_BEAMS:-}"
+  printf 'export EVAL_GEN=%q\n' "${EVAL_GEN:-}"
+  printf 'export EVAL_GEN_MAX_LENGTH=%q\n' "${EVAL_GEN_MAX_LENGTH:-}"
+  printf 'export EVAL_GEN_MIN_LENGTH=%q\n' "${EVAL_GEN_MIN_LENGTH:-}"
+  printf 'export EVAL_GEN_NUM_BEAMS=%q\n' "${EVAL_GEN_NUM_BEAMS:-}"
   # Other common env vars
-  printf 'GRADIENT_CHECKPOINTING=%q\n' "${GRADIENT_CHECKPOINTING:-}"
-  printf 'LOGITS_TO_KEEP=%q\n' "${LOGITS_TO_KEEP:-}"
-  printf 'NUM_DATA_WORKERS=%q\n' "${NUM_DATA_WORKERS:-}"
-  printf 'PYTORCH_CUDA_ALLOC_CONF=%q\n' "${PYTORCH_CUDA_ALLOC_CONF:-}"
-  printf 'TOKENIZERS_PARALLELISM=%q\n' "${TOKENIZERS_PARALLELISM:-}"
-  printf 'OMP_NUM_THREADS=%q\n' "${OMP_NUM_THREADS:-}"
-  printf 'MKL_NUM_THREADS=%q\n' "${MKL_NUM_THREADS:-}"
+  printf 'export GRADIENT_CHECKPOINTING=%q\n' "${GRADIENT_CHECKPOINTING:-}"
+  printf 'export LOGITS_TO_KEEP=%q\n' "${LOGITS_TO_KEEP:-}"
+  printf 'export NUM_DATA_WORKERS=%q\n' "${NUM_DATA_WORKERS:-}"
+  printf 'export PYTORCH_CUDA_ALLOC_CONF=%q\n' "${PYTORCH_CUDA_ALLOC_CONF:-}"
+  printf 'export TOKENIZERS_PARALLELISM=%q\n' "${TOKENIZERS_PARALLELISM:-}"
+  printf 'export OMP_NUM_THREADS=%q\n' "${OMP_NUM_THREADS:-}"
+  printf 'export MKL_NUM_THREADS=%q\n' "${MKL_NUM_THREADS:-}"
+  # Data roots and NLTK resources (ensure they propagate into tmux jobs)
+  printf 'export SPIDER_LOCAL_DIR=%q\n' "${SPIDER_LOCAL_DIR:-}"
+  printf 'export NLTK_DATA=%q\n' "${NLTK_DATA:-}"
 
   echo 'mkdir -p "$LOG_DIR"'
 
@@ -184,6 +187,7 @@ for item in "${JOBS[@]}"; do
       SWANLAB_ENABLE="$SWANLAB_ENABLE" SWANLAB_MODE="$SWANLAB_MODE" \
       SWANLAB_PROJECT="$SWANLAB_PROJECT" SWANLAB_EXPERIMENT_PREFIX="$SWANLAB_EXPERIMENT_PREFIX" \
       SWANLAB_LOGDIR="$SWANLAB_LOGDIR" \
+      SPIDER_LOCAL_DIR="$SPIDER_LOCAL_DIR" NLTK_DATA="$NLTK_DATA" \
       bash "$tmp_launcher" "$SUITE" "$ROUND" 2>&1 | tee "$log_file"
   )
   status=$?

@@ -252,6 +252,30 @@ ROUND_E5=( #18
 #  "E8_QK_plus_GATING_DoRA_r8_alpha16.yaml"
 #  "E9_OplusHEAD_DoRA_r8_alpha16.yaml"
 )
+
+ROUND_E51=( #18
+  "E1_QKVO_plus_G_r8_alpha16.yaml"
+  "E1_QKVO_plus_GK_r8_alpha16.yaml"
+  "E2_OMLP_plus_G_r8_alpha16.yaml"
+  "E2_OMLP_plus_GK_r8_alpha16.yaml"
+  "E2_OMLP_plus_G_plus_GK_r8_alpha16.yaml"
+  "E1_QKVO_plus_MLP_r8_alpha16.yaml"
+
+
+)
+
+ROUND_E52=( #18
+  "E1_QKVO_r8_alpha16.yaml"
+  "E1_QKVO_first6_r8_alpha16.yaml"
+  "E1_QKVO_last6_r8_alpha16.yaml"
+  "E2_OMLP_last6_r8_alpha16.yaml"
+  "E2_OMLP_middle6_r8_alpha16.yaml"
+  "E3_GATINGONLY_r8_alpha16.yaml"
+  "E6_QKONLY_r8_alpha16.yaml"
+  "E7_KVONLY_r8_alpha16.yaml"
+  "E9_OplusHEAD_r8_alpha16.yaml"
+)
+
 : "${ROUND_E6[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E6=()
 : "${ROUND_E7[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E7=()
 ROUND_E7=( #6
@@ -410,6 +434,10 @@ for _k in \
   GPU_PLAN \
   CUDA_VISIBLE_DEVICES \
   DATA \
+  SPIDER_LOCAL_DIR \
+  NLTK_DATA \
+  EVAL_GEN EVAL_GEN_MAX_LENGTH EVAL_GEN_MIN_LENGTH EVAL_GEN_NUM_BEAMS \
+  PYTORCH_CUDA_ALLOC_CONF TOKENIZERS_PARALLELISM OMP_NUM_THREADS MKL_NUM_THREADS \
   GRADIENT_CHECKPOINTING \
   LOGITS_TO_KEEP \
   NUM_DATA_WORKERS \
@@ -683,6 +711,8 @@ run_round () {
   echo "PLAN    = ${GPU_PLAN_ARR[*]}  (GPU->slots)"
   echo "SLOTS   = ${GPU_SLOTS[*]}     (flattened)"
   echo "DATA    = ${DATA}"
+  echo "SPIDER_LOCAL_DIR = ${SPIDER_LOCAL_DIR:-}"
+  echo "NLTK_DATA        = ${NLTK_DATA:-}"
   # Round timing (start)
   local __round_start_epoch
   __round_start_epoch="$(date +%s)"
