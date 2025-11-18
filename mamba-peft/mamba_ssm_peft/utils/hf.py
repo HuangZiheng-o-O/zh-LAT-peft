@@ -51,64 +51,60 @@ except Exception:
 
 
 def load_config_hf(model_name):
-    resolved_archive_file = cached_file(model_name, CONFIG_NAME, _raise_exceptions_for_missing_entries=False)
-    return json.load(open(resolved_archive_file))
+    resolved_archive_file = cached_file(
+        model_name, CONFIG_NAME, _raise_exceptions_for_missing_entries=False
+    )
+    if resolved_archive_file is None:
+        raise FileNotFoundError(f"[GLA] {CONFIG_NAME} not found for model '{model_name}'")
+    with open(resolved_archive_file, "r") as f:
+        return json.load(f)
 
 
 def load_state_dict_hf(model_name, device=None, dtype=None):
-    # If not fp32, then we don't want to load directly to the GPU
+    """
+    Load a HF state dict and optionally cast dtype and/or move to device.
+    """
     mapped_device = "cpu" if dtype not in [torch.float32, None] else device
-    resolved_archive_file = cached_file(model_name, WEIGHTS_NAME, _raise_exceptions_for_missing_entries=False)
-    return torch.load(resolved_archive_file, map_location=mapped_device)
-    # Convert dtype before moving to GPU to save memory
+    resolved_archive_file = cached_file(
+        model_name, WEIGHTS_NAME, _raise_exceptions_for_missing_entries=False
+    )
+    state_dict = torch.load(resolved_archive_file, map_location=mapped_device)
     if dtype is not None:
         state_dict = {k: v.to(dtype=dtype) for k, v in state_dict.items()}
-    state_dict = {k: v.to(device=device) for k, v in state_dict.items()}
+    if device is not None and device != "cpu":
+        state_dict = {k: v.to(device=device) for k, v in state_dict.items()}
     return state_dict
 
 
 def load_gla(model_id, trust_remote_code=True, device="cuda", dtype=torch.bfloat16):
     """
-    Robust GLA loader:
-    1) Prefer flash-linear-attention GLA classes (GLAForCausalLM/GLAConfig)
-    2) Fallback to HF AutoModel (only if registered)
+    Robust GLA loader (flash-linear-attention first; hard fail on mismatch).
+    Current behavior:
+      1) Use flash-linear-attention GLAForCausalLM/GLAConfig exclusively.
+      2) If GLAConfig.from_pretrained fails, raise RuntimeError (no fallback to generic AutoModel).
     Returns: {"model": model, "tokenizer": tokenizer}
     """
     # Try flash-linear-attention implementation first (more reliable for GLA)
-    e_fla_msg = None
-    try:
-        from fla.models.gla import GLAForCausalLM, GLAConfig
-        from transformers import AutoTokenizer
+    from fla.models.gla import GLAForCausalLM, GLAConfig
+    from transformers import AutoTokenizer
 
-        # Load config (with graceful fallback to raw config.json)
+    # Strict config loading (no silent fallback)
+    try:
+        config = GLAConfig.from_pretrained(model_id)
+    except Exception as e:
+        raise RuntimeError(
+            f"[GLA] Failed to load GLAConfig.from_pretrained('{model_id}'). "
+            f"Ensure flash-linear-attention and model weights are compatible. Underlying error: {e}"
+        )
+
+    # Optional fused SwiGLU control
+    use_fused = str(os.environ.get("GLA_USE_FUSED_SWIGLU", "0")).lower() in ("1", "true", "yes", "on")
+    if not use_fused:
         try:
-            config = GLAConfig.from_pretrained(model_id)
-        except Exception:
-            raw_cfg = load_config_hf(model_id)
-            config = GLAConfig(
-                vocab_size=raw_cfg.get("vocab_size", 32000),
-                hidden_size=raw_cfg.get("hidden_size", 2048),
-                intermediate_size=raw_cfg.get("intermediate_size", 5632),
-                num_hidden_layers=raw_cfg.get("num_hidden_layers", 24),
-                num_attention_heads=raw_cfg.get("num_attention_heads", 32),
-                max_position_embeddings=raw_cfg.get("max_position_embeddings", 2048),
-                rms_norm_eps=raw_cfg.get("rms_norm_eps", 1e-6),
-                use_cache=True,
-                pad_token_id=raw_cfg.get("pad_token_id", None),
-                bos_token_id=raw_cfg.get("bos_token_id", 1),
-                eos_token_id=raw_cfg.get("eos_token_id", 2),
-            )
-        # Disable fused SwiGLU to avoid Triton autotuner issues on certain torch/triton combos
-        try:
-            config.fuse_swiglu = False
+            if hasattr(config, "fuse_swiglu"):
+                config.fuse_swiglu = False
         except Exception:
             pass
-
-        # Load tokenizer
-        tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
-
-        # Load model
-        # Runtime monkey patch: disable Triton SwiGLU by overriding to PyTorch ops
         try:
             import torch.nn.functional as F
             from importlib import import_module
@@ -121,33 +117,27 @@ def load_gla(model_id, trust_remote_code=True, device="cuda", dtype=torch.bfloat
             def _pt_swiglu_linear(x, y, weight, bias):
                 return F.linear(F.silu(x) * y, weight, bias)
 
-            # Patch both modules so global lookups resolve to PT versions
             _mlp.swiglu = _pt_swiglu
             _mlp.swiglu_linear = _pt_swiglu_linear
             _act.swiglu = _pt_swiglu
             _act.swiglu_linear = _pt_swiglu_linear
-        except Exception:
-            pass
+            print("[GLA] fuse_swiglu disabled; using PyTorch SwiGLU (set GLA_USE_FUSED_SWIGLU=1 to enable fused kernels).")
+        except Exception as patch_err:
+            print(f"[GLA][warn] Failed to apply SwiGLU runtime patch: {patch_err}")
+    else:
+        print("[GLA] Using fused SwiGLU kernels (GLA_USE_FUSED_SWIGLU=1).")
 
-        model = GLAForCausalLM.from_pretrained(
-            model_id,
-            config=config,
-            torch_dtype=dtype,
-            device_map="auto" if device == "auto" else None,
-        )
-
-        if device != "auto" and device is not None:
-            model = model.to(device=device)
-
-        return {"model": model, "tokenizer": tokenizer}
-
-    except Exception as e_fla:
-        e_fla_msg = str(e_fla)
-        print(f"[load_gla] flash-linear-attention load failed: {e_fla_msg}")
-
-    # Explicitly do NOT fallback to HF AutoModel for 'gla' (not registered in your transformers).
-    # If we reach here, raise a clear error.
-    raise RuntimeError(f"Failed to load GLA model via flash-linear-attention: {e_fla_msg}")
+    # Load tokenizer and model
+    tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=trust_remote_code)
+    model = GLAForCausalLM.from_pretrained(
+        model_id,
+        config=config,
+        torch_dtype=dtype,
+        device_map="auto" if device == "auto" else None,
+    )
+    if device != "auto" and device is not None:
+        model = model.to(device=device)
+    return {"model": model, "tokenizer": tokenizer}
 
 
 def load_gla_tokenizer(model_id="fla-hub/gla-1.3B-100B", trust_remote_code=True):

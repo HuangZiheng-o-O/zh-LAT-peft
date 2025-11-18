@@ -1,13 +1,14 @@
 import torch
 from dataclasses import dataclass
 from typing import Optional, Any
+import os
 
 
 @dataclass
 class GLAHFDecoder:
     tokenizer: Any
-    max_length: int = 1024
-    min_length: int = 0
+    max_length: int = 1024  # interpreted as max_new_tokens when GLA_USE_MAX_NEW_TOKENS=1 (default)
+    min_length: int = 0     # interpreted as min_new_tokens when supported and GLA_USE_MAX_NEW_TOKENS=1
     num_beams: Optional[int] = None
     do_sample: bool = False
 
@@ -22,28 +23,61 @@ class GLAHFDecoder:
                 attention_mask = input_ids.ne(pad_id)
         except Exception:
             attention_mask = None
+
+        use_max_new = str(os.getenv("GLA_USE_MAX_NEW_TOKENS", "1")).lower() in ("1", "true", "yes", "on")
         gen_kwargs = dict(
             input_ids=input_ids,
-            max_length=int(input_ids.shape[1] + self.max_length),
-            min_length=int(self.min_length),
             eos_token_id=getattr(self.tokenizer, "eos_token_id", None),
             pad_token_id=getattr(self.tokenizer, "pad_token_id", None),
             return_dict_in_generate=True,
             output_scores=False,
             do_sample=bool(self.do_sample),
         )
+        # Prefer official semantics: max_new_tokens/min_new_tokens
+        if use_max_new:
+            if os.getenv("GLA_VERBOSE", "0").lower() in ("1","true","yes","on"):
+                print("[GLA] Using HF generate(max_new_tokens/min_new_tokens) semantics (GLA_USE_MAX_NEW_TOKENS=1).")
+            gen_kwargs["max_new_tokens"] = int(self.max_length)
+            if self.min_length and self.min_length > 0:
+                # Try to use min_new_tokens if available; otherwise fail fast for visibility
+                try:
+                    gen_kwargs["min_new_tokens"] = int(self.min_length)
+                except TypeError as e:
+                    raise RuntimeError(
+                        f"min_new_tokens not supported by current transformers; set GLA_USE_MAX_NEW_TOKENS=0 "
+                        f"or upgrade transformers. Underlying error: {e}"
+                    )
+        else:
+            # Legacy behavior: treat max_length/min_length as total length caps relative to prompt
+            if os.getenv("GLA_VERBOSE", "0").lower() in ("1","true","yes","on"):
+                print("[GLA] Using legacy generate(max_length=min_length+prompt) semantics (GLA_USE_MAX_NEW_TOKENS=0).")
+            gen_kwargs["max_length"] = int(input_ids.shape[1] + self.max_length)
+            if self.min_length and self.min_length > 0:
+                gen_kwargs["min_length"] = int(input_ids.shape[1] + self.min_length)
+
         if attention_mask is not None:
             gen_kwargs["attention_mask"] = attention_mask
         if self.num_beams is not None and self.num_beams > 1:
             gen_kwargs["num_beams"] = int(self.num_beams)
             gen_kwargs["do_sample"] = False
 
-        outputs = model.generate(**gen_kwargs)
+        try:
+            outputs = model.generate(**gen_kwargs)
+        except TypeError as e:
+            # Some transformers versions may not support min_new_tokens kwarg
+            if use_max_new and "min_new_tokens" in str(e):
+                raise RuntimeError(
+                    "min_new_tokens is not supported by the current transformers version. "
+                    "Set GLA_USE_MAX_NEW_TOKENS=0 to fall back to legacy max_length semantics, "
+                    "or upgrade transformers."
+                ) from e
+            raise
         # Trim prompt for downstream metrics
         if hasattr(outputs, "sequences"):
             seq = outputs.sequences
             if seq is not None and seq.dim() == 2 and input_ids is not None and input_ids.dim() == 2:
                 try:
+                    # Always trim off the original prompt so metrics only see generated tokens
                     outputs.sequences = seq[:, input_ids.shape[1]:]
                 except Exception:
                     pass

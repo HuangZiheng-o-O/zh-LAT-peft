@@ -300,17 +300,18 @@ def run_train(
         peft_json_path=peft,
     )
 
-    # 强制 decoder-only 友好的左填充策略：避免任何右填充告警/行为不一致
-    try:
-        tokenizer_obj.padding_side = "left"
-    except Exception:
-        pass
-    try:
-        if getattr(tokenizer_obj, "pad_token_id", None) is None:
-            if getattr(tokenizer_obj, "eos_token", None) is not None:
+    # 强制 decoder-only 友好的左填充策略（可通过 GLA_FORCE_LEFT_PAD 控制，默认开启）
+    force_left = str(os.environ.get("GLA_FORCE_LEFT_PAD", "1")).lower() in ("1", "true", "yes", "on")
+    if force_left:
+        try:
+            tokenizer_obj.padding_side = "left"
+            if getattr(tokenizer_obj, "pad_token_id", None) is None and getattr(tokenizer_obj, "eos_token", None) is not None:
                 tokenizer_obj.pad_token = tokenizer_obj.eos_token
-    except Exception:
-        pass
+            print("[GLA] Using left padding for decoder-only generation (GLA_FORCE_LEFT_PAD=1).")
+        except Exception as e:
+            print(f"[GLA][warn] Failed to enforce left padding policy: {e}")
+    else:
+        print("[GLA] Respecting tokenizer's original padding policy (GLA_FORCE_LEFT_PAD=0).")
 
     # 预构建 train data module，仅用于计算长度和 steps
     train_data_module_for_len = load_dataset(
@@ -356,6 +357,15 @@ def run_train(
 
     print("Dropping last batch")
 
+    # resume 语义：若请求 resume，必须确保存在有效的 checkpoint
+    resume_arg = None
+    if resume_from_checkpoint:
+        last_ckpt = _find_last_checkpoint(Path(output_dir))
+        if last_ckpt is None:
+            raise RuntimeError(f"[GLA] --resume was set but no checkpoint-* found under {output_dir}")
+        resume_arg = str(last_ckpt)
+        print(f"[GLA] Resuming from checkpoint: {resume_arg}")
+
     build_and_run_trainer_gla_only(
         model=model,
         tokenizer=tokenizer_obj,
@@ -374,7 +384,7 @@ def run_train(
         eval_steps_override=eval_steps_override,
         save_steps_override=save_steps_override,
         eval_gen=eval_gen,
-        resume_from_checkpoint=resume_from_checkpoint,
+        resume_from_checkpoint=resume_arg,
         min_eval_metric_after_epoch=min_eval_metric_after_epoch,
         seed=seed,
         data=data,
@@ -402,6 +412,26 @@ def get_output_path_for_cfg(cfg_path, cfg):
         return Path("/home/user/mzs_h/output/benchmark/glue") / folder / yaml_stem
     # fallback 与旧逻辑一致
     return Path("/home/user/mzs_h/output/benchmark/glue/cola_gla") / yaml_stem
+
+def _find_last_checkpoint(root: Path) -> Optional[Path]:
+    """
+    扫描输出目录下的 checkpoint-* 子目录，返回步数最高的一个。
+    """
+    if not root.exists():
+        return None
+    try:
+        candidates = [p for p in root.glob("checkpoint-*") if p.is_dir()]
+        if not candidates:
+            return None
+        def step_of(p: Path) -> int:
+            try:
+                return int(p.name.split("-")[-1])
+            except Exception:
+                return -1
+        candidates.sort(key=step_of)
+        return candidates[-1] if candidates else None
+    except Exception:
+        return None
 
 
 def main():
