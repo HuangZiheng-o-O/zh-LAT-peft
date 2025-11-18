@@ -12,9 +12,31 @@ class MambaEvalPrediction:
     def __init__(self, tokenizer=None, input_ids=None, pred_ids=None, label_ids=None, save_file=None, remove_eos=False):
         self.tokenizer = tokenizer
 
-        self.inputs = tokenizer.batch_decode(self.remove_pad_token_id(input_ids) if remove_eos else input_ids) if input_ids is not None else None
-        self.preds = tokenizer.batch_decode(self.remove_eos_token_id(pred_ids) if remove_eos else pred_ids) if pred_ids is not None else None
-        self.labels = tokenizer.batch_decode(self.remove_eos_token_id(label_ids) if remove_eos else label_ids) if label_ids is not None else None
+        self.inputs = (
+            tokenizer.batch_decode(
+                self.remove_pad_token_id(input_ids) if remove_eos else input_ids,
+                skip_special_tokens=False,
+                clean_up_tokenization_spaces=False,
+            )
+            if input_ids is not None else None
+        )
+        # Important: strip special tokens (e.g., BOS <s>) from predictions to avoid SQL parsing failures
+        self.preds = (
+            tokenizer.batch_decode(
+                self.remove_eos_token_id(pred_ids) if remove_eos else pred_ids,
+                skip_special_tokens=True,
+                clean_up_tokenization_spaces=False,
+            )
+            if pred_ids is not None else None
+        )
+        self.labels = (
+            tokenizer.batch_decode(
+                self.remove_eos_token_id(label_ids) if remove_eos else label_ids,
+                skip_special_tokens=True,
+                clean_up_tokenization_spaces=False,
+            )
+            if label_ids is not None else None
+        )
 
         self.input_ids = [t.cpu().numpy() for t in input_ids] if input_ids is not None else None
         self.pred_ids = [t.cpu().numpy() for t in pred_ids] if pred_ids is not None else None

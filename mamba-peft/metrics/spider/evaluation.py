@@ -606,12 +606,11 @@ def evaluate(glist, plist, db_dir, etype, kmaps):
                 else:
                     scores[level]['partial'][type_]['rec'] = scores[level]['partial'][type_]['rec'] / \
                                                              scores[level]['partial'][type_]['rec_count'] * 1.0
-                if scores[level]['partial'][type_]['acc'] == 0 and scores[level]['partial'][type_]['rec'] == 0:
-                    scores[level]['partial'][type_]['f1'] = 1
-                else:
-                    scores[level]['partial'][type_]['f1'] = \
-                        2.0 * scores[level]['partial'][type_]['acc'] * scores[level]['partial'][type_]['rec'] / (
-                        scores[level]['partial'][type_]['rec'] + scores[level]['partial'][type_]['acc'])
+                # Match the official Spider evaluation logic: F1 is 0 when both
+                # precision (acc) and recall are 0, and 2PR/(P+R) otherwise.
+                acc_val = scores[level]['partial'][type_]['acc']
+                rec_val = scores[level]['partial'][type_]['rec']
+                scores[level]['partial'][type_]['f1'] = F1(acc_val, rec_val)
 
     print_scores(scores, etype)
     return scores
