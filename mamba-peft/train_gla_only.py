@@ -1,10 +1,32 @@
-import os
-import json
+import sys
 from pathlib import Path
+
+# --- ensure local 'fla' submodule is importable when running from mamba-peft/ ---
+try:
+    import fla  # noqa: F401
+except Exception:
+    try:
+        repo_root = Path(__file__).resolve().parents[1]  # .../zh-LAT-peft
+        fla_symlink = repo_root / "fla"
+        if fla_symlink.exists():
+            sys.path.insert(0, str(repo_root))
+            import fla  # noqa: F401
+    except Exception:
+        pass
+
+import json
+import os
+import shutil
 from typing import Optional, Dict
 
 import torch
+import argparse
+import numpy as np
+from torch.utils.data import DataLoader  # noqa: F401  # kept for compatibility
+
 import yaml
+
+os.environ["WANDB_PROJECT"] = "mamba-peft"
 
 from dataset import load_dataset
 from trainer.generic_lm_trainer import GenericLMTrainer, GenericLMTrainingArguments
@@ -18,6 +40,19 @@ def _env_bool(name: str, default: bool) -> bool:
     if v is None:
         return default
     return str(v).lower() in ("1", "true", "yes", "on")
+
+
+def _lock_share(name):
+    path = Path("share/lock") / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        with open(path, "x"):
+            pass
+        return True
+    except OSError:
+        print(path, "exists")
+        return False
 
 
 def build_and_run_trainer_gla_only(
@@ -49,22 +84,29 @@ def build_and_run_trainer_gla_only(
     gradient_checkpointing: bool = False,
     logits_to_keep: int | None = None,
 ):
+    """
+    纯 GLA-only 的训练和评估入口：
+      - 使用 GenericLMTrainer / GenericLMTrainingArguments
+      - 生成评估统一走 HF-native model.generate()（create_gla_decoder）
+      - 数据加载仍复用原 dataset.load_dataset 以及 Spider/GLUE 等模块
+    """
     print_trainable_parameter_names(model)
     print("Loaded model")
 
+    # 构建 train data module（真正用来训练的）
     train_data_module = load_dataset(data, tokenizer, "train", return_module=True)
 
+    # 保存 cfg.yaml（保持与旧 train.py 一致）
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     with open(Path(output_dir) / "cfg.yaml", "w") as f:
         yaml.safe_dump(cfg, f)
 
-    # Force HF-native generation for GLA
+    # 构造生成式评估 decoder（GLA HF-native）
     eval_generator = None
     if eval_gen is not None:
         _eval = dict(eval_gen)
-        # Normalize keys from our launcher
         max_length = int(_eval.get("max_length", 1024))
-        min_length = int(_eval.get("min_length", 0))
+        min_length = int(_eval.get("min_length", 5))
         num_beams = _eval.get("num_beams", None)
         eval_generator = create_gla_decoder(
             tokenizer,
@@ -74,6 +116,7 @@ def build_and_run_trainer_gla_only(
             do_sample=False,
         )
 
+    # 验证/评估 data module：生成任务用 "gen" 模式，否则 "lm"
     val_data_module = load_dataset(
         val_data if val_data is not None else data,
         tokenizer,
@@ -83,18 +126,23 @@ def build_and_run_trainer_gla_only(
     )
     compute_metrics = val_data_module.dataset.compute_metrics
 
+    # debug 模式下截断数据规模
     if debug:
-        train_data_module.dataset = torch.utils.data.Subset(train_data_module.dataset, range(8))
-        val_data_module.dataset = torch.utils.data.Subset(val_data_module.dataset, range(2))
+        train_data_module.dataset = torch.utils.data.Subset(
+            train_data_module.dataset, range(8)
+        )
+        val_data_module.dataset = torch.utils.data.Subset(
+            val_data_module.dataset, range(2)
+        )
 
-    # Prefer non-reentrant checkpointing with PEFT bases
+    # gradient checkpointing 参数（默认 non-reentrant，对 PEFT 更友好）
     _gc_kwargs = {"use_reentrant": False} if gradient_checkpointing else None
 
-    # Optional optimizer/scheduler/rng saving via env
+    # 是否保存 optimizer state：由 env 控制（与新代码保持一致）
     _sos_env = str(os.environ.get("SAVE_OPTIMIZER_STATE", "")).lower()
     _save_optimizer_state = _sos_env in ("1", "true", "yes", "on")
 
-    # DataLoader memory knobs (env)
+    # DataLoader 相关 env knob
     def _env_int(name: str, default: int) -> int:
         try:
             v = os.environ.get(name)
@@ -135,9 +183,31 @@ def build_and_run_trainer_gla_only(
             save_optimizer_state=_save_optimizer_state,
             save_strategy="steps" if not no_save else "no",
             evaluation_strategy="steps" if not skip_eval else "no",
-            save_steps=(save_steps_override if save_steps_override is not None else int(eval_epochs * (len(train_data_module.dataset) // batch_size + (len(train_data_module.dataset) % batch_size > 0)))),
-            eval_steps=(eval_steps_override if eval_steps_override is not None else int(eval_epochs * (len(train_data_module.dataset) // batch_size + (len(train_data_module.dataset) % batch_size > 0)))),
+            save_steps=(
+                save_steps_override
+                if save_steps_override is not None
+                else int(
+                    eval_epochs
+                    * (
+                        len(train_data_module.dataset) // batch_size
+                        + (len(train_data_module.dataset) % batch_size > 0)
+                    )
+                )
+            ),
+            eval_steps=(
+                eval_steps_override
+                if eval_steps_override is not None
+                else int(
+                    eval_epochs
+                    * (
+                        len(train_data_module.dataset) // batch_size
+                        + (len(train_data_module.dataset) % batch_size > 0)
+                    )
+                )
+            ),
             dataloader_drop_last=True,
+            # 旧版默认是 wandb，通过 Trainer 的 report_to 控制；
+            # 这里如果你后面想开 wandb，可以改成 "wandb"
             report_to="none",
             seed=seed,
         ),
@@ -151,112 +221,123 @@ def build_and_run_trainer_gla_only(
     trainer.train(resume_from_checkpoint=resume_from_checkpoint)
 
 
-def main():
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--cfg", type=str, required=True)
-    parser.add_argument("--overwrite", action="store_true")
-    parser.add_argument("--resume", action="store_true")
-    parser.add_argument("--debug", action="store_true")
-    parser.add_argument("--lock", action="store_true")
-    parser.add_argument("--model")
-    parser.add_argument("--prec")
-    args = parser.parse_args()
+def run_train(
+    output_dir,
+    cfg_path,
+    model,
+    data,
+    val_data=None,
+    val_data_split="val",
+    tokenizer="EleutherAI/gpt-neox-20b",  # 保留参数名以兼容旧 cfg；实际不再使用
+    num_epochs=10,
+    prec="bf16",
+    peft=None,
+    optim="adamw_torch",
+    learning_rate=5e-4,
+    gradient_accumulation_steps=1,
+    num_data_workers=8,
+    batch_size=4,
+    eval_gen=None,
+    backend="cuda",  # 保留参数，仅为兼容旧 cfg，不再使用
+    debug=False,
+    resume=False,
+    overwrite=False,
+    lock=False,
+    no_save=False,
+    skip_eval=False,
+    eval_epochs=1,
+    min_eval_metric_after_epoch=None,
+    seed=42,
+    is_sdlora=False,  # 保留字段但不再触发 SD-LoRA 两阶段逻辑
+    gradient_checkpointing=False,
+    logits_to_keep=None,
+):
+    """
+    GLA-only 的 run_train：
+      - 仍然保留旧 train.py 的 cfg/lock/resume/overwrite 语义
+      - 但不再支持 Mamba 模型路径，也不再做 SD-LoRA warmup 两阶段
+    """
+    # 旧代码：如果 overwrite 且 is_sdlora，要求 output_dir 已存在
+    # 现在我们不再走 SD-LoRA 两阶段，这个条件基本不会触发，保留不影响行为
+    if overwrite and is_sdlora:
+        assert Path(output_dir).exists()
 
-    with open(args.cfg, "r") as f:
-        cfg = yaml.safe_load(f)
+    # 在任何后续修改前先 snapshot 一份 cfg（保持与旧逻辑一致）
+    cfg = {**locals()}
 
-    # env overrides (consistent with train.py)
-    env = os.environ
-    def _maybe(v, cast):
-        return cast(v) if v is not None and v != "" else None
+    if not overwrite:
+        if lock and _lock_share(str(output_dir)):
+            return
 
-    data_env = env.get("HP_DATA")
-    if data_env:
-        cfg["data"] = data_env
-    bs_env = _maybe(env.get("HP_BATCH_SIZE"), int)
-    if bs_env is not None:
-        cfg["batch_size"] = bs_env
-    lr_env = _maybe(env.get("HP_LR"), float)
-    if lr_env is not None:
-        cfg["learning_rate"] = lr_env
-    epochs_env = _maybe(env.get("HP_EPOCHS"), int)
-    if epochs_env is not None:
-        cfg["num_epochs"] = epochs_env
-    prec_env = env.get("HP_PREC")
-    if prec_env:
-        cfg["prec"] = prec_env
-    seed_env = _maybe(env.get("HP_SEED"), int)
-    if seed_env is not None:
-        cfg["seed"] = seed_env
+        if (Path(output_dir) / "cfg.yaml").exists():
+            if resume:
+                resume_from_checkpoint = True
+            else:
+                assert False, str(Path(output_dir) / "cfg.yaml") + " exists!"
+        else:
+            resume_from_checkpoint = False
+    else:
+        # overwrite=True 时，总是从头训练
+        resume_from_checkpoint = False
 
-    val_split_env = env.get("HP_VAL_SPLIT")
-    if val_split_env in {"train", "val", "test"}:
-        cfg["val_data_split"] = val_split_env
+    # 旧版的安全提示：多 epoch 但不保存 ckpt 时警告
+    if not (
+        data.startswith("glue_")
+        or data in ("glue_rte", "glue_mrpc", "glue_cola", "spider_1000")
+        or not (no_save and num_epochs > 1)
+    ):
+        print("Training for more than one epoch without saving ckpts!")
 
-    # eval_gen defaults (HF path)
-    def _truthy(x: str | None) -> bool:
-        if x is None:
-            return False
-        return str(x).lower() in ("1", "true", "yes", "on")
-
-    is_gen_task = any([
-        str(cfg.get("data", "")).startswith("samsum"),
-        str(cfg.get("data", "")).startswith("dart"),
-        str(cfg.get("data", "")).startswith("spider"),
-    ])
-    force_eval_gen = _truthy(env.get("EVAL_GEN"))
-    if (cfg.get("eval_gen") is None) and (is_gen_task or force_eval_gen):
-        max_len = _maybe(env.get("EVAL_GEN_MAX_LENGTH"), int) or 1024
-        min_len = _maybe(env.get("EVAL_GEN_MIN_LENGTH"), int) or 0
-        num_beams = _maybe(env.get("EVAL_GEN_NUM_BEAMS"), int)  # None or int
-        cfg["eval_gen"] = {
-            "max_length": int(max_len),
-            "min_length": int(min_len),
-            "num_beams": (int(num_beams) if num_beams is not None else None),
-        }
-
-    # Prepare model & tokenizer (GLA only)
-    model_id = args.model or cfg.get("model")
-    if model_id is None:
-        model_id = "fla-hub/gla-1.3B-100B"
-    prec = args.prec or cfg.get("prec", "bf16")
-    peft = cfg.get("peft", None)
-    debug = bool(args.debug)
-
-    model, tokenizer, _ = prepare_gla_model_and_tokenizer(
+    # -------------------------------
+    # 纯 GLA 模型加载（不再有 Mamba 分支）
+    # -------------------------------
+    print(f"Loading GLA model: {model}")
+    model_id = model
+    model, tokenizer_obj, _ = prepare_gla_model_and_tokenizer(
         model_id=model_id,
         prec=prec,
         debug=debug,
         peft_json_path=peft,
     )
-    # Enforce decoder-only friendly padding policy
+
+    # 强制 decoder-only 友好的左填充策略：避免任何右填充告警/行为不一致
     try:
-        tokenizer.padding_side = "left"
+        tokenizer_obj.padding_side = "left"
     except Exception:
         pass
     try:
-        if getattr(tokenizer, "pad_token_id", None) is None:
-            if getattr(tokenizer, "eos_token", None) is not None:
-                tokenizer.pad_token = tokenizer.eos_token
+        if getattr(tokenizer_obj, "pad_token_id", None) is None:
+            if getattr(tokenizer_obj, "eos_token", None) is not None:
+                tokenizer_obj.pad_token = tokenizer_obj.eos_token
     except Exception:
         pass
 
-    # Steps / logging
-    train_data_for_len = load_dataset(cfg["data"], tokenizer, "train", return_module=True)
-    its_per_epoch = int((len(train_data_for_len.dataset) + cfg["batch_size"] - 1) // cfg["batch_size"])
+    # 预构建 train data module，仅用于计算长度和 steps
+    train_data_module_for_len = load_dataset(
+        data, tokenizer_obj, "train", return_module=True
+    )
+
+    its_per_epoch = int(
+        np.ceil(len(train_data_module_for_len.dataset) / batch_size)
+    )
+
+    # 与旧 train.py 保持一致的 logging / steps / env override 逻辑
+    env = os.environ
     logging_steps = min(50, its_per_epoch)
     try:
         if env.get("HP_LOGGING_STEPS"):
             logging_steps = int(env.get("HP_LOGGING_STEPS"))
     except Exception:
         pass
-    total_steps = int(cfg["num_epochs"] * its_per_epoch)
+
+    total_steps = int(num_epochs * its_per_epoch)
     try:
         if env.get("HP_MAX_STEPS"):
             total_steps = int(env.get("HP_MAX_STEPS"))
     except Exception:
         pass
+
+    # Eval/save frequency overrides
     eval_steps_override = None
     save_steps_override = None
     try:
@@ -270,38 +351,187 @@ def main():
     except Exception:
         pass
 
-    out_root = Path("/home/user/mzs_h/output/benchmark/glue")  # keep same convention
-    yaml_stem = Path(args.cfg).stem
-    output_dir = out_root / f"{cfg['data']}_seed{cfg.get('seed', 42)}" / yaml_stem
+    # WANDB 名称（保持旧行为）
+    os.environ["WANDB_NAME"] = str(output_dir).replace("weights/", "")
+
+    print("Dropping last batch")
 
     build_and_run_trainer_gla_only(
         model=model,
-        tokenizer=tokenizer,
+        tokenizer=tokenizer_obj,
         output_dir=str(output_dir),
         cfg=cfg,
-        cfg_path=args.cfg,
-        learning_rate=cfg["learning_rate"],
+        cfg_path=cfg_path,
+        learning_rate=learning_rate,
         total_steps=total_steps,
         logging_steps=logging_steps,
-        gradient_accumulation_steps=cfg["gradient_accumulation_steps"],
-        num_data_workers=cfg.get("num_data_workers", 8),
-        batch_size=cfg["batch_size"],
-        eval_epochs=cfg.get("eval_epochs", 1),
-        skip_eval=cfg.get("skip_eval", False),
-        no_save=cfg.get("no_save", False),
+        gradient_accumulation_steps=gradient_accumulation_steps,
+        num_data_workers=num_data_workers,
+        batch_size=batch_size,
+        eval_epochs=eval_epochs,
+        skip_eval=skip_eval,
+        no_save=no_save,
         eval_steps_override=eval_steps_override,
         save_steps_override=save_steps_override,
-        eval_gen=cfg.get("eval_gen"),
-        resume_from_checkpoint=bool(args.resume),
-        min_eval_metric_after_epoch=cfg.get("min_eval_metric_after_epoch"),
-        seed=cfg.get("seed", 42),
-        data=cfg["data"],
-        val_data=cfg.get("val_data"),
-        val_data_split=cfg.get("val_data_split", "val"),
+        eval_gen=eval_gen,
+        resume_from_checkpoint=resume_from_checkpoint,
+        min_eval_metric_after_epoch=min_eval_metric_after_epoch,
+        seed=seed,
+        data=data,
+        val_data=val_data,
+        val_data_split=val_data_split,
         debug=debug,
-        gradient_checkpointing=cfg.get("gradient_checkpointing", False),
-        logits_to_keep=cfg.get("logits_to_keep"),
+        gradient_checkpointing=gradient_checkpointing,
+        logits_to_keep=logits_to_keep,
     )
+
+
+def get_output_path_for_cfg(cfg_path, cfg):
+    """
+    目标：
+      /home/user/mzs_h/output/benchmark/glue/<data>_seed<seed>/<yaml_stem>
+    回退（缺 data/seed 时）：
+      /home/user/mzs_h/output/benchmark/glue/cola_gla/<yaml_stem>
+    """
+    yaml_stem = Path(cfg_path).stem
+    data = cfg.get("data")
+    seed = cfg.get("seed")
+
+    if data and seed is not None:
+        folder = f"{data}_seed{seed}"
+        return Path("/home/user/mzs_h/output/benchmark/glue") / folder / yaml_stem
+    # fallback 与旧逻辑一致
+    return Path("/home/user/mzs_h/output/benchmark/glue/cola_gla") / yaml_stem
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--cfg", type=str, required=True)
+    parser.add_argument("--overwrite", action="store_true")
+    parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--debug", action="store_true")
+    parser.add_argument("--lock", action="store_true")
+    parser.add_argument("--model")
+    parser.add_argument("--prec")
+    parser.add_argument("--device")
+    args = parser.parse_args()
+
+    # 兼容旧逻辑：允许通过 --device 设置 VISIBLE_DEVICES
+    if args.device is not None:
+        os.environ["VISIBLE_DEVICES"] = args.device
+
+    with open(args.cfg, "r") as f:
+        cfg = yaml.safe_load(f)
+
+    # Apply environment overrides (最高优先级，与旧 train.py 保持一致)
+    env = os.environ
+
+    def _maybe(v, cast):
+        return cast(v) if v is not None and v != "" else None
+
+    # HP_DATA：GLUE/spider 等任务的别名映射逻辑（完整保留）
+    data_env = env.get("HP_DATA")
+    if data_env:
+        glue_tasks = {
+            "rte",
+            "mrpc",
+            "cola",
+            "sst2",
+            "qnli",
+            "qqp",
+            "mnli",
+            "wnli",
+        }
+        accepted_prefixes = (
+            "glue",
+            "samsum",
+            "dart",
+            "spider",
+            "mnist",
+            "cifar",
+            "piqa",
+            "boolq",
+            "arc",
+        )
+        if data_env in glue_tasks:
+            cfg["data"] = f"glue-tvt_{data_env}"
+        elif data_env == "cifar":
+            cfg["data"] = "cifar-tvt"
+        elif data_env == "spider":
+            cfg["data"] = "spider-tvt"
+        else:
+            cfg["data"] = (
+                data_env
+                if data_env.startswith(accepted_prefixes)
+                else data_env
+            )
+
+    bs_env = _maybe(env.get("HP_BATCH_SIZE"), int)
+    if bs_env is not None:
+        cfg["batch_size"] = bs_env
+
+    lr_env = _maybe(env.get("HP_LR"), float)
+    if lr_env is not None:
+        cfg["learning_rate"] = lr_env
+
+    epochs_env = _maybe(env.get("HP_EPOCHS"), int)
+    if epochs_env is not None:
+        cfg["num_epochs"] = epochs_env
+
+    prec_env = env.get("HP_PREC")
+    if prec_env:
+        cfg["prec"] = prec_env
+
+    seed_env = _maybe(env.get("HP_SEED"), int)
+    if seed_env is not None:
+        cfg["seed"] = seed_env
+
+    # Optional override of validation split via env (train|val|test)
+    val_split_env = env.get("HP_VAL_SPLIT")
+    if val_split_env in {"train", "val", "test"}:
+        cfg["val_data_split"] = val_split_env
+
+    # eval_gen 自动注入：保持与旧 train.py 一致（生成任务 + EVAL_GEN）
+    def _truthy(x: Optional[str]) -> bool:
+        if x is None:
+            return False
+        return str(x).lower() in ("1", "true", "yes", "on")
+
+    data_name = str(cfg.get("data", ""))
+    is_gen_task = any(
+        [
+            data_name.startswith("samsum"),
+            data_name.startswith("dart"),
+            data_name.startswith("spider"),  # e.g., spider-tvt
+        ]
+    )
+    force_eval_gen = _truthy(env.get("EVAL_GEN"))
+    if (cfg.get("eval_gen") is None) and (is_gen_task or force_eval_gen):
+        max_len = _maybe(env.get("EVAL_GEN_MAX_LENGTH"), int) or 1024
+        min_len = _maybe(env.get("EVAL_GEN_MIN_LENGTH"), int) or 5
+        num_beams = _maybe(env.get("EVAL_GEN_NUM_BEAMS"), int) or 5
+        cfg["eval_gen"] = {
+            "max_length": int(max_len),
+            "min_length": int(min_len),
+            "num_beams": int(num_beams),
+        }
+
+    # 输出目录与旧 get_output_path_for_cfg 完全一致
+    output_dir = get_output_path_for_cfg(args.cfg, cfg)
+
+    # 将 cfg + CLI args 合并成 run_train 的参数
+    train_args = {
+        **cfg,
+        **{k: v for k, v in vars(args).items() if v is not None},
+        "output_dir": str(output_dir),
+    }
+    train_args["cfg_path"] = train_args.pop("cfg")
+    if "device" in train_args:
+        del train_args["device"]
+
+    # 不再根据 peft_type 特判 SD-LoRA，
+    # 也不再做两阶段 warmup，直接调用 run_train 一次
+    run_train(**train_args)
 
 
 if __name__ == "__main__":
