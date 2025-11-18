@@ -65,9 +65,9 @@ def load_state_dict_hf(model_name, device=None, dtype=None):
     Load a HF state dict and optionally cast dtype and/or move to device.
     """
     mapped_device = "cpu" if dtype not in [torch.float32, None] else device
-    resolved_archive_file = cached_file(
-        model_name, WEIGHTS_NAME, _raise_exceptions_for_missing_entries=False
-    )
+    resolved_archive_file = cached_file(model_name, WEIGHTS_NAME, _raise_exceptions_for_missing_entries=False)
+    if resolved_archive_file is None:
+        raise FileNotFoundError(f"[GLA] {WEIGHTS_NAME} not found for model '{model_name}'")
     state_dict = torch.load(resolved_archive_file, map_location=mapped_device)
     if dtype is not None:
         state_dict = {k: v.to(dtype=dtype) for k, v in state_dict.items()}

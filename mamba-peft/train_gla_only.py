@@ -42,17 +42,26 @@ def _env_bool(name: str, default: bool) -> bool:
     return str(v).lower() in ("1", "true", "yes", "on")
 
 
-def _lock_share(name):
+def _lock_share(name: str) -> bool:
+    """
+    Acquire a simple filesystem lock under share/lock/<name>.
+    Returns:
+      True  -> lock already exists (another process holds it) – caller SHOULD skip.
+      False -> lock created successfully – caller MAY proceed and SHOULD remove it after completion.
+    """
     path = Path("share/lock") / name
     path.parent.mkdir(parents=True, exist_ok=True)
-
+    if path.exists():
+        print(f"[GLA][lock] {path} exists; skipping this run to avoid duplicate training.")
+        return True
     try:
         with open(path, "x"):
             pass
-        return True
-    except OSError:
-        print(path, "exists")
+        print(f"[GLA][lock] acquired {path}")
         return False
+    except OSError:
+        print(f"[GLA][lock] {path} exists; skipping this run.")
+        return True
 
 
 def build_and_run_trainer_gla_only(
@@ -155,6 +164,25 @@ def build_and_run_trainer_gla_only(
     _persist_workers = _env_bool("DATALOADER_PERSISTENT_WORKERS", False)
     _eval_acc_steps = _env_int("EVAL_ACCUMULATION_STEPS", 128)
 
+    # Optional SwanLab integration (controlled by env)
+    callbacks = []
+    _sl_enable = str(os.environ.get("SWANLAB_ENABLE", "")).lower() in ("1", "true", "yes", "on", "cloud", "local")
+    if _sl_enable:
+        try:
+            from swanlab.integration.transformers import SwanLabCallback
+            sl_project = os.environ.get("SWANLAB_PROJECT", "gla-peft")
+            exp_prefix = os.environ.get("SWANLAB_EXPERIMENT_PREFIX", "")
+            exp_name = Path(output_dir).name
+            if exp_prefix:
+                exp_name = f"{exp_prefix}_{exp_name}"
+            sl_mode = os.environ.get("SWANLAB_MODE", "")
+            if sl_mode:
+                callbacks.append(SwanLabCallback(project=sl_project, experiment_name=exp_name, mode=sl_mode))
+            else:
+                callbacks.append(SwanLabCallback(project=sl_project, experiment_name=exp_name))
+        except Exception as e:
+            print(f"[GLA][swanlab][warn] Failed to initialize SwanLabCallback: {e}")
+
     trainer = GenericLMTrainer(
         model=model,
         train_dataset=train_data_module.dataset,
@@ -214,6 +242,7 @@ def build_and_run_trainer_gla_only(
         compute_metrics=compute_metrics,
         data_collator=train_data_module.data_collator,
         eval_dataset=val_data_module.dataset,
+        callbacks=callbacks or None,
         eval_generator=eval_generator,
         min_eval_metric_after_epoch=min_eval_metric_after_epoch,
     )
@@ -265,9 +294,13 @@ def run_train(
     # 在任何后续修改前先 snapshot 一份 cfg（保持与旧逻辑一致）
     cfg = {**locals()}
 
+    created_lock = False
     if not overwrite:
-        if lock and _lock_share(str(output_dir)):
-            return
+        if lock:
+            # If a lock already exists, skip this run; otherwise acquire and remember to release after training.
+            if _lock_share(str(output_dir)):
+                return
+            created_lock = True
 
         if (Path(output_dir) / "cfg.yaml").exists():
             if resume:
@@ -366,34 +399,43 @@ def run_train(
         resume_arg = str(last_ckpt)
         print(f"[GLA] Resuming from checkpoint: {resume_arg}")
 
-    build_and_run_trainer_gla_only(
-        model=model,
-        tokenizer=tokenizer_obj,
-        output_dir=str(output_dir),
-        cfg=cfg,
-        cfg_path=cfg_path,
-        learning_rate=learning_rate,
-        total_steps=total_steps,
-        logging_steps=logging_steps,
-        gradient_accumulation_steps=gradient_accumulation_steps,
-        num_data_workers=num_data_workers,
-        batch_size=batch_size,
-        eval_epochs=eval_epochs,
-        skip_eval=skip_eval,
-        no_save=no_save,
-        eval_steps_override=eval_steps_override,
-        save_steps_override=save_steps_override,
-        eval_gen=eval_gen,
-        resume_from_checkpoint=resume_arg,
-        min_eval_metric_after_epoch=min_eval_metric_after_epoch,
-        seed=seed,
-        data=data,
-        val_data=val_data,
-        val_data_split=val_data_split,
-        debug=debug,
-        gradient_checkpointing=gradient_checkpointing,
-        logits_to_keep=logits_to_keep,
-    )
+    try:
+        build_and_run_trainer_gla_only(
+            model=model,
+            tokenizer=tokenizer_obj,
+            output_dir=str(output_dir),
+            cfg=cfg,
+            cfg_path=cfg_path,
+            learning_rate=learning_rate,
+            total_steps=total_steps,
+            logging_steps=logging_steps,
+            gradient_accumulation_steps=gradient_accumulation_steps,
+            num_data_workers=num_data_workers,
+            batch_size=batch_size,
+            eval_epochs=eval_epochs,
+            skip_eval=skip_eval,
+            no_save=no_save,
+            eval_steps_override=eval_steps_override,
+            save_steps_override=save_steps_override,
+            eval_gen=eval_gen,
+            resume_from_checkpoint=resume_arg,
+            min_eval_metric_after_epoch=min_eval_metric_after_epoch,
+            seed=seed,
+            data=data,
+            val_data=val_data,
+            val_data_split=val_data_split,
+            debug=debug,
+            gradient_checkpointing=gradient_checkpointing,
+            logits_to_keep=logits_to_keep,
+        )
+    finally:
+        if created_lock:
+            try:
+                lock_path = Path("share/lock") / str(output_dir)
+                lock_path.unlink(missing_ok=True)
+                print(f"[GLA][lock] released {lock_path}")
+            except Exception as e:
+                print(f"[GLA][lock][warn] failed to remove lock: {e}")
 
 
 def get_output_path_for_cfg(cfg_path, cfg):

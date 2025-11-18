@@ -17,12 +17,7 @@ class GLAHFDecoder:
         pad_id = getattr(self.tokenizer, "pad_token_id", None)
         if pad_id is None:
             pad_id = getattr(self.tokenizer, "eos_token_id", None)
-        attention_mask = None
-        try:
-            if pad_id is not None:
-                attention_mask = input_ids.ne(pad_id)
-        except Exception:
-            attention_mask = None
+        attention_mask = input_ids.ne(pad_id) if pad_id is not None else None
 
         use_max_new = str(os.getenv("GLA_USE_MAX_NEW_TOKENS", "1")).lower() in ("1", "true", "yes", "on")
         gen_kwargs = dict(
@@ -39,14 +34,7 @@ class GLAHFDecoder:
                 print("[GLA] Using HF generate(max_new_tokens/min_new_tokens) semantics (GLA_USE_MAX_NEW_TOKENS=1).")
             gen_kwargs["max_new_tokens"] = int(self.max_length)
             if self.min_length and self.min_length > 0:
-                # Try to use min_new_tokens if available; otherwise fail fast for visibility
-                try:
-                    gen_kwargs["min_new_tokens"] = int(self.min_length)
-                except TypeError as e:
-                    raise RuntimeError(
-                        f"min_new_tokens not supported by current transformers; set GLA_USE_MAX_NEW_TOKENS=0 "
-                        f"or upgrade transformers. Underlying error: {e}"
-                    )
+                gen_kwargs["min_new_tokens"] = int(self.min_length)
         else:
             # Legacy behavior: treat max_length/min_length as total length caps relative to prompt
             if os.getenv("GLA_VERBOSE", "0").lower() in ("1","true","yes","on"):
@@ -72,15 +60,12 @@ class GLAHFDecoder:
                     "or upgrade transformers."
                 ) from e
             raise
-        # Trim prompt for downstream metrics
+        # Trim prompt for downstream metrics (fail fast if incompatible)
         if hasattr(outputs, "sequences"):
             seq = outputs.sequences
             if seq is not None and seq.dim() == 2 and input_ids is not None and input_ids.dim() == 2:
-                try:
-                    # Always trim off the original prompt so metrics only see generated tokens
-                    outputs.sequences = seq[:, input_ids.shape[1]:]
-                except Exception:
-                    pass
+                # Always trim off the original prompt so metrics only see generated tokens
+                outputs.sequences = seq[:, input_ids.shape[1]:]
         return outputs
 
 
