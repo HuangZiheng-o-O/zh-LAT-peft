@@ -35,11 +35,39 @@ class SpiderDataset(NlgDatasetBase):
         self._db_dir = None
     
     def _get_local_root(self) -> Path | None:
-        env_dir = os.environ.get("SPIDER_LOCAL_DIR") or os.environ.get("HP_SPIDER_LOCAL_DIR")
-        if env_dir:
-            p = Path(env_dir)
-            if p.exists():
-                return p
+        # Priority:
+        # 1) SPIDER_LOCAL_DIR / HP_SPIDER_LOCAL_DIR (user override)
+        # 2) repo-local conventional paths under the project
+        # 3) None (caller will use HF snapshot)
+        candidates = []
+        for key in ("SPIDER_LOCAL_DIR", "HP_SPIDER_LOCAL_DIR"):
+            v = os.environ.get(key)
+            if v:
+                candidates.append(Path(v))
+        # Project-local fallbacks
+        try:
+            repo_root = Path(__file__).resolve().parents[2]  # .../zh-LAT-peft
+            candidates += [
+                repo_root / "mamba-peft" / "data" / "spider_data",
+                repo_root / "spider_data",
+            ]
+        except Exception:
+            pass
+        # CWD-relative fallbacks
+        try:
+            cwd = Path.cwd()
+            candidates += [
+                cwd / "mamba-peft" / "data" / "spider_data",
+                cwd / "spider_data",
+            ]
+        except Exception:
+            pass
+        for p in candidates:
+            try:
+                if p.exists() and (p / "train_spider.json").exists():
+                    return p
+            except Exception:
+                continue
         return None
         
     def get_sql_hardness(self, sql, db):
