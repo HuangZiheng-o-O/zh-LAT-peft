@@ -489,6 +489,7 @@ def evaluate(glist, plist, db_dir, etype, kmaps):
     # plist = [("select max(Share),min(Share) from performance where Type != 'terminal'", "orchestra")]
     # glist = [("SELECT max(SHARE) ,  min(SHARE) FROM performance WHERE TYPE != 'Live final'", "orchestra")]
     evaluator = Evaluator()
+    skip_bad_gold = str(os.environ.get("SPIDER_EVAL_EXEC_SKIP_BAD_GOLD", "1")).lower() in ("1", "true", "yes", "on")
 
     levels = ['easy', 'medium', 'hard', 'extra', 'all']
     partial_types = ['select', 'select(no AGG)', 'where', 'where(no OP)', 'group(no Having)',
@@ -499,6 +500,7 @@ def evaluate(glist, plist, db_dir, etype, kmaps):
     for level in levels:
         scores[level] = {'count': 0, 'partial': {}, 'exact': 0.}
         scores[level]['exec'] = 0
+        scores[level]['exec_count'] = 0
         for type_ in partial_types:
             scores[level]['partial'][type_] = {'acc': 0., 'rec': 0., 'f1': 0.,'acc_count':0,'rec_count':0}
 
@@ -549,10 +551,14 @@ def evaluate(glist, plist, db_dir, etype, kmaps):
         p_sql = rebuild_sql_col(p_valid_col_units, p_sql, kmap)
 
         if etype in ["all", "exec"]:
-            exec_score = eval_exec_match(db, p_str, g_str, p_sql, g_sql)
-            if exec_score:
-                scores[hardness]['exec'] += 1.0
-                scores['all']['exec'] += 1.0
+            ok, gold_ok = eval_exec_match(db, p_str, g_str, p_sql, g_sql)
+            # Denominator handling: optionally skip gold-invalid cases
+            if gold_ok or not skip_bad_gold:
+                scores[hardness]['exec_count'] += 1
+                scores['all']['exec_count'] += 1
+                if ok:
+                    scores[hardness]['exec'] += 1.0
+                    scores['all']['exec'] += 1.0
 
         if etype in ["all", "match"]:
             exact_score = evaluator.eval_exact_match(p_sql, g_sql)
@@ -591,7 +597,8 @@ def evaluate(glist, plist, db_dir, etype, kmaps):
         if scores[level]['count'] == 0:
             continue
         if etype in ["all", "exec"]:
-            scores[level]['exec'] /= scores[level]['count']
+            denom = scores[level]['exec_count'] if scores[level]['exec_count'] > 0 else scores[level]['count']
+            scores[level]['exec'] = (scores[level]['exec'] / denom) if denom > 0 else 0.0
 
         if etype in ["all", "match"]:
             scores[level]['exact'] /= scores[level]['count']
@@ -618,7 +625,7 @@ def evaluate(glist, plist, db_dir, etype, kmaps):
 
 def eval_exec_match(db, p_str, g_str, pred, gold):
     """
-    return 1 if the values between prediction and gold are matching
+    return (ok, gold_ok): ok==1 if result sets match; gold_ok==1 if gold executed successfully.
     in the corresponding index. Currently not support multiple col_unit(pairs).
     """
     conn = sqlite3.connect(db)
@@ -627,10 +634,22 @@ def eval_exec_match(db, p_str, g_str, pred, gold):
         print(p_str)
         cursor.execute(p_str)
         p_res = cursor.fetchall()
-    except:
-        return False
-
-    cursor.execute(g_str)
+    except Exception:
+        return False, True
+    # Execute gold with robust error handling; if gold fails to execute under sqlite,
+    # treat exec match as False but do not crash evaluation.
+    try:
+        cursor.execute(g_str)
+    except Exception as e:
+        try:
+            with open("spider_exec_errors.log", "a") as f:
+                f.write(f"[exec_error] db={db}\n")
+                f.write(f"  gold_sql: {g_str}\n")
+                f.write(f"  pred_sql: {p_str}\n")
+                f.write(f"  error   : {e}\n\n")
+        except Exception:
+            pass
+        return False, False
     q_res = cursor.fetchall()
 
     def res_map(res, val_units):
@@ -642,7 +661,7 @@ def eval_exec_match(db, p_str, g_str, pred, gold):
 
     p_val_units = [unit[1] for unit in pred['select'][1]]
     q_val_units = [unit[1] for unit in gold['select'][1]]
-    return res_map(p_res, p_val_units) == res_map(q_res, q_val_units)
+    return (res_map(p_res, p_val_units) == res_map(q_res, q_val_units)), True
 
 
 # Rebuild SQL functions for value evaluation

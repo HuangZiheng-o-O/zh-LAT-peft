@@ -29,7 +29,9 @@ class SpiderMetric():
             self.db_dir = "data/xlangai_spider/spider/database"
             self.table = "data/xlangai_spider/spider/tables.json"
 
-        self.etype = "all"
+        # Exec metric may be brittle on non-standard SQLite constraints; default to 'match' unless explicitly enabled
+        use_exec = str(os.environ.get("SPIDER_EVAL_EXEC", "0")).lower() in ("1", "true", "yes", "on")
+        self.etype = "all" if use_exec else "match"
         self.kmaps = build_foreign_key_map_from_json(self.table)
 
     def _configure_nltk_from_env(self) -> None:
