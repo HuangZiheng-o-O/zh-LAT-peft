@@ -97,35 +97,31 @@ def load_gla(model_id, trust_remote_code=True, device="cuda", dtype=torch.bfloat
             f"Ensure flash-linear-attention and model weights are compatible. Underlying error: {e}"
         )
 
-    # Optional fused SwiGLU control
-    use_fused = str(os.environ.get("GLA_USE_FUSED_SWIGLU", "0")).lower() in ("1", "true", "yes", "on")
-    if not use_fused:
-        try:
-            if hasattr(config, "fuse_swiglu"):
-                config.fuse_swiglu = False
-        except Exception:
-            pass
-        try:
-            import torch.nn.functional as F
-            from importlib import import_module
-            _mlp = import_module('fla.modules.mlp')
-            _act = import_module('fla.modules.activations')
+    # Always disable fused SwiGLU; use PyTorch implementations unconditionally
+    try:
+        if hasattr(config, "fuse_swiglu"):
+            config.fuse_swiglu = False
+    except Exception:
+        pass
+    try:
+        import torch.nn.functional as F
+        from importlib import import_module
+        _mlp = import_module('fla.modules.mlp')
+        _act = import_module('fla.modules.activations')
 
-            def _pt_swiglu(x, y):
-                return F.silu(x) * y
+        def _pt_swiglu(x, y):
+            return F.silu(x) * y
 
-            def _pt_swiglu_linear(x, y, weight, bias):
-                return F.linear(F.silu(x) * y, weight, bias)
+        def _pt_swiglu_linear(x, y, weight, bias):
+            return F.linear(F.silu(x) * y, weight, bias)
 
-            _mlp.swiglu = _pt_swiglu
-            _mlp.swiglu_linear = _pt_swiglu_linear
-            _act.swiglu = _pt_swiglu
-            _act.swiglu_linear = _pt_swiglu_linear
-            print("[GLA] fuse_swiglu disabled; using PyTorch SwiGLU (set GLA_USE_FUSED_SWIGLU=1 to enable fused kernels).")
-        except Exception as patch_err:
-            print(f"[GLA][warn] Failed to apply SwiGLU runtime patch: {patch_err}")
-    else:
-        print("[GLA] Using fused SwiGLU kernels (GLA_USE_FUSED_SWIGLU=1).")
+        _mlp.swiglu = _pt_swiglu
+        _mlp.swiglu_linear = _pt_swiglu_linear
+        _act.swiglu = _pt_swiglu
+        _act.swiglu_linear = _pt_swiglu_linear
+        print("[GLA] fuse_swiglu disabled; using PyTorch SwiGLU.")
+    except Exception as patch_err:
+        print(f"[GLA][warn] Failed to apply SwiGLU runtime patch: {patch_err}")
 
     # Load tokenizer and model
     tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=trust_remote_code)

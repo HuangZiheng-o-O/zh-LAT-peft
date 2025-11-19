@@ -115,7 +115,6 @@ HDR
   printf 'export SWANLAB_EXPERIMENT_PREFIX=%q\n' "${SWANLAB_EXPERIMENT_PREFIX:-}"
   printf 'export SWANLAB_LOGDIR=%q\n' "${SWANLAB_LOGDIR:-}"
   # GLA-specific toggles
-  printf 'export GLA_USE_FUSED_SWIGLU=%q\n' "${GLA_USE_FUSED_SWIGLU:-}"
   printf 'export GLA_FORCE_LEFT_PAD=%q\n' "${GLA_FORCE_LEFT_PAD:-}"
   printf 'export GLA_USE_MAX_NEW_TOKENS=%q\n' "${GLA_USE_MAX_NEW_TOKENS:-}"
   printf 'export GLA_VERBOSE=%q\n' "${GLA_VERBOSE:-}"

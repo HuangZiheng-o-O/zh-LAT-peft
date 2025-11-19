@@ -135,9 +135,10 @@ class GenericLMTrainer(Trainer):
             return ([], [])
         input_ids = inputs.get("input_ids") if isinstance(inputs, dict) else None
         label_ids = inputs.get("label_ids") if isinstance(inputs, dict) else None
+        attention_mask = inputs.get("attention_mask") if isinstance(inputs, dict) else None
         if input_ids is None or label_ids is None:
             return ([], [])
-        out_seq = generator(model, input_ids)
+        out_seq = generator(model, input_ids, attention_mask=attention_mask)
         if hasattr(out_seq, "sequences"):
             out_seq = out_seq.sequences
         if out_seq.dim() == 1:

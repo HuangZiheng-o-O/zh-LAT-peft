@@ -12,12 +12,13 @@ class GLAHFDecoder:
     num_beams: Optional[int] = None
     do_sample: bool = False
 
-    def __call__(self, model, input_ids: torch.Tensor):
+    def __call__(self, model, input_ids: torch.Tensor, attention_mask: Optional[torch.Tensor] = None):
         # Use HF generate provided by fla.models.gla.FLAGenerationMixin
         pad_id = getattr(self.tokenizer, "pad_token_id", None)
         if pad_id is None:
             pad_id = getattr(self.tokenizer, "eos_token_id", None)
-        attention_mask = input_ids.ne(pad_id) if pad_id is not None else None
+        if attention_mask is None:
+            attention_mask = input_ids.ne(pad_id) if pad_id is not None else None
 
         use_max_new = str(os.getenv("GLA_USE_MAX_NEW_TOKENS", "1")).lower() in ("1", "true", "yes", "on")
         gen_kwargs = dict(
@@ -45,6 +46,14 @@ class GLAHFDecoder:
 
         if attention_mask is not None:
             gen_kwargs["attention_mask"] = attention_mask
+            # Optional runtime check to catch right-padding during generation
+            if os.getenv("GLA_VERBOSE", "0").lower() in ("1","true","yes","on"):
+                try:
+                    if attention_mask.size(1) > 0 and (attention_mask[:, -1] == 0).any():
+                        print("[GLA][warn] Right-padding detected in attention_mask during generation. "
+                              "Ensure tokenizer.padding_side='left' and collator applies left padding.")
+                except Exception:
+                    pass
         if self.num_beams is not None and self.num_beams > 1:
             gen_kwargs["num_beams"] = int(self.num_beams)
             gen_kwargs["do_sample"] = False

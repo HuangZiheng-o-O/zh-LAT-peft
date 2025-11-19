@@ -19,8 +19,24 @@ class DataCollator(object):
         if pad_id is None:
             eos_id = getattr(self.tokenizer, "eos_token_id", None)
             pad_id = eos_id if eos_id is not None else 0
-        input_ids = torch.nn.utils.rnn.pad_sequence(input_ids, batch_first=True, padding_value=pad_id)
-        label_ids = torch.nn.utils.rnn.pad_sequence(label_ids, batch_first=True, padding_value=-100)
+        padding_side = getattr(self.tokenizer, "padding_side", "right")
+
+        def _pad_sequences(seqs, pad_value, side: str):
+            lengths = [t.size(0) for t in seqs]
+            max_len = max(lengths) if lengths else 0
+            out = seqs[0].new_full((len(seqs), max_len), pad_value) if max_len > 0 else torch.empty((len(seqs), 0), dtype=seqs[0].dtype, device=seqs[0].device)
+            for i, t in enumerate(seqs):
+                l = t.size(0)
+                if l == 0:
+                    continue
+                if side == "left":
+                    out[i, max_len - l:] = t
+                else:
+                    out[i, :l] = t
+            return out
+
+        input_ids = _pad_sequences(input_ids, pad_id, padding_side)
+        label_ids = _pad_sequences(label_ids, -100, padding_side)
 
         return dict(
             input_ids=input_ids,
