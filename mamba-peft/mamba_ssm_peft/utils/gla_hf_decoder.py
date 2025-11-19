@@ -50,8 +50,12 @@ class GLAHFDecoder:
             if os.getenv("GLA_VERBOSE", "0").lower() in ("1","true","yes","on"):
                 try:
                     if attention_mask.size(1) > 0 and (attention_mask[:, -1] == 0).any():
-                        print("[GLA][warn] Right-padding detected in attention_mask during generation. "
-                              "Ensure tokenizer.padding_side='left' and collator applies left padding.")
+                        msg = ("[GLA][warn] Right-padding detected in attention_mask during generation. "
+                               "Ensure tokenizer.padding_side='left' and collator applies left padding.")
+                        if os.getenv("GLA_STRICT_LEFT_PAD", "0").lower() in ("1", "true", "yes", "on"):
+                            raise RuntimeError(msg)
+                        print(msg)
+
                 except Exception:
                     pass
         if self.num_beams is not None and self.num_beams > 1:

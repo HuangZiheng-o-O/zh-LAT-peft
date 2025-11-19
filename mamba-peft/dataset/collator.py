@@ -33,13 +33,25 @@ class DataCollator(object):
                     out[i, max_len - l:] = t
                 else:
                     out[i, :l] = t
-            return out
+            return out, lengths
 
-        input_ids = _pad_sequences(input_ids, pad_id, padding_side)
-        label_ids = _pad_sequences(label_ids, -100, padding_side)
+        input_ids, input_lens = _pad_sequences(input_ids, pad_id, padding_side)
+        label_ids, _ = _pad_sequences(label_ids, -100, padding_side)
+
+        # Build attention_mask from original lengths (robust even when pad_token_id == eos_token_id)
+        attention_mask = torch.zeros_like(input_ids, dtype=torch.long)
+        if attention_mask.numel() > 0:
+            if padding_side == "left":
+                for i, l in enumerate(input_lens):
+                    if l > 0:
+                        attention_mask[i, -l:] = 1
+            else:
+                for i, l in enumerate(input_lens):
+                    if l > 0:
+                        attention_mask[i, :l] = 1
 
         return dict(
             input_ids=input_ids,
             label_ids=label_ids,
-            attention_mask=input_ids.ne(pad_id),
+            attention_mask=attention_mask,
         )
