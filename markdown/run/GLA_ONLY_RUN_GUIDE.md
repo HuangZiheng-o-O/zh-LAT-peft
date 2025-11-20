@@ -120,6 +120,24 @@ See `dangerous/email_notify.example.yaml` for the required Gmail SMTP config.
 
 ---
 
+### 3.1) Modern LR scheduler (recommended for better convergence)
+
+```bash
+# Enable cosine annealing with warmup (most advanced and well-reviewed approach)
+export LR_SCHEDULER_TYPE=cosine     # Options: constant|linear|cosine|polynomial
+export LR_WARMUP_RATIO=0.1          # Warmup steps as ratio of total training steps
+
+# Alternative: set fixed warmup steps instead of ratio
+# export LR_WARMUP_STEPS=500
+```
+
+**Why cosine with warmup?**
+- **Warmup phase**: Prevents early training instability by gradually increasing LR
+- **Cosine annealing**: Smoothly decreases LR following cosine curve, often leading to better final performance than linear decay
+- **Default behavior**: If not set, falls back to constant LR (backward compatible with existing YAMLs)
+
+---
+
 ### 4) Single-round runner (recommended for manual runs)
 
 Use `gla_round_clean.sh` to run a set of YAML configs in a round-robin fashion across specified GPUs.

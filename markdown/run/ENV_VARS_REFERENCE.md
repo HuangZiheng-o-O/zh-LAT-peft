@@ -214,6 +214,28 @@ This page documents every env var respected by the clean GLA-only pipeline. It l
 
 —
 
+#### Modern learning rate scheduling
+
+- LR_SCHEDULER_TYPE
+  - Purpose: Type of LR scheduler to use (modern approach for better convergence).
+  - Values: constant|linear|cosine|polynomial (cosine recommended for best results).
+  - Default: constant (backward compatible).
+  - Used by: train_gla_only.py (passed to HF Trainer).
+
+- LR_WARMUP_STEPS
+  - Purpose: Number of warmup steps before LR decay begins.
+  - Values: Integer ≥ 0.
+  - Default: None (computed from LR_WARMUP_RATIO if set).
+  - Used by: train_gla_only.py.
+
+- LR_WARMUP_RATIO
+  - Purpose: Warmup steps as ratio of total training steps.
+  - Values: Float 0.0–1.0 (recommended: 0.05–0.15).
+  - Default: 0.1 (10% of total steps).
+  - Used by: train_gla_only.py (fallback when LR_WARMUP_STEPS not set).
+
+—
+
 #### GPU scheduling (launchers)
 
 - --gpus / GPU_IDS

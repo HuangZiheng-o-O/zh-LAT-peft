@@ -42,6 +42,14 @@ def _env_bool(name: str, default: bool) -> bool:
     return str(v).lower() in ("1", "true", "yes", "on")
 
 
+def _env_float(name: str, default: float) -> float:
+    try:
+        v = os.environ.get(name)
+        return float(v) if v is not None else default
+    except Exception:
+        return default
+
+
 def _lock_share(name: str) -> bool:
     """
     Acquire a simple filesystem lock under share/lock/<name>.
@@ -164,6 +172,13 @@ def build_and_run_trainer_gla_only(
     _persist_workers = _env_bool("DATALOADER_PERSISTENT_WORKERS", False)
     _eval_acc_steps = _env_int("EVAL_ACCUMULATION_STEPS", 128)
 
+    # Modern LR scheduler configuration (advanced scheduling with warmup)
+    _lr_scheduler_type = os.environ.get("LR_SCHEDULER_TYPE", "constant")  # constant|linear|cosine|polynomial
+    _warmup_steps = _env_int("LR_WARMUP_STEPS", None)
+    _warmup_ratio = _env_float("LR_WARMUP_RATIO", 0.1)  # fallback if warmup_steps not set
+    if _warmup_steps is None and _warmup_ratio > 0:
+        _warmup_steps = int(_warmup_ratio * total_steps)
+
     # Optional SwanLab integration (controlled by env)
     callbacks = []
     _sl_enable = str(os.environ.get("SWANLAB_ENABLE", "")).lower() in ("1", "true", "yes", "on", "cloud", "local")
@@ -224,6 +239,8 @@ def build_and_run_trainer_gla_only(
             gradient_checkpointing=gradient_checkpointing,
             gradient_checkpointing_kwargs=_gc_kwargs,
             optim=cfg.get("optim", "adamw_torch"),
+            lr_scheduler_type=_lr_scheduler_type,
+            warmup_steps=_warmup_steps,
             output_dir=output_dir,
             logging_steps=logging_steps,
             dataloader_num_workers=num_data_workers,

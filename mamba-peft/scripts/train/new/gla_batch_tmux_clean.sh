@@ -125,6 +125,10 @@ HDR
   printf 'export HP_LOGGING_STEPS=%q\n' "${HP_LOGGING_STEPS:-}"
   printf 'export HP_VAL_SPLIT=%q\n' "${HP_VAL_SPLIT:-}"
   printf 'export HP_DATA=%q\n' "${HP_DATA:-}"
+  # Modern LR scheduler (warmup + decay)
+  printf 'export LR_SCHEDULER_TYPE=%q\n' "${LR_SCHEDULER_TYPE:-cosine}"
+  printf 'export LR_WARMUP_STEPS=%q\n' "${LR_WARMUP_STEPS:-}"
+  printf 'export LR_WARMUP_RATIO=%q\n' "${LR_WARMUP_RATIO:-0.1}"
   # EVAL_GEN parameters for generation tasks
   printf 'export EVAL_GEN=%q\n' "${EVAL_GEN:-}"
   printf 'export EVAL_GEN_MAX_LENGTH=%q\n' "${EVAL_GEN_MAX_LENGTH:-}"
