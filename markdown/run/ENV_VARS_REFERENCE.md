@@ -188,6 +188,30 @@ This page documents every env var respected by the clean GLA-only pipeline. It l
   - Default: Unset.
   - Used by: train_gla_only.py.
 
+- SWANLAB_EMAIL_YAML
+  - Purpose: Path to Gmail SMTP config for email notifications.
+  - Values: Absolute path to YAML file (see dangerous/email_notify.example.yaml).
+  - Default: Unset (email disabled).
+  - Used by: train_gla_only.py + gla_round_clean.sh.
+
+- SWANLAB_EMAIL_ON_START
+  - Purpose: Send email when training starts.
+  - Values: 1/on/true (enable) or 0/off/false (disable).
+  - Default: 1 (enabled).
+  - Used by: train_gla_only.py.
+
+- SWANLAB_EMAIL_ON_FINISH
+  - Purpose: Send email when training finishes successfully.
+  - Values: 1/on/true (enable) or 0/off/false (disable).
+  - Default: 1 (enabled).
+  - Used by: train_gla_only.py.
+
+- SWANLAB_EMAIL_ON_INTERRUPT
+  - Purpose: Send email when training is interrupted (SIGINT/SIGTERM).
+  - Values: 1/on/true (enable) or 0/off/false (disable).
+  - Default: 1 (enabled).
+  - Used by: gla_round_clean.sh (cleanup trap).
+
 —
 
 #### GPU scheduling (launchers)

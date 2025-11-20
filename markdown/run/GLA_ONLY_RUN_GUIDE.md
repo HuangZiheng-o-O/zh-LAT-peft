@@ -15,6 +15,17 @@ Key properties:
 
 ### 0) Environment prerequisites
 
+
+``` 
+git submodule add https://github.com/fla-org/flash-linear-attention.git 3rdparty/flash-linear-attention
+ln -s 3rdparty/flash-linear-attention/fla fla
+```
+
+recover:
+``` 
+git submodule sync --recursive
+git submodule update --init --recursive
+```
 ```bash
 conda activate mzsz
 cd /Users/huangziheng/PycharmProjects/all_code/codeH1_4090/code/zh-LAT-peft/mamba-peft
@@ -95,6 +106,17 @@ export SWANLAB_EXPERIMENT_PREFIX="E5"     # optional prefix
 ```
 
 SwanLab is wired as a Trainer callback only when `SWANLAB_ENABLE` is truthy. HF’s `report_to` remains `"none"` by default, so WandB will not be used even if its env is set.
+
+Email notifications (optional, requires Gmail setup):
+
+```bash
+export SWANLAB_EMAIL_YAML="/Users/huangziheng/PycharmProjects/all_code/codeH1_4090/code/zh-LAT-peft/mamba-peft/dangerous/email_notify.yaml"
+export SWANLAB_EMAIL_ON_START=1       # Send email when training starts (default: 1)
+export SWANLAB_EMAIL_ON_FINISH=1      # Send email when training finishes successfully (default: 1)
+export SWANLAB_EMAIL_ON_INTERRUPT=1   # Send email when training is interrupted (default: 1)
+```
+
+See `dangerous/email_notify.example.yaml` for the required Gmail SMTP config.
 
 ---
 

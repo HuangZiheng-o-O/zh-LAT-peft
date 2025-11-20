@@ -88,7 +88,6 @@ def build_and_run_trainer(
     callbacks = []
     _sl_enable = str(os.environ.get("SWANLAB_ENABLE", "")).lower() in ("1", "true", "yes", "on", "cloud", "local")
     if _sl_enable:
-        # try:
         from swanlab.integration.transformers import SwanLabCallback  # type: ignore
         sl_project = os.environ.get("SWANLAB_PROJECT", "mamba-peft")
         exp_prefix = os.environ.get("SWANLAB_EXPERIMENT_PREFIX", "")
@@ -96,8 +95,33 @@ def build_and_run_trainer(
         if exp_prefix:
             exp_name = f"{exp_prefix}_{exp_name}"
         callbacks.append(SwanLabCallback(project=sl_project, experiment_name=exp_name))
-        # except Exception as _e:
-        #     print(f"[SwanLab] disabled (import/init failed): {_e}")
+        # Optional: register EmailCallback from YAML secrets
+        try:
+            import swanlab  # type: ignore
+            from swanlab.plugin.notification import EmailCallback  # type: ignore
+            email_yaml = os.environ.get("SWANLAB_EMAIL_YAML", "dangerous/email_notify.yaml")
+            if Path(email_yaml).is_file():
+                with open(email_yaml, "r") as _ef:
+                    _ecfg = yaml.safe_load(_ef) or {}
+                if all(k in _ecfg for k in ("sender_email", "receiver_email", "password", "smtp_server", "port")):
+                    _email_cb = EmailCallback(
+                        sender_email=str(_ecfg["sender_email"]),
+                        receiver_email=str(_ecfg["receiver_email"]),
+                        password=str(_ecfg["password"]),
+                        smtp_server=str(_ecfg["smtp_server"]),
+                        port=int(_ecfg.get("port", 587)),
+                        language=str(_ecfg.get("language", "zh")),
+                    )
+                    swanlab.register_callbacks([_email_cb])
+                    _start_env = str(os.environ.get("SWANLAB_EMAIL_ON_START", "1")).lower()
+                    if _start_env in ("1", "true", "yes", "on"):
+                        try:
+                            _msg = f"Output: {output_dir}\nData: {cfg.get('data')}\nSeed: {cfg.get('seed')}\nCfg: {cfg_path}"
+                            _email_cb.send_email(subject=f"SwanLab | STARTED | {exp_name}", content=_msg)
+                        except Exception:
+                            pass
+        except Exception:
+            pass
 
     # Optional DataLoader/Eval memory tuning via env (defaults preserve old behavior)
     def _env_bool(name: str, default: bool) -> bool:
@@ -174,6 +198,23 @@ def build_and_run_trainer(
         callbacks=callbacks or None,
     )
 
-    trainer.train(resume_from_checkpoint=resume_from_checkpoint)
+    try:
+        trainer.train(resume_from_checkpoint=resume_from_checkpoint)
+        try:
+            from scripts.utils.email_notify import send_event_email  # type: ignore
+            _fin_env = str(os.environ.get("SWANLAB_EMAIL_ON_FINISH", "1")).lower()
+            if _sl_enable and _fin_env in ("1", "true", "yes", "on"):
+                send_event_email("FINISHED", group=Path(output_dir).name, details=f"Finished OK: {output_dir}")
+        except Exception:
+            pass
+    except Exception as _e:
+        try:
+            from scripts.utils.email_notify import send_event_email  # type: ignore
+            import traceback
+            tb = "".join(traceback.format_exception_only(type(_e), _e))
+            send_event_email("FAILED", group=Path(output_dir).name, details=f"Failed: {tb}")
+        except Exception:
+            pass
+        raise
 
 

@@ -1,0 +1,8 @@
+sender_email: "ziheng2701@gmail.com"        # 发送者邮箱（开启 SMTP 的邮箱）
+receiver_email: "ziheng2701@gmail.com"      # 接收者邮箱
+password: "..."          #  https://myaccount.google.com/apppasswords
+smtp_server: "smtp.gmail.com"          # Gmail: smtp.gmail.com
+port: 587                              # Gmail TLS 端口 587
+language: "zh"                         # 邮件语言：zh / en
+
+

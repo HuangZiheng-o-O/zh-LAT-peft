@@ -22,3 +22,7 @@ checkpoint-*
 /weights
 /bak
 .idea/
+#
+# Sensitive email notifier secrets (keep example only)
+/dangerous/*.yaml
+!/dangerous/email_notify.example.yaml

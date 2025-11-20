@@ -124,6 +124,18 @@ cleanup() {
     pkill -f -- "${LAUNCHER_PY} --cfg ${EXP_ROOT}/" 2>/dev/null || true
   fi
 
+  # Best-effort email notification for interruption (controlled by env, default on; does not kill anything, only notifies once)
+  _email_interrupt="${SWANLAB_EMAIL_ON_INTERRUPT:-1}"
+  if [[ "${_email_interrupt}" == "1" ]] && command -v python >/dev/null 2>&1; then
+    (
+      cd "$(dirname "$0")/.." || true
+      python -m scripts.utils.email_notify \
+        --event INTERRUPTED \
+        --group "suite=${SELECT_SUITE} round=${CURRENT_ROUND} data=${DATA}" \
+        --yaml "${SWANLAB_EMAIL_YAML:-}" >/dev/null 2>&1 || true
+    )
+  fi
+
   print_interruption_summary
   exit 130
 }

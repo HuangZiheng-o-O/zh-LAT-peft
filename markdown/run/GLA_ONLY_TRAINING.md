@@ -274,6 +274,9 @@ export NUM_DATA_WORKERS=8
 export GRADIENT_CHECKPOINTING=true
 export LOGITS_TO_KEEP=1
 
+export SWANLAB_EMAIL_ON_START=1
+export SWANLAB_EMAIL_ON_FINISH=1
+
 ./gla_batch_tmux_clean.sh \
   --suite E5 \
   --round all \
@@ -331,7 +334,8 @@ export OMP_NUM_THREADS=1
 export MKL_NUM_THREADS=1
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
- 
+export SWANLAB_EMAIL_ON_START=1
+export SWANLAB_EMAIL_ON_FINISH=1
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
 export SWANLAB_PROJECT="gla-samsum-e5-clean"
@@ -342,4 +346,10 @@ export SWANLAB_PROJECT="gla-samsum-e5-clean"
   --pairs "87:samsum" \
   --gpus "7" \
   --gpu-plan "1"
+```
+
+
+```bash
+cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft
+python -m scripts.utils.email_notify --event STARTED --group smoketest --yaml "$SWANLAB_EMAIL_YAML"
 ```
