@@ -285,3 +285,61 @@ export LOGITS_TO_KEEP=1
 This is the GLA‑only, HF‑native `.generate()` path with strict error reporting and no Mamba decoder/resume contamination.
 
 
+```bash
+conda activate mzsz
+cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
+
+# 本地 SamSum CSV 目录（需包含 train.csv / validation.csv / test.csv 或 dev.csv）
+export SAMSUM_LOCAL_DIR=/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/data/samsum
+
+# 生成评测（ROUGE）
+export EVAL_GEN=1
+export EVAL_GEN_MAX_LENGTH=128
+export EVAL_GEN_MIN_LENGTH=8
+export EVAL_GEN_NUM_BEAMS=5
+
+# 解码/生成策略（GLA）
+export GLA_FORCE_LEFT_PAD=1
+export GLA_USE_MAX_NEW_TOKENS=1
+export GLA_VERBOSE=1
+
+# 训练超参（覆盖 YAML）
+export HP_DATA=samsum
+export HP_EPOCHS=3
+export HP_LR=0.0001
+export HP_BATCH_SIZE=4
+export HP_PREC=bf16
+export HP_SEED=87
+export HP_VAL_SPLIT=val
+export HP_EVAL_STEPS=1000     # ← 从 500 调整为 1000
+export HP_SAVE_STEPS=1000     # ← 从 500 调整为 1000
+export HP_LOGGING_STEPS=50
+
+# LoRA 初始化（两种二选一；推荐第一种直接生效）
+export HP_INIT=pissa_niter_4
+# 或：export HP_PISSA_FAST=1   #（当 JSON 里是 "pissa" 时自动切到 fast 变体）
+
+# DataLoader 与内存
+export NUM_DATA_WORKERS=2      # ← 从 8 调整为 2（SamSum 小数据 + 多并发）
+export DATALOADER_PREFETCH_FACTOR=2
+export DATALOADER_PIN_MEMORY=1
+export DATALOADER_PERSISTENT_WORKERS=0
+export GRADIENT_CHECKPOINTING=true
+export LOGITS_TO_KEEP=1
+export TOKENIZERS_PARALLELISM=false
+export OMP_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
+ 
+export SWANLAB_ENABLE=1
+export SWANLAB_MODE=cloud
+export SWANLAB_PROJECT="gla-samsum-e5-clean"
+
+./gla_batch_tmux_clean.sh \
+  --suite E5 \
+  --round all \
+  --pairs "87:samsum" \
+  --gpus "7" \
+  --gpu-plan "1"
+```
