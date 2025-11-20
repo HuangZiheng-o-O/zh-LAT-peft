@@ -5,4 +5,4 @@ no_save: false
 num_epochs: 10
 peft: cfg/my_lora_exp/peft/lora_out_dropout0_r4_a4.json
 prec: bf16
-seed: 42
+

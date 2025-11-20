@@ -15,10 +15,7 @@ ROUND_E_MASTER=( # 70 existing configs, grouped & non-duplicated
   ############################################################
   "E1_QKVO_r4_alpha8.yaml"
   "E1_QKVO_r8_alpha8.yaml"
-  "E1_QKVO_r8_alpha12.yaml"
   "E1_QKVO_r8_alpha16.yaml"   # 主 anchor：r=8, α=16
-  "E1_QKVO_r8_alpha20.yaml"
-  "E1_QKVO_r10_alpha20.yaml"
   "E1_QKVO_r16_alpha32.yaml"  # 高 rank 对照，给 DoRA / RSLoRA 的 “等效 rank” 参考
 
   ############################################################
@@ -26,20 +23,20 @@ ROUND_E_MASTER=( # 70 existing configs, grouped & non-duplicated
   #    —— 只改 “插哪里 / 插什么结构”，方法固定为 LoRA
   ############################################################
   # 1.1 α sweep @ r=8
-  "E1_QKVO_plus_G_r8_alpha8.yaml"
+#  "E1_QKVO_plus_G_r8_alpha8.yaml"
+#    "E1_QKVO_plus_GK_r8_alpha8.yaml"
+#      "E1_QKVO_plus_G_plus_GK_r8_alpha8.yaml"
   "E1_QKVO_plus_G_r8_alpha16.yaml"
-  "E1_QKVO_plus_GK_r8_alpha8.yaml"
   "E1_QKVO_plus_GK_r8_alpha16.yaml"
-  "E1_QKVO_plus_G_plus_GK_r8_alpha8.yaml"
   "E1_QKVO_plus_G_plus_GK_r8_alpha16.yaml"
 
-  # 1.2 Branch 结构，在主 anchor r=8 α=16
+  # 1.2 Branch 结构
   "E1_QKVO_plus_MLP_r8_alpha16.yaml"
   "E1_QKVO_plus_G_plus_GK_plus_MLP_r8_alpha16.yaml"
 
-  # 1.3 （缺失但从设计上“应该有”的对照，只做占位）
-  # "E1_QKVO_plus_G_only_r8_alpha16.yaml"   # MISSING: 只加 G 分支，在主 budget r=8 α=16
-  # "E1_QKVO_plus_GK_only_r8_alpha16.yaml"  # MISSING: 只加 GK 分支，在主 budget r=8 α=16
+  # 1.3 纯 G / GK 分支对照（只加门控，不加 QKVO）
+  "E1_QKVO_plus_G_only_r8_alpha16.yaml"   # 只加 G 分支，在主 budget r=8 α=16
+  "E1_QKVO_plus_GK_only_r8_alpha16.yaml"  # 只加 GK 分支，在主 budget r=8 α=16
 
   ############################################################
   # 2. O-MLP family (LoRA, aligned backbone)
@@ -156,8 +153,7 @@ ROUND_E_MASTER=( # 70 existing configs, grouped & non-duplicated
   "round4_LORAGA_QKVO_plus_GK_r8_a16.yaml"
 
   # （如果以后有更多方法，比如 AdaLoRA / VeRA，也可以在这里按同样 pattern 补）
-  # "round4_ADALORA_QKVO_r8_a16.yaml"          # MISSING: 示例占位
-  # "round4_ADALORA_QKVO_plus_GK_r8_a16.yaml"  # MISSING: 示例占位
+
 
   ############################################################
   # 8. Mixed-budget experiments (E3 family, LoRA)
