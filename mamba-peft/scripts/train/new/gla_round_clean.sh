@@ -6,6 +6,223 @@ LAUNCHER_PY="train_gla_only.py"
 ###############################################################################
 #                               USER CONFIG HERE                              #
 ###############################################################################
+: "${ROUND_E_MASTER[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E_MASTER=()
+ROUND_E_MASTER=( # 70 existing configs, grouped & non-duplicated
+
+  ############################################################
+  # 0. Anchor baselines & rank/alpha sweep (LoRA, QKVO backbone)
+  #    —— 主干对照组：只动 QKVO，扫 rank / α，当作所有结构 / 方法的共同锚点
+  ############################################################
+  "E1_QKVO_r4_alpha8.yaml"
+  "E1_QKVO_r8_alpha8.yaml"
+  "E1_QKVO_r8_alpha12.yaml"
+  "E1_QKVO_r8_alpha16.yaml"   # 主 anchor：r=8, α=16
+  "E1_QKVO_r8_alpha20.yaml"
+  "E1_QKVO_r10_alpha20.yaml"
+  "E1_QKVO_r16_alpha32.yaml"  # 高 rank 对照，给 DoRA / RSLoRA 的 “等效 rank” 参考
+
+  ############################################################
+  # 1. Structural ablations on QKVO (LoRA)
+  #    —— 只改 “插哪里 / 插什么结构”，方法固定为 LoRA
+  ############################################################
+  # 1.1 α sweep @ r=8
+  "E1_QKVO_plus_G_r8_alpha8.yaml"
+  "E1_QKVO_plus_G_r8_alpha16.yaml"
+  "E1_QKVO_plus_GK_r8_alpha8.yaml"
+  "E1_QKVO_plus_GK_r8_alpha16.yaml"
+  "E1_QKVO_plus_G_plus_GK_r8_alpha8.yaml"
+  "E1_QKVO_plus_G_plus_GK_r8_alpha16.yaml"
+
+  # 1.2 Branch 结构，在主 anchor r=8 α=16
+  "E1_QKVO_plus_MLP_r8_alpha16.yaml"
+  "E1_QKVO_plus_G_plus_GK_plus_MLP_r8_alpha16.yaml"
+
+  # 1.3 （缺失但从设计上“应该有”的对照，只做占位）
+  # "E1_QKVO_plus_G_only_r8_alpha16.yaml"   # MISSING: 只加 G 分支，在主 budget r=8 α=16
+  # "E1_QKVO_plus_GK_only_r8_alpha16.yaml"  # MISSING: 只加 GK 分支，在主 budget r=8 α=16
+
+  ############################################################
+  # 2. O-MLP family (LoRA, aligned backbone)
+  #    —— 和 QKVO 主干对齐的 O-MLP LoRA，对比 “改 attention 还是改 MLP”
+  ############################################################
+  # 2.1 α sweep @ r=8
+  "E2_OMLP_r8_alpha8.yaml"
+  "E2_OMLP_r8_alpha16.yaml"
+
+  # 2.2 gating interactions @ r=8 α=16
+  "E2_OMLP_plus_G_r8_alpha16.yaml"
+  "E2_OMLP_plus_GK_r8_alpha16.yaml"
+  "E2_OMLP_plus_G_plus_GK_r8_alpha16.yaml"
+
+  # 2.3 （潜在缺失，对 O-MLP 做纯 G / 纯 GK，只占位）
+  # "E2_OMLP_plus_G_only_r8_alpha16.yaml"   # MISSING: O-MLP 只接 G adapter
+  # "E2_OMLP_plus_GK_only_r8_alpha16.yaml"  # MISSING: O-MLP 只接 GK adapter
+
+  ############################################################
+  # 3. Layer-wise localization (LoRA)
+  #    —— 控制 “层位置” 这个变量：前几层 / 后几层 / 中间几层
+  ############################################################
+  "E1_QKVO_first6_r8_alpha16.yaml"
+  "E1_QKVO_last6_r8_alpha16.yaml"
+  "E2_OMLP_last6_r8_alpha16.yaml"
+  "E2_OMLP_middle6_r8_alpha16.yaml"
+
+  ############################################################
+  # 4. Fine-grained target sets (LoRA)
+  #    —— 精细化 “更新哪些子模块”：Gating-only / QK-only / KV-only / QK+Gating / O+Head
+  ############################################################
+  "E3_GATINGONLY_r8_alpha16.yaml"
+  "E6_QKONLY_r8_alpha16.yaml"
+  "E7_KVONLY_r8_alpha16.yaml"
+  "E8_QK_plus_GATING_r8_alpha16.yaml"
+  "E9_OplusHEAD_r8_alpha16.yaml"
+
+  # 4.1 更细但缺失的目标集合（只占位，方便你以后补全）
+  # "E4_QONLY_r8_alpha16.yaml"      # MISSING: 只更新 Q
+  # "E4_KONLY_r8_alpha16.yaml"      # MISSING: 只更新 K
+  # "E4_VONLY_r8_alpha16.yaml"      # MISSING: 只更新 V
+  # "E4_OONLY_r8_alpha16.yaml"      # MISSING: 只更新 O
+  # "E4_HEADONLY_r8_alpha16.yaml"   # MISSING: 只更新 output head，不动 O 本体
+  # "E4_GKONLY_r8_alpha16.yaml"     # MISSING: gating 里只接 GK 不接 G 的版本
+
+  ############################################################
+  # 5. Method family: DoRA (fixed structure, compare method)
+  #    —— 把结构固定在 QKVO 主干 / 结构 ablation / fine-grained，换成 DoRA
+  ############################################################
+  # 5.1 QKVO backbone: rank sweep with DoRA
+  "E1_QKVO_DoRA_r8_alpha16.yaml"
+  "E1_QKVO_DoRA_r12_alpha24.yaml"
+
+  # 5.2 Structural: +G / +GK / +G+GK with DoRA
+  "E1_QKVO_plus_G_DoRA_r8_alpha16.yaml"
+  "E1_QKVO_plus_GK_DoRA_r8_alpha16.yaml"
+  "E1_QKVO_plus_G_plus_GK_DoRA_r8_alpha16.yaml"
+
+  # 5.3 Fine-grained target sets with DoRA
+  "E3_GATINGONLY_DoRA_r8_alpha16.yaml"
+  "E6_QKONLY_DoRA_r8_alpha16.yaml"
+  "E7_KVONLY_DoRA_r8_alpha16.yaml"
+  "E8_QK_plus_GATING_DoRA_r8_alpha16.yaml"
+  "E9_OplusHEAD_DoRA_r8_alpha16.yaml"
+
+  # 5.4 Mixed-budget (QKVO main, Gates as aux) with DoRA on aux path
+  "E3_QKVO_main_Gates_aux_DoRA_r8a16_r4a4.yaml"
+
+  # 5.5 round4: DoRA on standard QKVO / QKVO+GK
+  "round4_DoRA_QKVO_r8_a16.yaml"
+  "round4_DoRA_QKVO_plus_GK_r8_a16.yaml"
+
+  ############################################################
+  # 6. Method family: RSLoRA
+  #    —— 完全平行的 RSLoRA 组，和上面 DoRA 可一一对比
+  ############################################################
+  # 6.1 QKVO backbone: rank sweep with RSLoRA
+  "E1_QKVO_RSLoRA_r8_alpha16.yaml"
+  "E1_QKVO_RSLoRA_r12_alpha24.yaml"
+
+  # 6.2 Structural: +G / +GK / +G+GK with RSLoRA
+  "E1_QKVO_plus_G_RSLoRA_r8_alpha16.yaml"
+  "E1_QKVO_plus_GK_RSLoRA_r8_alpha16.yaml"
+  "E1_QKVO_plus_G_plus_GK_RSLoRA_r8_alpha16.yaml"
+
+  # 6.3 Fine-grained target sets with RSLoRA
+  "E3_GATINGONLY_RSLoRA_r8_alpha16.yaml"
+  "E6_QKONLY_RSLoRA_r8_alpha16.yaml"
+  "E7_KVONLY_RSLoRA_r8_alpha16.yaml"
+  "E8_QK_plus_GATING_RSLoRA_r8_alpha16.yaml"
+  "E9_OplusHEAD_RSLoRA_r8_alpha16.yaml"
+
+  # 6.4 Mixed-budget with RSLoRA on aux path
+  "E3_QKVO_main_Gates_aux_RSLoRA_r8a16_r4a4.yaml"
+
+  # 6.5 round4: RSLoRA on standard QKVO / QKVO+GK
+  "round4_RSLORA_QKVO_r8_a16.yaml"
+  "round4_RSLORA_QKVO_plus_GK_r8_a16.yaml"
+
+  ############################################################
+  # 7. Other method families on QKVO backbone
+  #    —— PiSSA / LoRA-GA，相当于 “方法轴” 的补完
+  ############################################################
+  # LoRA baseline under round4 setting
+  "round4_QKVO_r8_a16.yaml"
+  "round4_QKVO_plus_GK_r8_a16.yaml"
+
+  # PiSSA variants
+  "round4_PISSA_QKVO_r8_a16.yaml"
+  "round4_PISSA_QKVO_plus_GK_r8_a16.yaml"
+
+  # LoRA-GA variants
+  "round4_LORAGA_QKVO_r8_a16.yaml"
+  "round4_LORAGA_QKVO_plus_GK_r8_a16.yaml"
+
+  # （如果以后有更多方法，比如 AdaLoRA / VeRA，也可以在这里按同样 pattern 补）
+  # "round4_ADALORA_QKVO_r8_a16.yaml"          # MISSING: 示例占位
+  # "round4_ADALORA_QKVO_plus_GK_r8_a16.yaml"  # MISSING: 示例占位
+
+  ############################################################
+  # 8. Mixed-budget experiments (E3 family, LoRA)
+  #    —— 主 budget 固定在 QKVO r=8 a=16，再加小 budget 给 Gates / MLP
+  ############################################################
+  "E3_QKVO_main_Gates_aux_r8a16_r2a2.yaml"
+  "E3_QKVO_main_Gates_aux_r8a16_r4a4.yaml"
+  "E3_QKVO_main_Gates_aux_r8a16_r4a8.yaml"
+  "E3_QKVO_main_MLP_aux_r8a16_r4a8.yaml"
+  "E3_QKVO_main_GatesMLP_aux_r8a16_r4a8.yaml"
+  "E3_QKVO_plus_G_only_r4a4.yaml"
+  "E3_QKVO_plus_GK_only_r4a4.yaml"
+
+  # 8.1 混合 budget 里理论上也可以做 “only Q / only K / only V” 的小 adapter（先占位）
+  # "E3_QKVO_main_Q_aux_r8a16_r4a4.yaml"   # MISSING: main 在 QKVO，aux 在 Q
+  # "E3_QKVO_main_K_aux_r8a16_r4a4.yaml"   # MISSING
+  # "E3_QKVO_main_V_aux_r8a16_r4a4.yaml"   # MISSING
+
+  ############################################################
+  # 9. Training-strategy ablations (LoRA, decoupled from structure)
+  #    —— 结构固定 QKVO r=8 α=16，只改 training hyper
+  ############################################################
+  "E1_QKVO_dropout0_r8_alpha16.yaml"
+  "E1_QKVO_wd0.01_r8_alpha16.yaml"
+
+  # 9.1 你之前注释掉的 lr / loradrop 也可以在这里补上，如果 yaml 文件本身存在：
+  # "E1_QKVO_lr5e-5_r8_alpha16.yaml"      # OPTIONAL: 低 lr 对照
+  # "E1_QKVO_lr2e-4_r8_alpha16.yaml"      # OPTIONAL: 高 lr 对照
+  # "E1_QKVO_loradrop0.05_r8_alpha16.yaml" # OPTIONAL: LoRA dropout ablation
+)
+
+# 只跑 “方法轴”：DoRA 系列
+ROUND_DORA=(
+  "E1_QKVO_DoRA_r8_alpha16.yaml"
+  "E1_QKVO_DoRA_r12_alpha24.yaml"
+  "E1_QKVO_plus_G_DoRA_r8_alpha16.yaml"
+  "E1_QKVO_plus_GK_DoRA_r8_alpha16.yaml"
+  "E1_QKVO_plus_G_plus_GK_DoRA_r8_alpha16.yaml"
+  "E3_GATINGONLY_DoRA_r8_alpha16.yaml"
+  "E6_QKONLY_DoRA_r8_alpha16.yaml"
+  "E7_KVONLY_DoRA_r8_alpha16.yaml"
+  "E8_QK_plus_GATING_DoRA_r8_alpha16.yaml"
+  "E9_OplusHEAD_DoRA_r8_alpha16.yaml"
+  "E3_QKVO_main_Gates_aux_DoRA_r8a16_r4a4.yaml"
+  "round4_DoRA_QKVO_r8_a16.yaml"
+  "round4_DoRA_QKVO_plus_GK_r8_a16.yaml"
+)
+
+# 只跑 “方法轴”：RSLoRA 系列
+ROUND_RSLoRA=(
+  "E1_QKVO_RSLoRA_r8_alpha16.yaml"
+  "E1_QKVO_RSLoRA_r12_alpha24.yaml"
+  "E1_QKVO_plus_G_RSLoRA_r8_alpha16.yaml"
+  "E1_QKVO_plus_GK_RSLoRA_r8_alpha16.yaml"
+  "E1_QKVO_plus_G_plus_GK_RSLoRA_r8_alpha16.yaml"
+  "E3_GATINGONLY_RSLoRA_r8_alpha16.yaml"
+  "E6_QKONLY_RSLoRA_r8_alpha16.yaml"
+  "E7_KVONLY_RSLoRA_r8_alpha16.yaml"
+  "E8_QK_plus_GATING_RSLoRA_r8_alpha16.yaml"
+  "E9_OplusHEAD_RSLoRA_r8_alpha16.yaml"
+  "E3_QKVO_main_Gates_aux_RSLoRA_r8a16_r4a4.yaml"
+  "round4_RSLORA_QKVO_r8_a16.yaml"
+  "round4_RSLORA_QKVO_plus_GK_r8_a16.yaml"
+)
+
 
 ROUND_E5=( #18
   # 0. Baselines (anchor)
