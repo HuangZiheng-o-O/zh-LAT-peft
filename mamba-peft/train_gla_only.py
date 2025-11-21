@@ -110,6 +110,18 @@ def build_and_run_trainer_gla_only(
     print_trainable_parameter_names(model, output_dir=output_dir, cfg_path=cfg_path)
     print("Loaded model")
 
+    # # 在构建任何数据模块之前，优先依据环境变量强制左填充到传入的 tokenizer，避免生成期间出现右填充告警
+    # try:
+    #     _force_left = str(os.environ.get("GLA_FORCE_LEFT_PAD", "1")).lower() in ("1", "true", "yes", "on")
+    #     if _force_left and hasattr(tokenizer, "padding_side"):
+    #         tokenizer.padding_side = "left"
+    #         if getattr(tokenizer, "pad_token_id", None) is None and getattr(tokenizer, "eos_token", None) is not None:
+    #             tokenizer.pad_token = tokenizer.eos_token
+    #         if str(os.environ.get("GLA_VERBOSE", "0")).lower() in ("1", "true", "yes", "on"):
+    #             print("[GLA] Using left padding for decoder-only generation (GLA_FORCE_LEFT_PAD=1).")
+    # except Exception as _e:
+    #     print(f"[GLA][warn] Failed to enforce left padding policy early: {_e}")
+
     # 构建 train data module（真正用来训练的）
     train_data_module = load_dataset(data, tokenizer, "train", return_module=True)
 
@@ -124,12 +136,10 @@ def build_and_run_trainer_gla_only(
         _eval = dict(eval_gen)
         max_length = int(_eval.get("max_length", 1024))
         min_length = int(_eval.get("min_length", 5))
-        num_beams = _eval.get("num_beams", None)
         eval_generator = create_gla_decoder(
             tokenizer,
             max_length=max_length,
             min_length=min_length,
-            num_beams=num_beams,
             do_sample=False,
         )
 
@@ -650,11 +660,9 @@ def main():
     if (cfg.get("eval_gen") is None) and (is_gen_task or force_eval_gen):
         max_len = _maybe(env.get("EVAL_GEN_MAX_LENGTH"), int) or 1024
         min_len = _maybe(env.get("EVAL_GEN_MIN_LENGTH"), int) or 5
-        num_beams = _maybe(env.get("EVAL_GEN_NUM_BEAMS"), int) or 5
         cfg["eval_gen"] = {
             "max_length": int(max_len),
             "min_length": int(min_len),
-            "num_beams": int(num_beams),
         }
 
     # 输出目录与旧 get_output_path_for_cfg 完全一致

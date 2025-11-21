@@ -282,7 +282,7 @@ export HP_SAVE_STEPS=1500
 export HP_LOGGING_STEPS=100
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="gla-spider-1-4090-E155-mail02-r3"
+export SWANLAB_PROJECT="gla-spider-1-4090-E155-mail02-r4"
 export SWANLAB_LOGDIR="/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/my_swanlog/local_eval_logs"
 export SWANLAB_EMAIL_YAML="/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/dangerous/email_notify.yaml"
 export SWANLAB_EMAIL_ON_START=1
@@ -354,7 +354,7 @@ export SAMSUM_LOCAL_DIR=/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/data/samsum
 export EVAL_GEN=1
 export EVAL_GEN_MAX_LENGTH=128
 export EVAL_GEN_MIN_LENGTH=8
-export EVAL_GEN_NUM_BEAMS=5
+
 
 # 解码/生成策略（GLA）
 export GLA_FORCE_LEFT_PAD=1
