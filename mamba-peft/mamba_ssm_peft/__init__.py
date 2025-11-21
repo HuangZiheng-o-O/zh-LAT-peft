@@ -125,6 +125,9 @@ def print_trainable_parameter_names(model, output_dir=None, cfg_path=None):
         import json
         from pathlib import Path
 
+        # Ensure output directory exists before writing
+        Path(output_dir).mkdir(parents=True, exist_ok=True)
+
         param_info = {
             "total_params": total_params,
             "trainable_params": trainable_params,

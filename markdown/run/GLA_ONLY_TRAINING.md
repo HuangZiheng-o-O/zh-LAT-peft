@@ -282,7 +282,7 @@ export HP_SAVE_STEPS=1500
 export HP_LOGGING_STEPS=100
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="gla-spider-1-4090-E5-mail02-r2"
+export SWANLAB_PROJECT="gla-spider-1-4090-E155-mail02-r2"
 export SWANLAB_LOGDIR="/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/my_swanlog/local_eval_logs"
 export SWANLAB_EMAIL_YAML="/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/dangerous/email_notify.yaml"
 export SWANLAB_EMAIL_ON_START=1
@@ -301,11 +301,11 @@ export SWANLAB_EMAIL_ON_START=1
 export SWANLAB_EMAIL_ON_FINISH=1
 
 ./gla_batch_tmux_clean.sh \
-  --suite E11 \
-  --round 2 \
+  --suite E155 \
+  --round all \
   --pairs "87:spider-tvt" \
-  --gpus "0 1 3 4 6" \
-  --gpu-plan "3,3,3,3,3"
+  --gpus "0 1 3 4" \
+  --gpu-plan "3,3,3,1"
 ```
 
 This is the GLA‑only, HF‑native `.generate()` path with strict error reporting and no Mamba decoder/resume contamination.
@@ -405,4 +405,18 @@ export SWANLAB_PROJECT="gla-samsum-e5-clean"
 ```bash
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft
 python -m scripts.utils.email_notify --event STARTED --group smoketest --yaml "$SWANLAB_EMAIL_YAML"
+```
+
+```bash
+
+```
+
+
+```bash
+
+```
+
+
+```bash
+
 ```
