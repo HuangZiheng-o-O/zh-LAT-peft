@@ -41,7 +41,7 @@ def build_and_run_trainer(
     gradient_checkpointing: bool = False,
     logits_to_keep: int | None = None,
 ):
-    print_trainable_parameter_names(model)
+    print_trainable_parameter_names(model, output_dir=output_dir, cfg_path=cfg_path)
     print("Loaded model")
 
     train_data_module = load_dataset(data, tokenizer, "train", return_module=True)

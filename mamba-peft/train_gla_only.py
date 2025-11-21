@@ -107,7 +107,7 @@ def build_and_run_trainer_gla_only(
       - 生成评估统一走 HF-native model.generate()（create_gla_decoder）
       - 数据加载仍复用原 dataset.load_dataset 以及 Spider/GLUE 等模块
     """
-    print_trainable_parameter_names(model)
+    print_trainable_parameter_names(model, output_dir=output_dir, cfg_path=cfg_path)
     print("Loaded model")
 
     # 构建 train data module（真正用来训练的）

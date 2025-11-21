@@ -104,13 +104,41 @@ def load_mamba_tokenizer():
     return tokenizer
 
 
-def print_trainable_parameter_names(model):
+def print_trainable_parameter_names(model, output_dir=None, cfg_path=None):
     print("Trainable parameters:")
+    trainable_names = []
     for name, param in model.named_parameters():
         if param.requires_grad:
             print(name)
+            trainable_names.append(name)
+
     if hasattr(model, "print_trainable_parameters"):
         model.print_trainable_parameters()
+
+    # Calculate parameter counts
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    trainable_ratio = trainable_params / total_params if total_params > 0 else 0
+
+    # Save parameter counts to JSON file
+    if output_dir is not None:
+        import json
+        from pathlib import Path
+
+        param_info = {
+            "total_params": total_params,
+            "trainable_params": trainable_params,
+            "trainable_ratio": round(trainable_ratio, 6),
+            "config_name": Path(cfg_path).name if cfg_path else "unknown",
+            "trainable_parameter_names": trainable_names
+        }
+
+        param_file = Path(output_dir) / "parameter_counts.json"
+        with open(param_file, 'w', encoding='utf-8') as f:
+            json.dump(param_info, f, indent=2, ensure_ascii=False)
+
+        print(f"Parameter counts saved to: {param_file}")
+        print(f"Total params: {total_params:,}, Trainable: {trainable_params:,} ({trainable_ratio:.4f})")
 
 
 def get_mamba_peft_model(model, peft, return_peft_cfg=False, train_embedding=False, no_print=False):

@@ -34,9 +34,6 @@ ROUND_E10=( # 70 existing configs, grouped & non-duplicated
   "E1_QKVO_plus_MLP_r8_alpha16.yaml"
   "E1_QKVO_plus_G_plus_GK_plus_MLP_r8_alpha16.yaml"
 
-  # 1.3 纯 G / GK 分支对照（只加门控，不加 QKVO）
-  "E1_QKVO_plus_G_only_r8_alpha16.yaml"   # 只加 G 分支，在主 budget r=8 α=16
-  "E1_QKVO_plus_GK_only_r8_alpha16.yaml"  # 只加 GK 分支，在主 budget r=8 α=16
 
   ############################################################
   # 2. O-MLP family (LoRA, aligned backbone)
@@ -185,8 +182,154 @@ ROUND_E10=( # 70 existing configs, grouped & non-duplicated
   # "E1_QKVO_loradrop0.05_r8_alpha16.yaml" # OPTIONAL: LoRA dropout ablation
 )
 
-# 只跑 “方法轴”：DoRA 系列
-ROUND_DORA=(
+ROUND_E4=(
+  "E1_QKVO_r4_alpha8.yaml"
+  "E1_QKVO_r8_alpha8.yaml"
+  "E1_QKVO_r8_alpha16.yaml"
+
+  "E1_QKVO_plus_G_r8_alpha16.yaml"
+  "E1_QKVO_plus_GK_r8_alpha16.yaml"
+  "E1_QKVO_plus_G_plus_GK_r8_alpha16.yaml"
+
+  "E1_QKVO_plus_MLP_r8_alpha16.yaml"
+  "E1_QKVO_plus_G_plus_GK_plus_MLP_r8_alpha16.yaml"
+
+  "E2_OMLP_r8_alpha8.yaml"
+  "E2_OMLP_r8_alpha16.yaml"
+
+  "E2_OMLP_plus_G_r8_alpha16.yaml"
+  "E2_OMLP_plus_GK_r8_alpha16.yaml"
+  "E2_OMLP_plus_G_plus_GK_r8_alpha16.yaml"
+
+  "E1_QKVO_first6_r8_alpha16.yaml"
+  "E1_QKVO_last6_r8_alpha16.yaml"
+  "E2_OMLP_last6_r8_alpha16.yaml"
+  "E2_OMLP_middle6_r8_alpha16.yaml"
+
+  "E3_GATINGONLY_r8_alpha16.yaml"
+  "E6_QKONLY_r8_alpha16.yaml"
+  "E7_KVONLY_r8_alpha16.yaml"
+  "E8_QK_plus_GATING_r8_alpha16.yaml"
+  "E9_OplusHEAD_r8_alpha16.yaml"
+
+  "E2_OMLP_plus_G_only_r8_alpha16.yaml"
+  "E2_OMLP_plus_GK_only_r8_alpha16.yaml"
+
+  "round4_QKVO_r8_a16.yaml"
+  "round4_QKVO_plus_GK_r8_a16.yaml"
+
+  "E3_QKVO_main_Gates_aux_r8a16_r2a2.yaml"
+  "E3_QKVO_main_Gates_aux_r8a16_r4a4.yaml"
+  "E3_QKVO_main_Gates_aux_r8a16_r4a8.yaml"
+  "E3_QKVO_main_MLP_aux_r8a16_r4a8.yaml"
+  "E3_QKVO_main_GatesMLP_aux_r8a16_r4a8.yaml"
+  "E3_QKVO_plus_G_only_r4a4.yaml"
+  "E3_QKVO_plus_GK_only_r4a4.yaml"
+
+  "E1_QKVO_dropout0_r8_alpha16.yaml"
+  "E1_QKVO_wd0.01_r8_alpha16.yaml"
+)
+
+ROUND_E411=(
+  "E1_QKVO_r4_alpha8.yaml"
+  "E1_QKVO_r8_alpha8.yaml"
+
+  "E2_OMLP_r8_alpha8.yaml"
+
+  "E8_QK_plus_GATING_r8_alpha16.yaml"
+
+  "E2_OMLP_plus_G_only_r8_alpha16.yaml"
+  "E2_OMLP_plus_GK_only_r8_alpha16.yaml"
+
+  "round4_QKVO_r8_a16.yaml"
+  "round4_QKVO_plus_GK_r8_a16.yaml"
+
+  "round4_PISSA_QKVO_r8_a16.yaml"
+  "round4_PISSA_QKVO_plus_GK_r8_a16.yaml"
+
+  "round4_LORAGA_QKVO_r8_a16.yaml"
+  "round4_LORAGA_QKVO_plus_GK_r8_a16.yaml"
+
+  "E3_QKVO_main_Gates_aux_r8a16_r2a2.yaml"
+  "E3_QKVO_main_Gates_aux_r8a16_r4a4.yaml"
+  "E3_QKVO_main_Gates_aux_r8a16_r4a8.yaml"
+
+  "E3_QKVO_main_MLP_aux_r8a16_r4a8.yaml"
+  "E3_QKVO_main_GatesMLP_aux_r8a16_r4a8.yaml"
+
+  "E3_QKVO_plus_G_only_r4a4.yaml"
+  "E3_QKVO_plus_GK_only_r4a4.yaml"
+
+  "E1_QKVO_dropout0_r8_alpha16.yaml"
+  "E1_QKVO_wd0.01_r8_alpha16.yaml"
+)
+ROUND_E112=( #18
+  # 0. Baselines (anchor)
+  "E1_QKVO_r8_alpha16.yaml"
+
+  # Structural ablations @ r=8 α=16
+  "E1_QKVO_plus_G_r8_alpha16.yaml"
+  "E1_QKVO_plus_GK_r8_alpha16.yaml"
+  "E1_QKVO_plus_G_plus_GK_r8_alpha16.yaml"
+  "E1_QKVO_plus_G_plus_GK_plus_MLP_r8_alpha16.yaml"
+
+
+    #  O-MLP (α=16)
+  "E2_OMLP_r8_alpha16.yaml"
+  "E2_OMLP_plus_G_r8_alpha16.yaml"
+  "E2_OMLP_plus_GK_r8_alpha16.yaml"
+  "E2_OMLP_plus_G_plus_GK_r8_alpha16.yaml"
+
+  # Layer-wise localization (α=16)
+  "E1_QKVO_first6_r8_alpha16.yaml"
+  "E1_QKVO_last6_r8_alpha16.yaml"
+  "E2_OMLP_last6_r8_alpha16.yaml"
+  "E2_OMLP_middle6_r8_alpha16.yaml"
+
+  "E1_QKVO_plus_MLP_r8_alpha16.yaml"
+
+
+  # 8.1 Fine-grained target sets (r=8 α=16)
+  "E3_GATINGONLY_r8_alpha16.yaml"
+  "E6_QKONLY_r8_alpha16.yaml"
+  "E7_KVONLY_r8_alpha16.yaml"
+#  "E8_QK_plus_GATING_r8_alpha16.yaml"
+  "E9_OplusHEAD_r8_alpha16.yaml"
+
+  # 3. Module × Method (DoRA only) @ r=8 α=16
+#  "E1_QKVO_plus_G_DoRA_r8_alpha16.yaml"
+#  "E1_QKVO_plus_GK_DoRA_r8_alpha16.yaml"
+#  "E1_QKVO_plus_G_plus_GK_DoRA_r8_alpha16.yaml"
+
+  # 8.2 DoRA only (r=8 α=16)
+#  "E3_GATINGONLY_DoRA_r8_alpha16.yaml"
+#  "E6_QKONLY_DoRA_r8_alpha16.yaml"
+#  "E7_KVONLY_DoRA_r8_alpha16.yaml"
+#  "E8_QK_plus_GATING_DoRA_r8_alpha16.yaml"
+#  "E9_OplusHEAD_DoRA_r8_alpha16.yaml"
+)
+
+ROUND_E5=(   # 所有包含 RSLoRA 的实验
+  "E1_QKVO_RSLoRA_r8_alpha16.yaml"
+  "E1_QKVO_RSLoRA_r12_alpha24.yaml"
+
+  "E1_QKVO_plus_G_RSLoRA_r8_alpha16.yaml"
+  "E1_QKVO_plus_GK_RSLoRA_r8_alpha16.yaml"
+  "E1_QKVO_plus_G_plus_GK_RSLoRA_r8_alpha16.yaml"
+
+  "E3_GATINGONLY_RSLoRA_r8_alpha16.yaml"
+  "E6_QKONLY_RSLoRA_r8_alpha16.yaml"
+  "E7_KVONLY_RSLoRA_r8_alpha16.yaml"
+  "E8_QK_plus_GATING_RSLoRA_r8_alpha16.yaml"
+  "E9_OplusHEAD_RSLoRA_r8_alpha16.yaml"
+
+  "E3_QKVO_main_Gates_aux_RSLoRA_r8a16_r4a4.yaml"
+
+  "round4_RSLORA_QKVO_r8_a16.yaml"
+  "round4_RSLORA_QKVO_plus_GK_r8_a16.yaml"
+)
+
+ROUND_E6=(
   "E1_QKVO_DoRA_r8_alpha16.yaml"
   "E1_QKVO_DoRA_r12_alpha24.yaml"
   "E1_QKVO_plus_G_DoRA_r8_alpha16.yaml"
@@ -202,25 +345,7 @@ ROUND_DORA=(
   "round4_DoRA_QKVO_plus_GK_r8_a16.yaml"
 )
 
-# 只跑 “方法轴”：RSLoRA 系列
-ROUND_RSLoRA=(
-  "E1_QKVO_RSLoRA_r8_alpha16.yaml"
-  "E1_QKVO_RSLoRA_r12_alpha24.yaml"
-  "E1_QKVO_plus_G_RSLoRA_r8_alpha16.yaml"
-  "E1_QKVO_plus_GK_RSLoRA_r8_alpha16.yaml"
-  "E1_QKVO_plus_G_plus_GK_RSLoRA_r8_alpha16.yaml"
-  "E3_GATINGONLY_RSLoRA_r8_alpha16.yaml"
-  "E6_QKONLY_RSLoRA_r8_alpha16.yaml"
-  "E7_KVONLY_RSLoRA_r8_alpha16.yaml"
-  "E8_QK_plus_GATING_RSLoRA_r8_alpha16.yaml"
-  "E9_OplusHEAD_RSLoRA_r8_alpha16.yaml"
-  "E3_QKVO_main_Gates_aux_RSLoRA_r8a16_r4a4.yaml"
-  "round4_RSLORA_QKVO_r8_a16.yaml"
-  "round4_RSLORA_QKVO_plus_GK_r8_a16.yaml"
-)
-
-
-ROUND_E5=( #18
+ROUND_E11=( #18
   # 0. Baselines (anchor)
   "E1_QKVO_r8_alpha16.yaml"
 
