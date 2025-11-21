@@ -137,10 +137,6 @@ ROUND_E10=( # 70 existing configs, grouped & non-duplicated
   # 7. Other method families on QKVO backbone
   #    —— PiSSA / LoRA-GA，相当于 “方法轴” 的补完
   ############################################################
-  # LoRA baseline under round4 setting
-  "round4_QKVO_r8_a16.yaml"
-  "round4_QKVO_plus_GK_r8_a16.yaml"
-
   # PiSSA variants
   "round4_PISSA_QKVO_r8_a16.yaml"
   "round4_PISSA_QKVO_plus_GK_r8_a16.yaml"
@@ -215,9 +211,6 @@ ROUND_E4=(
   "E2_OMLP_plus_G_only_r8_alpha16.yaml"
   "E2_OMLP_plus_GK_only_r8_alpha16.yaml"
 
-  "round4_QKVO_r8_a16.yaml"
-  "round4_QKVO_plus_GK_r8_a16.yaml"
-
   "E3_QKVO_main_Gates_aux_r8a16_r2a2.yaml"
   "E3_QKVO_main_Gates_aux_r8a16_r4a4.yaml"
   "E3_QKVO_main_Gates_aux_r8a16_r4a8.yaml"
@@ -233,16 +226,12 @@ ROUND_E4=(
 ROUND_E411=(
   "E1_QKVO_r4_alpha8.yaml"
   "E1_QKVO_r8_alpha8.yaml"
-
   "E2_OMLP_r8_alpha8.yaml"
 
   "E8_QK_plus_GATING_r8_alpha16.yaml"
 
   "E2_OMLP_plus_G_only_r8_alpha16.yaml"
   "E2_OMLP_plus_GK_only_r8_alpha16.yaml"
-
-  "round4_QKVO_r8_a16.yaml"
-  "round4_QKVO_plus_GK_r8_a16.yaml"
 
   "round4_PISSA_QKVO_r8_a16.yaml"
   "round4_PISSA_QKVO_plus_GK_r8_a16.yaml"

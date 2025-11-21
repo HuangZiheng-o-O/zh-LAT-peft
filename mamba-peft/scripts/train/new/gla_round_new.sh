@@ -190,9 +190,6 @@ ROUND_E3=(
 
 : "${ROUND_E4[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E4=()
 ROUND_E4=(
-  # LoRA baseline (QKVO) and +G+GK
-  "round4_QKVO_r8_a16.yaml"
-  "round4_QKVO_plus_GK_r8_a16.yaml"
   # DoRA variants
   "round4_DoRA_QKVO_r8_a16.yaml"
   "round4_DoRA_QKVO_plus_GK_r8_a16.yaml"
