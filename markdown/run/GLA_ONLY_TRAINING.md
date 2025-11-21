@@ -282,7 +282,7 @@ export HP_SAVE_STEPS=1500
 export HP_LOGGING_STEPS=100
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="gla-spider-1-4090-E155-mail02-r2"
+export SWANLAB_PROJECT="gla-spider-1-4090-E155-mail02-r3"
 export SWANLAB_LOGDIR="/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/my_swanlog/local_eval_logs"
 export SWANLAB_EMAIL_YAML="/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/dangerous/email_notify.yaml"
 export SWANLAB_EMAIL_ON_START=1
@@ -304,8 +304,8 @@ export SWANLAB_EMAIL_ON_FINISH=1
   --suite E155 \
   --round all \
   --pairs "87:spider-tvt" \
-  --gpus "0 1 3 4" \
-  --gpu-plan "3,3,3,1"
+  --gpus "0 1 3 4 6" \
+  --gpu-plan "2,2,2,2,2"
 ```
 
 This is the GLA‑only, HF‑native `.generate()` path with strict error reporting and no Mamba decoder/resume contamination.
@@ -391,10 +391,10 @@ export SWANLAB_EMAIL_ON_START=1
 export SWANLAB_EMAIL_ON_FINISH=1
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="gla-samsum-e5-clean"
+export SWANLAB_PROJECT="gla-samsum-E15-clean-decoder"
 
 ./gla_batch_tmux_clean.sh \
-  --suite E5 \
+  --suite E15 \
   --round all \
   --pairs "87:samsum" \
   --gpus "7" \
@@ -408,6 +408,72 @@ python -m scripts.utils.email_notify --event STARTED --group smoketest --yaml "$
 ```
 
 ```bash
+conda activate mzsz
+cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
+
+########################################
+# ↓↓↓ 覆盖旧版本中已有的变量（只是数值不同） ↓↓↓
+########################################
+
+# ✔ 替换 EVAL_GEN 配置
+export EVAL_GEN=1
+export EVAL_GEN_MAX_LENGTH=128     
+export EVAL_GEN_MIN_LENGTH=8        
+export EVAL_GEN_NUM_BEAMS=5        
+
+# ✔ 解码/GLA（同名变量更新）
+export GLA_FORCE_LEFT_PAD=1
+export GLA_USE_MAX_NEW_TOKENS=1
+export GLA_VERBOSE=1
+export GLA_USE_FUSED_SWIGLU=0
+
+# ✔ 训练步骤（替换原来的）
+export HP_EVAL_STEPS=1000      # ← 从 1500 → 1000
+export HP_SAVE_STEPS=1000      # ← 从 1500 → 1000
+export HP_LOGGING_STEPS=50     # ← 从 100 → 50
+
+# ✔ LR 配置（保持一致）
+export LR_SCHEDULER_TYPE=cosine
+export LR_WARMUP_RATIO=0.1
+
+# ✔ DataLoader / CPU / CUDA
+export NUM_DATA_WORKERS=2               # ← 原 8 → 2
+export GRADIENT_CHECKPOINTING=true
+export LOGITS_TO_KEEP=1
+export TOKENIZERS_PARALLELISM=false
+export OMP_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
+# ✔ SWANLAB（保持原有结构但更新 project）
+export SWANLAB_ENABLE=1
+export SWANLAB_MODE=cloud
+export SWANLAB_PROJECT="gla-samsum-E15-clean-decoder-r1"
+export SWANLAB_EMAIL_ON_START=1
+export SWANLAB_EMAIL_ON_FINISH=1
+
+########################################
+# ↓↓↓ 下面这些是 SamSum 版本新增的变量 ↓↓↓
+########################################
+
+# SamSum 数据路径
+export SAMSUM_LOCAL_DIR=/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/data/samsum
+
+# LoRA 初始化策略（新增）
+#export HP_INIT=pissa_niter_4
+# 或：export HP_PISSA_FAST=1   # 可选
+
+# DataLoader 新增项
+#export DATALOADER_PREFETCH_FACTOR=2
+#export DATALOADER_PIN_MEMORY=1
+#export DATALOADER_PERSISTENT_WORKERS=0
+
+./gla_batch_tmux_clean.sh \
+  --suite E15 \
+  --round 1 \
+  --pairs "87:samsum" \
+  --gpus "0 1 2 3 4 5 6 7" \
+  --gpu-plan "1,1,1,1,1,1,1,1"
 
 ```
 
@@ -415,6 +481,7 @@ python -m scripts.utils.email_notify --event STARTED --group smoketest --yaml "$
 ```bash
 
 ```
+
 
 
 ```bash

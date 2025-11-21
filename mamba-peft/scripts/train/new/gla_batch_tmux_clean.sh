@@ -115,10 +115,13 @@ HDR
   printf 'export SWANLAB_EXPERIMENT_PREFIX=%q\n' "${SWANLAB_EXPERIMENT_PREFIX:-}"
   printf 'export SWANLAB_LOGDIR=%q\n' "${SWANLAB_LOGDIR:-/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/my_swanlog/local_eval_logs}"
   printf 'export SWANLAB_EMAIL_YAML=%q\n' "${SWANLAB_EMAIL_YAML:-}"
+  printf 'export SWANLAB_EMAIL_ON_START=%q\n' "${SWANLAB_EMAIL_ON_START:-}"
+  printf 'export SWANLAB_EMAIL_ON_FINISH=%q\n' "${SWANLAB_EMAIL_ON_FINISH:-}"
   # GLA-specific toggles
   printf 'export GLA_FORCE_LEFT_PAD=%q\n' "${GLA_FORCE_LEFT_PAD:-}"
   printf 'export GLA_USE_MAX_NEW_TOKENS=%q\n' "${GLA_USE_MAX_NEW_TOKENS:-}"
   printf 'export GLA_VERBOSE=%q\n' "${GLA_VERBOSE:-}"
+  printf 'export GLA_USE_FUSED_SWIGLU=%q\n' "${GLA_USE_FUSED_SWIGLU:-}"
   # HP_* hyperparameters (eval_steps, logging_steps, etc.)
   printf 'export HP_EVAL_STEPS=%q\n' "${HP_EVAL_STEPS:-}"
   printf 'export HP_SAVE_STEPS=%q\n' "${HP_SAVE_STEPS:-}"
@@ -145,6 +148,7 @@ HDR
   # Data roots and NLTK resources (ensure they propagate into tmux jobs)
   printf 'export SPIDER_LOCAL_DIR=%q\n' "${SPIDER_LOCAL_DIR:-}"
   printf 'export NLTK_DATA=%q\n' "${NLTK_DATA:-}"
+  printf 'export SAMSUM_LOCAL_DIR=%q\n' "${SAMSUM_LOCAL_DIR:-}"
 
   echo 'mkdir -p "$LOG_DIR"'
 
