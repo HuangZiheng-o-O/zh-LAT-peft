@@ -188,6 +188,12 @@ This page documents every env var respected by the clean GLA-only pipeline. It l
   - Default: Unset.
   - Used by: train_gla_only.py.
 
+- SWANLAB_LOGDIR
+  - Purpose: Directory to save local readable evaluation logs (even in cloud mode).
+  - Values: Absolute or relative path.
+  - Default: my_swanlog/local_eval_logs.
+  - Used by: Spider evaluation saves pred/gold comparisons in readable format.
+
 - SWANLAB_EMAIL_YAML
   - Purpose: Path to Gmail SMTP config for email notifications.
   - Values: Absolute path to YAML file (see dangerous/email_notify.example.yaml).

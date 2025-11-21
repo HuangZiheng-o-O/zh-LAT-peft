@@ -113,7 +113,7 @@ HDR
   printf 'export SWANLAB_MODE=%q\n' "${SWANLAB_MODE:-}"
   printf 'export SWANLAB_PROJECT=%q\n' "${SWANLAB_PROJECT:-}"
   printf 'export SWANLAB_EXPERIMENT_PREFIX=%q\n' "${SWANLAB_EXPERIMENT_PREFIX:-}"
-  printf 'export SWANLAB_LOGDIR=%q\n' "${SWANLAB_LOGDIR:-}"
+  printf 'export SWANLAB_LOGDIR=%q\n' "${SWANLAB_LOGDIR:-/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/my_swanlog/local_eval_logs}"
   printf 'export SWANLAB_EMAIL_YAML=%q\n' "${SWANLAB_EMAIL_YAML:-}"
   # GLA-specific toggles
   printf 'export GLA_FORCE_LEFT_PAD=%q\n' "${GLA_FORCE_LEFT_PAD:-}"

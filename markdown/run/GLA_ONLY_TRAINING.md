@@ -281,8 +281,13 @@ export HP_EVAL_STEPS=1500
 export HP_SAVE_STEPS=1500
 export HP_LOGGING_STEPS=100
 export SWANLAB_ENABLE=1
-export SWANLAB_MODE=cloud 
-export SWANLAB_PROJECT="gla-spider-1-4090-E5-mail02" 
+export SWANLAB_MODE=cloud
+export SWANLAB_PROJECT="gla-spider-1-4090-E5-mail02"
+export SWANLAB_LOGDIR="/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/my_swanlog/local_eval_logs"
+export SWANLAB_EMAIL_YAML="/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/dangerous/email_notify.yaml"
+export SWANLAB_EMAIL_ON_START=1
+export SWANLAB_EMAIL_ON_FINISH=1
+export SWANLAB_EMAIL_ON_INTERRUPT=1
 
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 export TOKENIZERS_PARALLELISM=false

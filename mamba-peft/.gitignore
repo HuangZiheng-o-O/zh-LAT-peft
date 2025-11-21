@@ -23,6 +23,9 @@ checkpoint-*
 /bak
 .idea/
 #
+# Local evaluation logs (generated files)
+/my_swanlog/
+#
 # Sensitive email notifier secrets (keep example only)
 /dangerous/*.yaml
 !/dangerous/email_notify.example.yaml

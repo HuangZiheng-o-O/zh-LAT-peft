@@ -102,6 +102,7 @@ Notes:
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud                 # or 'local'
 export SWANLAB_PROJECT="gla-spider"       # your project
+export SWANLAB_LOGDIR="my_swanlog/local_eval_logs"  # local readable logs
 export SWANLAB_EXPERIMENT_PREFIX="E5"     # optional prefix
 ```
 

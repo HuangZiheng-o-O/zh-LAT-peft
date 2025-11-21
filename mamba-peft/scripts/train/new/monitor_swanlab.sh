@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 监控使用 GPU 的 train_gla_only.py 进程是否疑似被swanlab挂住
-# 不看运行时长，只看一个时间窗口内 GPU 是否一直 0 利用率 + IO 是否几乎不动
+# cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new && sudo ./monitor_swanlab.sh
 
 set -u
 

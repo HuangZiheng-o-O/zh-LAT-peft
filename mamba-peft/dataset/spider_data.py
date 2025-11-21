@@ -283,6 +283,9 @@ class SpiderDataset(NlgDatasetBase):
 
             metrics = metric.compute(predictions, references)
 
+            # Save readable local log for debugging (only in cloud mode)
+            self._save_local_eval_log(eval_preds, predictions, references, metrics)
+
             # important metric first
             return {
                 "all/exec": None,
@@ -290,6 +293,82 @@ class SpiderDataset(NlgDatasetBase):
             }
         else:
             return {}
+
+    def _save_local_eval_log(self, eval_preds, predictions, references, metrics):
+        """Save readable local log with pred/gold comparisons for debugging."""
+        import os
+        import datetime
+
+        # Only save log if SwanLab is in cloud mode
+        if os.environ.get("SWANLAB_MODE", "").lower() != "cloud":
+            return
+
+        # Create output directory for local logs (use my_swanlog/ to avoid cleanup)
+        base_log_dir = "my_swanlog"
+        output_dir = os.path.join(base_log_dir, "local_eval_logs")
+        os.makedirs(output_dir, exist_ok=True)
+
+        # Get experiment group info from environment
+        suite = os.environ.get("SUITE", "unknown")
+        round_num = os.environ.get("ROUND", "unknown")
+        seed = os.environ.get("HP_SEED", "unknown")
+        data = os.environ.get("DATA", "unknown")
+
+        # Create group identifier
+        group_tag = f"{suite}_r{round_num}_s{seed}_{data.replace('-', '_')}"
+
+        # Generate filename with group info, timestamp and step info
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        step = getattr(eval_preds, 'step', 'unknown')
+        filename = f"{output_dir}/eval_log_{group_tag}_{timestamp}_step{step}.txt"
+
+        with open(filename, 'w', encoding='utf-8') as f:
+            # Write summary metrics
+            f.write("=== EVALUATION SUMMARY ===\n")
+            for key, value in metrics.items():
+                if isinstance(value, (int, float)):
+                    f.write(f"{key}: {value:.4f}\n")
+                else:
+                    f.write(f"{key}: {value}\n")
+            f.write("\n")
+
+            # Write detailed pred/gold comparisons
+            f.write("=== PRED/GOLD COMPARISONS ===\n")
+            eval_err_num = 0
+
+            for i, ((pred_sql, db_id), (gold_sql, gold_db_id)) in enumerate(zip(predictions, references)):
+                # Check if prediction is incorrect (exact match == 0)
+                try:
+                    from metrics.spider.evaluation import get_sql, Schema, get_schema
+                    db_path = os.path.join(self.db_dir, db_id, f"{db_id}.sqlite")
+                    schema = Schema(get_schema(db_path))
+                    pred_parsed = get_sql(schema, pred_sql)
+                    gold_parsed = get_sql(schema, gold_sql)
+
+                    from metrics.spider.lib.evaluation import Evaluator
+                    evaluator = Evaluator()
+                    exact_score = evaluator.eval_exact_match(pred_parsed, gold_parsed)
+
+                    if exact_score == 0:  # Incorrect prediction
+                        eval_err_num += 1
+                        # Determine hardness level
+                        hardness = evaluator.eval_hardness(gold_parsed)
+                        hardness = hardness if hardness in ['easy', 'medium', 'hard', 'extra'] else 'unknown'
+
+                        f.write(f"{hardness} pred: {pred_sql}\n")
+                        f.write(f"{hardness} gold: {gold_sql}\n")
+                        f.write("\n")
+
+                except Exception as e:
+                    # If parsing fails, still log the raw strings
+                    f.write(f"parse_error pred: {pred_sql}\n")
+                    f.write(f"parse_error gold: {gold_sql}\n")
+                    f.write(f"parse_error: {str(e)}\n")
+                    f.write("\n")
+
+            f.write(f"eval_err_num:{eval_err_num}\n")
+
+        print(f"[SpiderEval] Saved detailed eval log to: {filename} (group: {group_tag})")
 
 
 class SpiderDataModule:
