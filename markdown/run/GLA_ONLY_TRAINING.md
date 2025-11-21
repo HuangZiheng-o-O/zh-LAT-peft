@@ -282,7 +282,7 @@ export HP_SAVE_STEPS=1500
 export HP_LOGGING_STEPS=100
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="gla-spider-1-4090-E5-mail02"
+export SWANLAB_PROJECT="gla-spider-1-4090-E5-mail02-r2"
 export SWANLAB_LOGDIR="/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/my_swanlog/local_eval_logs"
 export SWANLAB_EMAIL_YAML="/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/dangerous/email_notify.yaml"
 export SWANLAB_EMAIL_ON_START=1
@@ -301,8 +301,8 @@ export SWANLAB_EMAIL_ON_START=1
 export SWANLAB_EMAIL_ON_FINISH=1
 
 ./gla_batch_tmux_clean.sh \
-  --suite E5 \
-  --round 1 \
+  --suite E1 \
+  --round 2 \
   --pairs "87:spider-tvt" \
   --gpus "0 1 3 4 6" \
   --gpu-plan "3,3,3,3,3"
