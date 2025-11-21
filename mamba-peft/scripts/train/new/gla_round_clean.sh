@@ -51,9 +51,9 @@ ROUND_E10=( # 70 existing configs, grouped & non-duplicated
   "E2_OMLP_plus_GK_r8_alpha16.yaml"
   "E2_OMLP_plus_G_plus_GK_r8_alpha16.yaml"
 
-  # 2.3 （潜在缺失，对 O-MLP 做纯 G / 纯 GK，只占位）
-  # "E2_OMLP_plus_G_only_r8_alpha16.yaml"   # MISSING: O-MLP 只接 G adapter
-  # "E2_OMLP_plus_GK_only_r8_alpha16.yaml"  # MISSING: O-MLP 只接 GK adapter
+  # 2.3 纯 G / GK 分支对照（只加门控到 O-MLP，不加 O）
+  "E2_OMLP_plus_G_only_r8_alpha16.yaml"   # O-MLP 只接 G adapter
+  "E2_OMLP_plus_GK_only_r8_alpha16.yaml"  # O-MLP 只接 GK adapter
 
   ############################################################
   # 3. Layer-wise localization (LoRA)
