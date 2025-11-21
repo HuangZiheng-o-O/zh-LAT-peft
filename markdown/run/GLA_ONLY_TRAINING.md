@@ -301,7 +301,7 @@ export SWANLAB_EMAIL_ON_START=1
 export SWANLAB_EMAIL_ON_FINISH=1
 
 ./gla_batch_tmux_clean.sh \
-  --suite E1 \
+  --suite E11 \
   --round 2 \
   --pairs "87:spider-tvt" \
   --gpus "0 1 3 4 6" \
