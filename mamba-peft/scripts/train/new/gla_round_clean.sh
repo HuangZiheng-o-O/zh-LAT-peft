@@ -326,7 +326,7 @@ ROUND_E11=( #18
 #[GPU 0] /tmp/gla_data_YQBvBa/E9_OplusHEAD_r8_alpha16.yaml  (HP_SEED=87; data=spider-tvt; ignoring seed in name/YAML)
 
 
-ROUND_E15=(# 共 25 个配置
+ROUND_E15=(# 共 24 个配置 3*8 = 24
 
   # 0. 主实验：全局多模块 LoRA（参考上限）
   "E1_QKVO_plus_G_plus_GK_plus_MLP_r8_alpha16.yaml"   # QKVO + G + GK + MLP 全打点
@@ -351,7 +351,7 @@ ROUND_E15=(# 共 25 个配置
   "E2_OMLP_plus_G_plus_GK_r8_alpha16.yaml"     # O-MLP + g_proj + gk_proj[0/1]
 
   # 3. Layer-wise localization：固定结构，改变深度分布
-  "E1_QKVO_first6_r8_alpha16.yaml"   # 只在前 6 层打 LoRA (QKVO)
+#  "E1_QKVO_first6_r8_alpha16.yaml"   # 只在前 6 层打 LoRA (QKVO)
   "E1_QKVO_last6_r8_alpha16.yaml"    # 只在后 6 层打 LoRA (QKVO)
   "E2_OMLP_last6_r8_alpha16.yaml"    # 只在后 6 层打 LoRA (O-MLP)
   "E2_OMLP_middle6_r8_alpha16.yaml"  # 只在中间 6 层打 LoRA (O-MLP)
@@ -376,6 +376,17 @@ ROUND_E155=(
   "E6_QKONLY_r8_alpha16.yaml"
   "E7_KVONLY_r8_alpha16.yaml"
   "E9_OplusHEAD_r8_alpha16.yaml"
+  "E4_MLPONLY_r8_alpha16.yaml"
+  "E10_HEADONLY_r8_alpha16.yaml"
+  "E11_OONLY_r8_alpha16.yaml"
+  "E3_GPROJONLY_r8_alpha16.yaml"
+  "E3_GKONLY_r8_alpha16.yaml"
+  "E4_MLPGATEONLY_r8_alpha16.yaml"
+  "E4_MLPUPDOWN_r8_alpha16.yaml"
+)
+ 
+# Diff-only group requested by user
+ROUND_DIFF=(
   "E4_MLPONLY_r8_alpha16.yaml"
   "E10_HEADONLY_r8_alpha16.yaml"
   "E11_OONLY_r8_alpha16.yaml"
