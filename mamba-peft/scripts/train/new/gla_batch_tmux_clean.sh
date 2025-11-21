@@ -26,7 +26,8 @@ SUITE="E2"
 ROUND="all"
 PAIRS=""           # e.g., "127:AAA,87:BBB" or "127:AAA 87:BBB"
 SESSION_NAME=""
-LOG_DIR="${SCRIPT_DIR}/logs"
+#LOG_DIR="${SCRIPT_DIR}/logs"
+LOG_DIR="/home/user/mzs_h/log"
 
 print_help() {
   cat <<'EOF'

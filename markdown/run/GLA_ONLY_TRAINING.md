@@ -448,7 +448,7 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 # ✔ SWANLAB（保持原有结构但更新 project）
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="gla-samsum-E15-clean-decoder-r1"
+export SWANLAB_PROJECT="gla-samsum-E15-clean-decoder-r1-2-4090"
 export SWANLAB_EMAIL_ON_START=1
 export SWANLAB_EMAIL_ON_FINISH=1
 
@@ -472,11 +472,22 @@ export SAMSUM_LOCAL_DIR=/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/data/samsum
   --suite E15 \
   --round 1 \
   --pairs "87:samsum" \
+  --gpus "3 4 5 6" \
+  --gpu-plan "2,2,2,2"
+
+
+```
+  --suite E15 \
+  --round 3 \
+  --pairs "87:samsum" \
   --gpus "0 1 2 3 4 5 6 7" \
   --gpu-plan "1,1,1,1,1,1,1,1"
 
-```
-
+  --suite E15 \
+  --round 1 \
+  --pairs "87:samsum" \
+  --gpus "3 4 5 6" \
+  --gpu-plan "2,2,2,2"
 
 ```bash
 
