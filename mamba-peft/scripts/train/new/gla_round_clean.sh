@@ -7,7 +7,7 @@ LAUNCHER_PY="train_gla_only.py"
 #                               USER CONFIG HERE                              #
 ###############################################################################
 : "${ROUND_E_MASTER[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E_MASTER=()
-ROUND_E_MASTER=( # 70 existing configs, grouped & non-duplicated
+ROUND_E10=( # 70 existing configs, grouped & non-duplicated
 
   ############################################################
   # 0. Anchor baselines & rank/alpha sweep (LoRA, QKVO backbone)
@@ -16,7 +16,7 @@ ROUND_E_MASTER=( # 70 existing configs, grouped & non-duplicated
   "E1_QKVO_r4_alpha8.yaml"
   "E1_QKVO_r8_alpha8.yaml"
   "E1_QKVO_r8_alpha16.yaml"   # 主 anchor：r=8, α=16
-  "E1_QKVO_r16_alpha32.yaml"  # 高 rank 对照，给 DoRA / RSLoRA 的 “等效 rank” 参考
+#  "E1_QKVO_r16_alpha32.yaml"  # 高 rank 对照，给 DoRA / RSLoRA 的 “等效 rank” 参考
 
   ############################################################
   # 1. Structural ablations on QKVO (LoRA)

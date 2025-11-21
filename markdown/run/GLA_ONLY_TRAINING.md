@@ -227,6 +227,21 @@ Then in `train_gla_only.py`, set `report_to = "wandb"` when `USE_WANDB=1` (if yo
 
 ---
 
+### 9) SwanLab Integration (Recommended Alternative to W&B)
+
+For cloud-based experiment tracking with automatic email notifications:
+
+```bash
+export SWANLAB_ENABLE=1
+export SWANLAB_MODE=cloud
+export SWANLAB_PROJECT="your_project"
+export SWANLAB_EMAIL_YAML="/path/to/email_config.yaml"
+```
+
+**Note**: Common tokenizer padding warnings are automatically filtered out to prevent excessive logging and connection issues.
+
+---
+
 ### 9) FAQ / Debugging
 
 - “Why is my output repeating (e.g. `199999...`)?”
@@ -267,7 +282,7 @@ export HP_SAVE_STEPS=1500
 export HP_LOGGING_STEPS=100
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud 
-export SWANLAB_PROJECT="gla-spider-1-4090-E5-cleantry15" 
+export SWANLAB_PROJECT="gla-spider-1-4090-E5-mail02" 
 
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 export TOKENIZERS_PARALLELISM=false
@@ -282,10 +297,10 @@ export SWANLAB_EMAIL_ON_FINISH=1
 
 ./gla_batch_tmux_clean.sh \
   --suite E5 \
-  --round all \
+  --round 1 \
   --pairs "87:spider-tvt" \
-  --gpus "0 1 2 3 4 5 6" \
-  --gpu-plan "2,2,2,2,2,2,2"
+  --gpus "0 1 3 4 6" \
+  --gpu-plan "3,3,3,3,3"
 ```
 
 This is the GLA‑only, HF‑native `.generate()` path with strict error reporting and no Mamba decoder/resume contamination.

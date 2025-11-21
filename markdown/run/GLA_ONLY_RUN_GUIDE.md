@@ -105,7 +105,9 @@ export SWANLAB_PROJECT="gla-spider"       # your project
 export SWANLAB_EXPERIMENT_PREFIX="E5"     # optional prefix
 ```
 
-SwanLab is wired as a Trainer callback only when `SWANLAB_ENABLE` is truthy. HF’s `report_to` remains `"none"` by default, so WandB will not be used even if its env is set.
+SwanLab is wired as a Trainer callback only when `SWANLAB_ENABLE` is truthy. HF's `report_to` remains `"none"` by default, so WandB will not be used even if its env is set.
+
+**Note**: Tokenizer padding warnings are automatically filtered out to prevent excessive logging and connection issues.
 
 Email notifications (optional, requires Gmail setup):
 

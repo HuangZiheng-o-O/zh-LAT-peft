@@ -184,6 +184,11 @@ def build_and_run_trainer_gla_only(
     _sl_enable = str(os.environ.get("SWANLAB_ENABLE", "")).lower() in ("1", "true", "yes", "on", "cloud", "local")
     if _sl_enable:
         try:
+            # Filter out tokenizer padding warnings before SwanLab initialization
+            import warnings
+            warnings.filterwarnings("ignore", message=".*For correct generation results, please set.*padding_side.*left.*", category=UserWarning)
+            warnings.filterwarnings("ignore", message=".*decoder-only architecture is being used, but right-padding was detected.*", category=UserWarning)
+
             from swanlab.integration.transformers import SwanLabCallback
             sl_project = os.environ.get("SWANLAB_PROJECT", "gla-peft")
             exp_prefix = os.environ.get("SWANLAB_EXPERIMENT_PREFIX", "")
