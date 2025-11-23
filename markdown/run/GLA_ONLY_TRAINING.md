@@ -247,7 +247,7 @@ export SWANLAB_EMAIL_YAML="/path/to/email_config.yaml"
 - “Why is my output repeating (e.g. `199999...`)?”
   - Ensure you are on the GLA‑only path (no Mamba decoder). Use this guide’s launchers.
   - Use `GLA_USE_MAX_NEW_TOKENS=1` and `GLA_FORCE_LEFT_PAD=1`.
-  - Try `EVAL_GEN_NUM_BEAMS=4` to rule out degenerate greedy outputs on your prompt.
+
 - “How do I sanity‑check the model outside training?”
   - Use `mamba-peft/debug/spider_debug.py` (already patched to HF `.generate()` and left padding).
 
@@ -418,8 +418,7 @@ cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
 # ✔ 替换 EVAL_GEN 配置
 export EVAL_GEN=1
 export EVAL_GEN_MAX_LENGTH=128     
-export EVAL_GEN_MIN_LENGTH=8        
-export EVAL_GEN_NUM_BEAMS=5        
+export EVAL_GEN_MIN_LENGTH=8              
 
 # ✔ 解码/GLA（同名变量更新）
 export GLA_FORCE_LEFT_PAD=1
@@ -448,7 +447,7 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 # ✔ SWANLAB（保持原有结构但更新 project）
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="gla-samsum-E15-clean-decoder-r1-2-4090"
+export SWANLAB_PROJECT="gla-samsum-E15-clean-decoder-r3-3090-t4"
 export SWANLAB_EMAIL_ON_START=1
 export SWANLAB_EMAIL_ON_FINISH=1
 
@@ -470,11 +469,10 @@ export SAMSUM_LOCAL_DIR=/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/data/samsum
 
 ./gla_batch_tmux_clean.sh \
   --suite E15 \
-  --round 1 \
+  --round 2 \
   --pairs "87:samsum" \
   --gpus "3 4 5 6" \
   --gpu-plan "2,2,2,2"
-
 
 ```
   --suite E15 \
@@ -490,7 +488,30 @@ export SAMSUM_LOCAL_DIR=/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/data/samsum
   --gpu-plan "2,2,2,2"
 
 ```bash
+### All caches → /mnt/data4/user_cache ###
 
+# Generic cache
+export XDG_CACHE_HOME=/mnt/data4/user_cache
+
+# Triton kernel cache
+export TRITON_CACHE_DIR=/mnt/data4/user_cache/triton
+
+# Torch Inductor
+export TORCHINDUCTOR_CACHE_DIR=/mnt/data4/user_cache/torch
+
+# Torch CUDA extensions
+export TORCH_EXTENSIONS_DIR=/mnt/data4/user_cache/torch_extensions
+
+# HuggingFace caches
+export HF_HOME=/mnt/data4/user_cache/huggingface
+export TRANSFORMERS_CACHE=/mnt/data4/user_cache/huggingface/transformers
+export HUGGINGFACE_HUB_CACHE=/mnt/data4/user_cache/huggingface/hub
+
+# pip cache
+export PIP_CACHE_DIR=/mnt/data4/user_cache/pip
+
+# wandb
+export WANDB_DIR=/mnt/data4/user_cache/wandb
 ```
 
 

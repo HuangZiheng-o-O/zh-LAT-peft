@@ -204,7 +204,7 @@ def build_and_run_trainer(
     )
 
     try:
-        trainer.train(resume_from_checkpoint=resume_from_checkpoint)
+    trainer.train(resume_from_checkpoint=resume_from_checkpoint)
         try:
             from scripts.utils.email_notify import send_event_email  # type: ignore
             _fin_env = str(os.environ.get("SWANLAB_EMAIL_ON_FINISH", "1")).lower()

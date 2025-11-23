@@ -435,22 +435,115 @@ class DartDataset(NlgDatasetBase):
             # Defensive: skip metric computation if no samples
             if not predictions or not references:
                 return {}
-            references = [r.split(self.sep_token) for r in references]  # split to get all refs
+            # Basic normalization: trim whitespace; split labels into multi-refs by sep_token
+            predictions = [p.strip() if isinstance(p, str) else "" for p in predictions]
+            references = [
+                [r.strip() for r in (rs.split(self.sep_token) if isinstance(rs, str) else []) if r.strip()]
+                for rs in references
+            ]
 
-            meteor = evaluate.load("meteor")
+            # Metrics commonly reported for GEM/DART: BLEU, METEOR, chrF
             bleu = evaluate.load("bleu")
+            meteor = evaluate.load("meteor")
+            chrf = evaluate.load("chrf")
 
-            meteor_score = meteor.compute(predictions=predictions, references=references)["meteor"]
             bleu_score = bleu.compute(predictions=predictions, references=references)["bleu"]
+            meteor_score = meteor.compute(predictions=predictions, references=references)["meteor"]
+            chrf_score = chrf.compute(predictions=predictions, references=references)["score"]
 
             results = {
-                "meteor": meteor_score,
                 "bleu": bleu_score,
+                "meteor": meteor_score,
+                "chrf": chrf_score,
             }
+
+            # Save concise local eval logs for debugging (cloud runs only), mirroring Spider
+            self._save_local_eval_log(eval_preds, predictions, references, results)
         else:
             results = {}
 
         return results
+
+    def _save_local_eval_log(self, eval_preds, predictions, references, metrics):
+        """Save readable local log with pred/ref comparisons for debugging (cloud mode only).
+        We log only 'low-overlap' samples to keep files small.
+        """
+        import os
+        import datetime
+        from difflib import SequenceMatcher
+
+        # Only save log if SwanLab is in cloud mode
+        if os.environ.get("SWANLAB_MODE", "").lower() != "cloud":
+            return
+
+        # Create output directory for local logs (use my_swanlog/ to avoid cleanup)
+        base_log_dir = "my_swanlog"
+        output_dir = os.path.join(base_log_dir, "local_eval_logs")
+        os.makedirs(output_dir, exist_ok=True)
+
+        # Get experiment group info from environment
+        suite = os.environ.get("SUITE", "unknown")
+        round_num = os.environ.get("ROUND", "unknown")
+        seed = os.environ.get("HP_SEED", "unknown")
+        data = os.environ.get("DATA", "unknown")
+
+        # Create group identifier
+        group_tag = f"{suite}_r{round_num}_s{seed}_{str(data).replace('-', '_')}"
+
+        # Generate filename with group info, timestamp and step info
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        step = getattr(eval_preds, 'step', 'unknown')
+        filename = f"{output_dir}/eval_log_dart_{group_tag}_{timestamp}_step{step}.txt"
+
+        # Heuristic: mark samples as 'low-overlap' if best Jaccard over refs is below threshold
+        def jaccard(a: str, b: str) -> float:
+            sa = set(a.split())
+            sb = set(b.split())
+            if not sa and not sb:
+                return 1.0
+            if not sa or not sb:
+                return 0.0
+            inter = len(sa & sb)
+            union = len(sa | sb)
+            return inter / union if union > 0 else 0.0
+
+        low_overlap_threshold = 0.20  # conservative
+        max_records = 200             # cap the number of logged examples
+        records = []
+
+        for i, (pred, refs) in enumerate(zip(predictions, references)):
+            try:
+                best_j = max((jaccard(pred, r) for r in refs), default=0.0)
+                if best_j < low_overlap_threshold:
+                    # Also compute a quick similarity ratio as auxiliary info
+                    best_ratio = max((SequenceMatcher(None, pred, r).ratio() for r in refs), default=0.0)
+                    records.append((i, best_j, best_ratio, pred, refs))
+            except Exception:
+                continue
+            if len(records) >= max_records:
+                break
+
+        with open(filename, 'w', encoding='utf-8') as f:
+            # Write summary metrics
+            f.write("=== EVALUATION SUMMARY (DART) ===\n")
+            for key, value in metrics.items():
+                if isinstance(value, (int, float)):
+                    f.write(f"{key}: {value:.4f}\n")
+                else:
+                    f.write(f"{key}: {value}\n")
+            f.write("\n")
+
+            # Write selected 'low-overlap' examples
+            f.write(f"=== LOW-OVERLAP EXAMPLES (≤{low_overlap_threshold:.2f} Jaccard) ===\n")
+            for i, best_j, best_ratio, pred, refs in records:
+                f.write(f"[{i}] jaccard={best_j:.3f} ratio={best_ratio:.3f}\n")
+                f.write(f"pred: {pred}\n")
+                for ridx, r in enumerate(refs[:5]):  # limit references shown per example
+                    f.write(f"ref{ridx+1}: {r}\n")
+                f.write("\n")
+            f.write(f"logged_examples: {len(records)}\n")
+
+        print(f"[DartEval] Saved detailed eval log to: {filename} (group: {group_tag})")
 
 
 class DartDataModule:
