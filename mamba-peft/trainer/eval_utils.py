@@ -21,20 +21,23 @@ class EvalPredictionWithText:
         self.tokenizer = tokenizer
         self.remove_eos = remove_eos
         if input_ids is not None:
+            cleaned_inputs = self._prepare_for_decode(input_ids, drop_negative=False)
             self.inputs = tokenizer.batch_decode(
-                self._remove_pad_token_id(input_ids) if remove_eos else input_ids,
+                self._remove_pad_token_id(cleaned_inputs) if remove_eos else cleaned_inputs,
                 skip_special_tokens=False,
                 clean_up_tokenization_spaces=False,
             )
         if pred_ids is not None:
+            cleaned_preds = self._prepare_for_decode(pred_ids, drop_negative=False)
             self.preds = tokenizer.batch_decode(
-                self._remove_eos_token_id(pred_ids) if remove_eos else pred_ids,
+                self._remove_eos_token_id(cleaned_preds) if remove_eos else cleaned_preds,
                 skip_special_tokens=True,
                 clean_up_tokenization_spaces=False,
             )
         if label_ids is not None:
+            cleaned_labels = self._prepare_for_decode(label_ids, drop_negative=True)
             self.labels = tokenizer.batch_decode(
-                self._remove_eos_token_id(label_ids) if remove_eos else label_ids,
+                self._remove_eos_token_id(cleaned_labels) if remove_eos else cleaned_labels,
                 skip_special_tokens=True,
                 clean_up_tokenization_spaces=False,
             )
@@ -50,6 +53,21 @@ class EvalPredictionWithText:
     def _remove_eos_token_id(self, ids):
         eos_id = getattr(self.tokenizer, "eos_token_id", None)
         return [(id if id[-1] != eos_id else id[:-1]) for id in ids]
+
+    @staticmethod
+    def _prepare_for_decode(ids, drop_negative: bool):
+        cleaned = []
+        for seq in ids:
+            if hasattr(seq, "tolist"):
+                seq = seq.tolist()
+            cleaned_seq = []
+            for token in seq:
+                val = int(token)
+                if drop_negative and val < 0:
+                    continue
+                cleaned_seq.append(val)
+            cleaned.append(cleaned_seq)
+        return cleaned
 
     @staticmethod
     def from_file(path: str) -> "EvalPredictionWithText":
