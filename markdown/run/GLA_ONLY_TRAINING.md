@@ -629,17 +629,17 @@ export TRANSFORMERS_VERBOSITY=error    # keeps HF logger quiet
 # SwanLab (keep metrics but no emails)
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="gla-dart-E156-clean"
+export SWANLAB_PROJECT="gla-dart-E15-1-4090-r3"
 export SWANLAB_EMAIL_YAML="/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/dangerous/email_notify.yaml"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 ./gla_batch_tmux_clean.sh \
-  --suite E156 \
+  --suite E15 \
   --round 1 \
   --pairs "87:dart" \
-  --gpus "0 1 2 3 4" \
+  --gpus "1 2 5 6 7" \
   --gpu-plan "2,2,2,2,2"
   
 ```

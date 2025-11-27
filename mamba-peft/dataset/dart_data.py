@@ -6,12 +6,25 @@ from huggingface_hub import snapshot_download
 from pathlib import Path
 from huggingface_hub import hf_hub_download
 import json
+import nltk
 
 from dataset.collator import DataCollator
 from .base import NlgDatasetBase
 import evaluate
 import numpy as np
 import pandas as pd
+
+
+def _ensure_local_nltk_data():
+    data_root = os.environ.get("NLTK_DATA")
+    if not data_root:
+        return
+    for segment in data_root.split(os.pathsep):
+        if segment and segment not in nltk.data.path:
+            nltk.data.path.append(segment)
+
+
+_ensure_local_nltk_data()
 
 
 class DartDataset(NlgDatasetBase):

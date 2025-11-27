@@ -347,6 +347,7 @@ def run_train(
     gradient_accumulation_steps=1,
     num_data_workers=8,
     batch_size=4,
+    eval_batch_size=1,
     eval_gen=None,
     backend="cuda",  # 保留参数，仅为兼容旧 cfg，不再使用
     debug=False,
@@ -493,6 +494,7 @@ def run_train(
             gradient_accumulation_steps=gradient_accumulation_steps,
             num_data_workers=num_data_workers,
             batch_size=batch_size,
+        eval_batch_size=eval_batch_size,
             eval_epochs=eval_epochs,
             skip_eval=skip_eval,
             no_save=no_save,
