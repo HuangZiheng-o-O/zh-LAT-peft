@@ -85,6 +85,7 @@ def build_and_run_trainer_gla_only(
     gradient_accumulation_steps: int,
     num_data_workers: int,
     batch_size: int,
+    eval_batch_size: int,
     eval_epochs: int,
     skip_eval: bool,
     no_save: bool,
