@@ -3,7 +3,5 @@ learning_rate: 0.0005
 model: /home/user/mzs_h/model/second-gla-1.3B-100B/gla-1.3B-100B
 peft: cfg/my_lora_exp/peft/lora_mixed_qkvo_r8a16_gates_r4a4_rslora.json
 prec: bf16
-num_epochs: 10
-no_save: false
 
 
