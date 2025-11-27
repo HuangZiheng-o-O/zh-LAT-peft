@@ -110,17 +110,17 @@ def build_and_run_trainer_gla_only(
     print_trainable_parameter_names(model, output_dir=output_dir, cfg_path=cfg_path)
     print("Loaded model")
 
-    # # 在构建任何数据模块之前，优先依据环境变量强制左填充到传入的 tokenizer，避免生成期间出现右填充告警
-    # try:
-    #     _force_left = str(os.environ.get("GLA_FORCE_LEFT_PAD", "1")).lower() in ("1", "true", "yes", "on")
-    #     if _force_left and hasattr(tokenizer, "padding_side"):
-    #         tokenizer.padding_side = "left"
-    #         if getattr(tokenizer, "pad_token_id", None) is None and getattr(tokenizer, "eos_token", None) is not None:
-    #             tokenizer.pad_token = tokenizer.eos_token
-    #         if str(os.environ.get("GLA_VERBOSE", "0")).lower() in ("1", "true", "yes", "on"):
-    #             print("[GLA] Using left padding for decoder-only generation (GLA_FORCE_LEFT_PAD=1).")
-    # except Exception as _e:
-    #     print(f"[GLA][warn] Failed to enforce left padding policy early: {_e}")
+    # 在构建任何数据模块之前，依据环境变量强制左填充到传入的 tokenizer，避免生成期间出现右填充告警
+    try:
+        _force_left = str(os.environ.get("GLA_FORCE_LEFT_PAD", "1")).lower() in ("1", "true", "yes", "on")
+        if _force_left and hasattr(tokenizer, "padding_side"):
+            tokenizer.padding_side = "left"
+            if getattr(tokenizer, "pad_token_id", None) is None and getattr(tokenizer, "eos_token", None) is not None:
+                tokenizer.pad_token = tokenizer.eos_token
+            if str(os.environ.get("GLA_VERBOSE", "0")).lower() in ("1", "true", "yes", "on"):
+                print("[GLA] Using left padding for decoder-only generation (GLA_FORCE_LEFT_PAD=1).")
+    except Exception as _e:
+        print(f"[GLA][warn] Failed to enforce left padding policy early: {_e}")
 
     # 构建 train data module（真正用来训练的）
     train_data_module = load_dataset(data, tokenizer, "train", return_module=True)
@@ -241,6 +241,8 @@ def build_and_run_trainer_gla_only(
         except Exception as e:
             print(f"[GLA][swanlab][warn] Failed to initialize SwanLabCallback: {e}")
 
+    _eval_batch_size = int(cfg.get("eval_batch_size", 1) or 1)
+
     trainer = GenericLMTrainer(
         model=model,
         train_dataset=train_data_module.dataset,
@@ -249,7 +251,7 @@ def build_and_run_trainer_gla_only(
             learning_rate=float(learning_rate),
             max_steps=total_steps,
             per_device_train_batch_size=batch_size,
-            per_device_eval_batch_size=1,
+            per_device_eval_batch_size=_eval_batch_size,
             gradient_accumulation_steps=gradient_accumulation_steps,
             gradient_checkpointing=gradient_checkpointing,
             gradient_checkpointing_kwargs=_gc_kwargs,
@@ -637,10 +639,18 @@ def main():
     if seed_env is not None:
         cfg["seed"] = seed_env
 
+    no_save_env = env.get("HP_NO_SAVE")
+    if no_save_env is not None:
+        cfg["no_save"] = str(no_save_env).lower() in ("1", "true", "yes", "on")
+
     # Optional override of validation split via env (train|val|test)
     val_split_env = env.get("HP_VAL_SPLIT")
     if val_split_env in {"train", "val", "test"}:
         cfg["val_data_split"] = val_split_env
+
+    eval_bs_env = _maybe(env.get("HP_EVAL_BATCH_SIZE"), int)
+    if eval_bs_env is not None and eval_bs_env > 0:
+        cfg["eval_batch_size"] = eval_bs_env
 
     # eval_gen 自动注入：保持与旧 train.py 一致（生成任务 + EVAL_GEN）
     def _truthy(x: Optional[str]) -> bool:
