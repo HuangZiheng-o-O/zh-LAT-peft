@@ -1,4 +1,3 @@
-batch_size: 4
 data: glue-tvt_cola
 learning_rate: 0.0005
 model: /home/user/mzs_h/model/second-gla-1.3B-100B/gla-1.3B-100B
