@@ -36,10 +36,98 @@ class DartDataset(NlgDatasetBase):
         self.sep_token = tokenizer.sep_token or getattr(tokenizer, "eos_token", "</s>")
         # prompt_prefix = None
 
+        # 🚨 关键修改：尽早验证数据存在性，避免中途失败
+        self._validate_data_availability()
+
         super().__init__(tokenizer, path, split, prompt_prefix=prompt_prefix,
                          use_cache=use_cache, **kwargs)
-        
+
         assert not (self.mode == "lm" and split != "train")
+
+    def _validate_data_availability(self):
+        """🚨 尽早验证DART本地数据存在性，避免训练中途失败。
+
+        这个方法在__init__的早期就被调用，确保在任何数据加载开始前
+        就发现问题并提供清晰的解决指引。
+        """
+        # 1) 检查环境变量指定的自定义路径
+        env_dir = os.environ.get("DART_LOCAL_DIR") or os.environ.get("HP_DART_LOCAL_DIR")
+        if env_dir:
+            data_root = Path(env_dir)
+            if not data_root.exists():
+                self._raise_data_missing_error(data_root, f"环境变量 DART_LOCAL_DIR/HP_DART_LOCAL_DIR 指定的路径不存在: {env_dir}")
+            if not self._has_required_files(data_root):
+                self._raise_data_missing_error(data_root, f"环境变量指定的路径中缺少必需的文件: {env_dir}")
+            return  # 数据验证通过
+
+        # 2) 检查默认路径
+        default_root = Path("data") / self.path.replace("/", "_")
+        if not default_root.exists():
+            self._raise_data_missing_error(default_root, f"默认数据路径不存在: {default_root}")
+        if not self._has_required_files(default_root):
+            self._raise_data_missing_error(default_root, f"默认数据路径中缺少必需的文件: {default_root}")
+
+        # 数据验证通过
+        print(f"[DART] ✓ 本地数据验证通过: {default_root}")
+
+    def _has_required_files(self, root: Path) -> bool:
+        """检查数据目录是否包含必需的文件。"""
+        required_files = [
+            "train.json", "validation.json", "test.json",  # 主要文件
+            "train.jsonl", "validation.jsonl", "test.jsonl",  # 备用格式
+        ]
+        # 至少要有训练和验证数据
+        has_train = any((root / f).exists() for f in ["train.json", "train.jsonl", "train.parquet"])
+        has_val = any((root / f).exists() for f in ["validation.json", "valid.json", "dev.json", "validation.jsonl", "dev.jsonl"])
+        has_test = any((root / f).exists() for f in ["test.json", "test.jsonl"])
+
+        return has_train and has_val  # 训练和验证是必需的，测试可选
+
+    def _raise_data_missing_error(self, expected_path: Path, reason: str):
+        """抛出清晰的数据缺失错误，包含详细的解决指引。"""
+        error_msg = f"""
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                           🚨 DART 数据缺失错误                             ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║ 原因: {reason}
+║
+║ 📁 期望路径: {expected_path}
+║
+║ 🔧 解决方法（选择其一）:
+║
+║   方法1 - 使用 HuggingFace CLI（推荐，稳定可靠）:
+║   cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft
+║   huggingface-cli download --repo-type dataset GEM/dart --local-dir {expected_path}
+║
+║   方法2 - 使用 Python 脚本:
+║   python -c "
+║   from huggingface_hub import snapshot_download
+║   snapshot_download(repo_id='GEM/dart', repo_type='dataset',
+║                     local_dir='{expected_path}', local_dir_use_symlinks=False)
+║   "
+║
+║   方法3 - 手动下载（如果网络受限）:
+║   1. 访问: https://huggingface.co/datasets/GEM/dart
+║   2. 下载文件: train.json, validation.json, test.json
+║   3. 放置到: {expected_path}/
+║
+║   方法4 - 使用自定义路径:
+║   export DART_LOCAL_DIR=/your/custom/path/to/dart/data
+║   # 然后重新运行训练脚本
+║
+║ 📋 数据集信息:
+║   - 名称: GEM/dart (Data-to-Text Generation with RDF triples)
+║   - 大小: ~50MB (压缩后)
+║   - 包含: 训练/验证/测试分割
+║
+║ ⚠️  注意事项:
+║   - 数据下载只需执行一次
+║   - 请确保有足够的磁盘空间
+║   - 网络下载可能需要几分钟
+║
+╚══════════════════════════════════════════════════════════════════════════════╝
+"""
+        raise FileNotFoundError(error_msg)
 
     def get_cache_name(self):
         name = super().get_cache_name()
