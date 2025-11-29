@@ -52,7 +52,14 @@ class DartDataset(NlgDatasetBase):
         return len(self.data) if self.data is not None else len(self.load_df())
 
     def _snapshot_local_root(self) -> Path:
-        """Prefer local directory if provided/offline, otherwise snapshot GEM/dart to data/ and return dir."""
+        """OFFLINE-ONLY: 强制本地读取。不会触发任何网络下载。
+        
+        优先顺序：
+        1) 环境变量指定目录：DART_LOCAL_DIR / HP_DART_LOCAL_DIR
+        2) 项目内本地目录：data/GEM_dart（或已有缓存文件）
+        
+        如本地不存在，将抛出异常并给出下载指引（代码中保留了下载示例，但已注释，避免误触发网络）。
+        """
         # 1) explicit override
         env_dir = os.environ.get("DART_LOCAL_DIR") or os.environ.get("HP_DART_LOCAL_DIR")
         if env_dir and Path(env_dir).exists():
@@ -61,7 +68,7 @@ class DartDataset(NlgDatasetBase):
         local_root = Path("data") / self.path.replace("/", "_")
         local_root.mkdir(parents=True, exist_ok=True)
 
-        # 2) offline or local files already present → use local_root directly
+        # 2) 仅当已存在本地文件时使用；否则报错，不再尝试任何下载
         offline = str(os.environ.get("HF_HUB_OFFLINE", "")).lower() in ("1", "true", "yes", "on")
         has_local_files = any((local_root / name).exists() for name in [
             "train.json", "validation.json", "dev.json", "test.json",
@@ -70,9 +77,19 @@ class DartDataset(NlgDatasetBase):
         if offline or has_local_files:
             return local_root
 
-        # 3) fallback to snapshot download
-        snap = snapshot_download(repo_id=self.path, repo_type="dataset", local_dir=str(local_root), local_dir_use_symlinks=False)
-        return Path(snap)
+        # 3) 不再进行 snapshot_download。明确报错 + 下载指引（注释保留下载示例，方便他人了解如何获取数据）
+        msg = (
+            "[DART][offline] Local dataset not found.\n"
+            f"  Expected under: {local_root}\n"
+            "  Or set env DART_LOCAL_DIR=/path/to/dart\n\n"
+            "Please prepare DART locally before running. For example:\n"
+            "  - Place files like train.json/validation.json/test.json (or parquet/jsonl) under the directory above.\n"
+            "  - Or set DART_LOCAL_DIR to an existing folder with these files.\n\n"
+            "Optional reference (commented out to avoid network):\n"
+            "  from huggingface_hub import snapshot_download\n"
+            "  snapshot_download(repo_id='GEM/dart', repo_type='dataset', local_dir='data/GEM_dart', local_dir_use_symlinks=False)\n"
+        )
+        raise FileNotFoundError(msg)
 
     def _find_split_files(self, snap_dir: Path, split_key: str):
         # Map our split to filename hints
@@ -96,53 +113,32 @@ class DartDataset(NlgDatasetBase):
         return None, []
 
     def _download_candidates(self, split_key: str, dest_dir: Path):
-        """Attempt to fetch known filename patterns directly from the repo when snapshot doesn't expose split files plainly.
-        Returns (builder, files).
+        """已禁用的下载分支（保留注释说明）。
+        
+        出于稳定性与可控性考虑，代码不再发起任何网络请求。若需要从 Hub 拉取，请手动执行下面的示例命令，
+        并将文件放入本地数据目录（或通过 DART_LOCAL_DIR 指向该目录）。
+
+        示例（请在命令行中执行，非代码自动执行）：
+          python -c "from huggingface_hub import snapshot_download; \
+                     snapshot_download(repo_id='GEM/dart', repo_type='dataset', \
+                     local_dir='data/GEM_dart', local_dir_use_symlinks=False)"
+
+        返回 (None, []) 以显式表示不提供在线下载候选。
         """
-        # Common DART file names observed in GEM releases
-        name_map = {
-            "train": [
-                "train.json", "train.jsonl", "train.parquet",
-                "train-v1.1.json", "train-v1.1.jsonl",
-                "data/train.json", "data/train.jsonl",
-            ],
-            "val": [
-                "validation.json", "validation.jsonl", "valid.json", "dev.json",
-                "dev-v1.1.json", "validation-v1.1.json",
-                "data/dev.json", "data/validation.json",
-            ],
-            "test": [
-                "test.json", "test.jsonl", "test-v1.1.json",
-                "data/test.json",
-            ],
-        }
-        builder = None
-        files = []
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        for fname in name_map[split_key]:
-            try:
-                local = hf_hub_download(repo_id=self.path, repo_type="dataset", filename=fname)
-                p = dest_dir / Path(fname).name
-                # copy file to a flat location
-                if not p.exists():
-                    Path(local).rename(p)
-                files.append(p)
-                if p.suffix == ".parquet":
-                    builder = builder or "parquet"
-                elif p.suffix in (".jsonl", ".json"):
-                    builder = builder or "json"
-            except Exception:
-                continue
-        return builder, files
+        return None, []
 
     def load_hf_dataset_split(self):
         snap_dir = self._snapshot_local_root()
         # decide which split to load from files. For train-*, still load full train then split
         if self.split.startswith("train-"):
             builder, files = self._find_split_files(snap_dir, "train")
-            if not files:
-                builder, files = self._download_candidates("train", snap_dir / "_files")
-            assert files, f"GEM/dart train files not found under {snap_dir}"
+            # 不再尝试任何下载；若本地缺失，直接报错并给出指引
+            assert files, (
+                f"GEM/dart train files not found under {snap_dir}\n"
+                "Please prepare local files (e.g., train.json/train.parquet) first.\n"
+                "You can set DART_LOCAL_DIR to point to your local dataset folder."
+            )
+            assert builder is not None, f"Unable to determine dataset builder for files: {files}"
             ds = load_dataset(builder, data_files={"train": [str(p) for p in files]})["train"]
             prefix, split, *seed_id = self.split.split("-")
             assert prefix == "train" and len(seed_id) == 0
@@ -157,21 +153,21 @@ class DartDataset(NlgDatasetBase):
                 # some repos may only provide validation/dev; map val->dev and test->validation as fallback
                 fallback = "val" if want == "test" else want
                 builder, files = self._find_split_files(snap_dir, fallback)
-            if not files:
-                builder, files = self._download_candidates(want, snap_dir / "_files")
-                if not files and want != "val":
-                    # try fallback explicitly
-                    builder, files = self._download_candidates("val" if want == "test" else want, snap_dir / "_files")
-            assert files, f"GEM/dart {want} files not found under {snap_dir}"
+            # 不再尝试任何下载；若本地缺失，直接报错并给出指引
+            assert files, (
+                f"GEM/dart {want} files not found under {snap_dir}\n"
+                "Please prepare local files (e.g., validation.json/test.json or parquet/jsonl).\n"
+                "You can set DART_LOCAL_DIR to point to your local dataset folder."
+            )
+            assert builder is not None, f"Unable to determine dataset builder for files: {files}"
             ds = load_dataset(builder, data_files={"train": [str(p) for p in files]})["train"]
             if len(ds) == 0:
                 # Try alternate splits present locally to avoid silent empty datasets
                 alt_order = ("val", "train", "test") if want == "train" else ("train", "val", "test")
                 for alt in alt_order:
                     b2, f2 = self._find_split_files(snap_dir, alt)
-                    if not f2:
-                        b2, f2 = self._download_candidates(alt, snap_dir / "_files")
                     if f2:
+                        assert b2 is not None, f"Unable to determine dataset builder for files: {f2}"
                         ds_alt = load_dataset(b2, data_files={"train": [str(p) for p in f2]})["train"]
                         if len(ds_alt) > 0:
                             print(f"[DART] Warning: split '{want}' empty. Falling back to '{alt}' ({len(ds_alt)} samples).")
