@@ -643,3 +643,69 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
   --gpu-plan "2,2,2,2,2"
   
 ```
+
+## GLUE
+
+```bash
+
+conda activate mzsz
+cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
+
+# 离线/本地资源（可选）
+#export GLUE_DATASET_ID=nyu-mll/glue
+#export GLUE_METRIC_DIR=/home/user/mzs_h/data/hf_cache/eval_metrics/glue
+
+# 禁止生成
+export EVAL_GEN=0
+
+# 训练超参（ENV 优先级最高）
+export HP_EPOCHS=4
+export HP_BATCH_SIZE=8
+export HP_LR=0.0004
+
+# 评测/保存/日志
+export HP_EVAL_BATCH_SIZE=64
+export HP_EVAL_STEPS=200
+export HP_SAVE_STEPS=800
+export HP_LOGGING_STEPS=50
+# 若完全不存
+# export HP_NO_SAVE=1
+
+# 调度
+export LR_SCHEDULER_TYPE=cosine
+export LR_WARMUP_RATIO=0.1
+
+# DataLoader/Runtime（可沿用）
+export NUM_DATA_WORKERS=4
+export DATALOADER_PREFETCH_FACTOR=2
+export DATALOADER_PIN_MEMORY=1
+export DATALOADER_PERSISTENT_WORKERS=0
+export GRADIENT_CHECKPOINTING=true
+export TOKENIZERS_PARALLELISM=false
+export OMP_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export TRANSFORMERS_VERBOSITY=error
+
+# SwanLab（改项目名区分，邮件按需开）
+export SWANLAB_ENABLE=1
+export SWANLAB_MODE=cloud
+export SWANLAB_PROJECT="gla-glue-all-test"
+export SWANLAB_EMAIL_ON_START=0
+export SWANLAB_EMAIL_ON_FINISH=0
+export SWANLAB_EMAIL_ON_INTERRUPT=0
+
+./gla_batch_tmux_clean_multidata.sh \
+  --suite E158 \
+  --round 1 \
+  --pairs "87:glue-tvt_cola 87:glue-tvt_rte 87:glue-tvt_mnli 87:glue-tvt_qnli 87:glue-tvt_sst2 87:glue-tvt_mrpc 87:glue-tvt_qqp" \
+  --gpus "0 1 2 3 4 5 6" \
+  --name glue_multidata_e158
+
+```
+
+没有
+87:glue-tvt_wnli
+没有
+87:glue-tvt_wnli
+glue_multidata_e15是  tmux session 名称
