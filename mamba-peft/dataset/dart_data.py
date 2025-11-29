@@ -37,19 +37,23 @@ class DartDataset(NlgDatasetBase):
         # prompt_prefix = None
 
         # 🚨 关键修改：尽早验证数据存在性，避免中途失败
-        self._validate_data_availability()
+        # 注意：此时还未调用父类构造，self.path 尚未赋值，因此传入本地变量 path
+        self._validate_data_availability(path_hint=path)
 
         super().__init__(tokenizer, path, split, prompt_prefix=prompt_prefix,
                          use_cache=use_cache, **kwargs)
 
         assert not (self.mode == "lm" and split != "train")
 
-    def _validate_data_availability(self):
+    def _validate_data_availability(self, path_hint: str | None = None):
         """🚨 尽早验证DART本地数据存在性，避免训练中途失败。
 
         这个方法在__init__的早期就被调用，确保在任何数据加载开始前
         就发现问题并提供清晰的解决指引。
         """
+        # 确定用于默认路径推导的路径标识
+        path_str = path_hint if path_hint is not None else getattr(self, "path", "GEM/dart")
+
         # 1) 检查环境变量指定的自定义路径
         env_dir = os.environ.get("DART_LOCAL_DIR") or os.environ.get("HP_DART_LOCAL_DIR")
         if env_dir:
@@ -61,7 +65,7 @@ class DartDataset(NlgDatasetBase):
             return  # 数据验证通过
 
         # 2) 检查默认路径
-        default_root = Path("data") / self.path.replace("/", "_")
+        default_root = Path("data") / path_str.replace("/", "_")
         if not default_root.exists():
             self._raise_data_missing_error(default_root, f"默认数据路径不存在: {default_root}")
         if not self._has_required_files(default_root):
