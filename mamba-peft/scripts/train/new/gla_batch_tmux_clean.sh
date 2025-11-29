@@ -129,6 +129,12 @@ HDR
   printf 'export HP_LOGGING_STEPS=%q\n' "${HP_LOGGING_STEPS:-}"
   printf 'export HP_VAL_SPLIT=%q\n' "${HP_VAL_SPLIT:-}"
   printf 'export HP_DATA=%q\n' "${HP_DATA:-}"
+  # Add missing core HP_* that should propagate to python (align with multidata launcher)
+  printf 'export HP_LR=%q\n' "${HP_LR:-}"
+  printf 'export HP_BATCH_SIZE=%q\n' "${HP_BATCH_SIZE:-}"
+  printf 'export HP_EPOCHS=%q\n' "${HP_EPOCHS:-}"
+  printf 'export HP_EVAL_BATCH_SIZE=%q\n' "${HP_EVAL_BATCH_SIZE:-}"
+  printf 'export HP_NO_SAVE=%q\n' "${HP_NO_SAVE:-}"
   # Modern LR scheduler (warmup + decay)
   printf 'export LR_SCHEDULER_TYPE=%q\n' "${LR_SCHEDULER_TYPE:-cosine}"
   printf 'export LR_WARMUP_STEPS=%q\n' "${LR_WARMUP_STEPS:-}"

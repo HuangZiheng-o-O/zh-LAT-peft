@@ -764,8 +764,8 @@ export TRANSFORMERS_VERBOSITY=error    # keeps HF logger quiet
 
 # SwanLab (本地模式，避免网络上传)
 export SWANLAB_ENABLE=1
-export SWANLAB_MODE=local             # 🔧 修改：从 cloud 改为 local
-export SWANLAB_PROJECT="gla-dart-E15-2-4090-r10"
+export SWANLAB_MODE=cloud             # 🔧 修改：从 cloud 改为 local
+export SWANLAB_PROJECT="gla-dart-E15-2-4090-r11"
 export SWANLAB_EMAIL_YAML="/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/dangerous/email_notify.yaml"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
@@ -779,3 +779,115 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
   --gpu-plan "2,2,2,2,2,2"
 
 ```
+
+```bash
+conda activate mzsz
+cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
+
+# 离线/本地资源（可选）
+#export GLUE_DATASET_ID=nyu-mll/glue
+#export GLUE_METRIC_DIR=/home/user/mzs_h/data/hf_cache/eval_metrics/glue
+
+# 禁止生成
+export EVAL_GEN=0
+
+# 训练超参（ENV 优先级最高）
+export HP_EPOCHS=4
+export HP_BATCH_SIZE=8
+export HP_LR=0.0004
+
+# 评测/保存/日志
+export HP_EVAL_BATCH_SIZE=64
+export HP_EVAL_STEPS=200
+export HP_SAVE_STEPS=800
+export HP_LOGGING_STEPS=50
+# 若完全不存
+# export HP_NO_SAVE=1
+
+# 调度
+export LR_SCHEDULER_TYPE=cosine
+export LR_WARMUP_RATIO=0.1
+
+# DataLoader/Runtime（可沿用）
+export NUM_DATA_WORKERS=4
+export DATALOADER_PREFETCH_FACTOR=2
+export DATALOADER_PIN_MEMORY=1
+export DATALOADER_PERSISTENT_WORKERS=0
+export GRADIENT_CHECKPOINTING=true
+export TOKENIZERS_PARALLELISM=false
+export OMP_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export TRANSFORMERS_VERBOSITY=error
+
+# SwanLab（改项目名区分，邮件按需开）
+export SWANLAB_ENABLE=1
+export SWANLAB_MODE=cloud
+export SWANLAB_PROJECT="rte-1-4090-1"
+export SWANLAB_EMAIL_ON_START=0
+export SWANLAB_EMAIL_ON_FINISH=0
+export SWANLAB_EMAIL_ON_INTERRUPT=0
+
+./gla_batch_tmux_clean.sh \
+  --suite E15 \
+  --round all \
+  --pairs "87:glue-tvt_rte" \
+  --gpus "0 1 2 3 4 5" \
+  --gpu-plan "2,2,2,2,2,2"
+错误
+```
+
+
+```bash
+
+conda activate mzsz
+cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
+
+# 禁止生成
+export EVAL_GEN=0
+export HP_VAL_SPLIT=test
+# ==== 训练超参 ====
+# RTE 数据量很小，epoch 不用太多；主要降低学习率，防止过拟合+训练不稳定
+export HP_EPOCHS=3          # 从 4 降到 3（必要的话第二轮再试 2 或 4）
+export HP_BATCH_SIZE=8      # 先保持不动，稳定后再看是否增大
+export HP_LR=0.00005        # ★从 4e-4 大幅降到 5e-5
+
+# ==== 评测/保存/日志 ====
+export HP_EVAL_BATCH_SIZE=64
+export HP_EVAL_STEPS=100    # 从 200 改成 100，更密集观察过拟合
+export HP_SAVE_STEPS=400    # 从 800 改成 400，更早留一个“没过拟合”的 checkpoint
+export HP_LOGGING_STEPS=50
+
+# ==== 调度 ====
+export LR_SCHEDULER_TYPE=cosine
+export LR_WARMUP_RATIO=0.1  # 先维持 0.1 就行
+
+# DataLoader/Runtime
+export NUM_DATA_WORKERS=4
+export DATALOADER_PREFETCH_FACTOR=2
+export DATALOADER_PIN_MEMORY=1
+export DATALOADER_PERSISTENT_WORKERS=0
+export GRADIENT_CHECKPOINTING=true
+export TOKENIZERS_PARALLELISM=false
+export OMP_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export TRANSFORMERS_VERBOSITY=error
+
+# SwanLab
+export SWANLAB_ENABLE=1
+export SWANLAB_MODE=cloud
+export SWANLAB_PROJECT="rte-1-4090-lr5e5-round2"  # 项目名也改一下方便区分
+export SWANLAB_EMAIL_ON_START=0
+export SWANLAB_EMAIL_ON_FINISH=0
+export SWANLAB_EMAIL_ON_INTERRUPT=0
+
+./gla_batch_tmux_clean.sh \
+  --suite E15 \
+  --round all \
+  --pairs "87:glue-tvt_rte" \
+  --gpus "0 1 2 3 4 5" \
+  --gpu-plan "2,2,2,2,2,2"
+  
+```
+
