@@ -823,7 +823,7 @@ export TRANSFORMERS_VERBOSITY=error
 # SwanLab（改项目名区分，邮件按需开）
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="rte-1-4090-1"
+export SWANLAB_PROJECT="gla-glue-tvt_cola-3090-4"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -831,7 +831,7 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 ./gla_batch_tmux_clean.sh \
   --suite E15 \
   --round all \
-  --pairs "87:glue-tvt_rte" \
+  --pairs "87:glue-tvt_cola" \
   --gpus "0 1 2 3 4 5" \
   --gpu-plan "2,2,2,2,2,2"
 错误
@@ -877,7 +877,7 @@ export TRANSFORMERS_VERBOSITY=error
 # SwanLab
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="rte-1-4090-lr5e5-round2"  # 项目名也改一下方便区分
+export SWANLAB_PROJECT="rte-1-4090-lr5e5-round5"  # 项目名也改一下方便区分
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -886,8 +886,8 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
   --suite E15 \
   --round all \
   --pairs "87:glue-tvt_rte" \
-  --gpus "0 1 2 3 4 5" \
-  --gpu-plan "2,2,2,2,2,2"
+  --gpus "0 1 2 3 4 5 6 7" \
+  --gpu-plan "2,2,2,2,2,2,2,2"
   
 ```
 

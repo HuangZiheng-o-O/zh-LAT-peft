@@ -326,51 +326,77 @@ ROUND_E11=( #18
 #[GPU 0] /tmp/gla_data_YQBvBa/E9_OplusHEAD_r8_alpha16.yaml  (HP_SEED=87; data=spider-tvt; ignoring seed in name/YAML)
 
 
-ROUND_E15=(# 共 24 个配置 3*8 = 24
+ROUND_E15=(# 分组更清晰：FULL → 主轴 → Attn细粒度 → Head → Gating → MLP → 增量 → O-MLP
 
-  # 0. 主实验：全局多模块 LoRA（参考上限）
-  "E1_QKVO_plus_G_plus_GK_plus_MLP_r8_alpha16.yaml"   # QKVO + G + GK + MLP 全打点
+  # 0) FULL 多模块（参考上限）
+  "E1_QKVO_plus_G_plus_GK_plus_MLP_r8_alpha16.yaml"
 
-  # 1. 参数量对齐的三类 target-set（主轴）：Attn / Gating / MLP
-  #    实际参数量若要严格对齐，可在各自 YAML 中单独调 r
-  "E1_QKVO_r8_alpha16.yaml"          # Attn-only: q_proj, k_proj, v_proj, o_proj
-  "E3_GATINGONLY_r8_alpha16.yaml"    # Gating-only: g_proj + gk_proj[0/1]
-  "E4_MLPONLY_r8_alpha16.yaml"       # MLP-only: gate_proj + up_proj + down_proj
+  # 1) 主轴基线（Attn / Gating / MLP）
+  "E1_QKVO_r8_alpha16.yaml"
+  "E3_GATINGONLY_r8_alpha16.yaml"
+  "E4_MLPONLY_r8_alpha16.yaml"
 
-  # 2. 结构增量 ablations：在 Attn / O-MLP backbone 上加 G / GK / MLP
-  # 2.1 E1: QKVO backbone 上的增量
-  "E1_QKVO_plus_G_r8_alpha16.yaml"             # QKVO + g_proj
-  "E1_QKVO_plus_GK_r8_alpha16.yaml"            # QKVO + gk_proj[0/1]
-  "E1_QKVO_plus_G_plus_GK_r8_alpha16.yaml"     # QKVO + g_proj + gk_proj[0/1]
-  "E1_QKVO_plus_MLP_r8_alpha16.yaml"           # QKVO + MLP (gate/up/down)
+  # 2) Attention 细粒度
+  # 2.1 单打点（q/k/v/o）
+  "E4_QONLY_r8_alpha16.yaml"
+  "E4_KONLY_r8_alpha16.yaml"
+  "E4_VONLY_r8_alpha16.yaml"
+  "E11_OONLY_r8_alpha16.yaml"
+  # 2.2 两两组合
+  "E6_QKONLY_r8_alpha16.yaml"
+  "E7_KVONLY_r8_alpha16.yaml"
+  "E6_QVONLY_r8_alpha16.yaml"
+  "E6_QOONLY_r8_alpha16.yaml"
+  "E6_KOONLY_r8_alpha16.yaml"
+  "E6_VOONLY_r8_alpha16.yaml"
 
-  # 2.2 E2: O-MLP / OGLA backbone 上的增量（保持和原轮次一致）
-  "E2_OMLP_r8_alpha16.yaml"                    # O-MLP 结构，Attn-only
-  "E2_OMLP_plus_G_r8_alpha16.yaml"             # O-MLP + g_proj
-  "E2_OMLP_plus_GK_r8_alpha16.yaml"            # O-MLP + gk_proj[0/1]
-  "E2_OMLP_plus_G_plus_GK_r8_alpha16.yaml"     # O-MLP + g_proj + gk_proj[0/1]
+  # 3) Head 相关
+  "E10_HEADONLY_r8_alpha16.yaml"
+  "E9_OplusHEAD_r8_alpha16.yaml"
 
-  # 3. Layer-wise localization：固定结构，改变深度分布
-#  "E1_QKVO_first6_r8_alpha16.yaml"   # 只在前 6 层打 LoRA (QKVO)
-  "E1_QKVO_last6_r8_alpha16.yaml"    # 只在后 6 层打 LoRA (QKVO)
-  "E2_OMLP_last6_r8_alpha16.yaml"    # 只在后 6 层打 LoRA (O-MLP)
-  "E2_OMLP_middle6_r8_alpha16.yaml"  # 只在中间 6 层打 LoRA (O-MLP)
+  # 4) Gating 细粒度
+  "E3_GPROJONLY_r8_alpha16.yaml"
+  "E3_GK0ONLY_r8_alpha16.yaml"
+  "E3_GK1ONLY_r8_alpha16.yaml"
+  "E3_GKONLY_r8_alpha16.yaml"
 
-  # 4. 细粒度 target-set：Attention + LM head 拆解
-  "E6_QKONLY_r8_alpha16.yaml"        # Q + K only（无 V/O）
-  "E7_KVONLY_r8_alpha16.yaml"        # K + V only（无 Q/O）
-  "E9_OplusHEAD_r8_alpha16.yaml"     # O_proj + lm_head
-  "E10_HEADONLY_r8_alpha16.yaml"     # 仅 lm_head LoRA
-  "E11_OONLY_r8_alpha16.yaml"        # 仅 O_proj LoRA
+  # 5) MLP 细粒度（SwiGLU）
+  "E4_MLPGATEONLY_r8_alpha16.yaml"
+  "E4_MLPUPONLY_r8_alpha16.yaml"
+  "E4_MLPDOWNONLY_r8_alpha16.yaml"
+  "E4_MLPUPDOWN_r8_alpha16.yaml"
 
+  # 6) 结构增量：在 QKVO 上增量 Gates/MLP
+  "E1_QKVO_plus_G_r8_alpha16.yaml"
+  "E1_QKVO_plus_GK_r8_alpha16.yaml"
+  "E1_QKVO_plus_G_plus_GK_r8_alpha16.yaml"
+  "E1_QKVO_plus_MLP_r8_alpha16.yaml"
 
-  # 5. 细粒度 target-set：Gating / MLP 内部拆解
-  "E3_GPROJONLY_r8_alpha16.yaml"     # 仅 g_proj（输出门 r_t）
-  "E3_GKONLY_r8_alpha16.yaml"        # 仅 gk_proj[0/1]（遗忘门 α_t）
-  "E4_MLPGATEONLY_r8_alpha16.yaml"   # 仅 MLP gate_proj（SwiGLU 门分支 W1）
-  "E4_MLPUPDOWN_r8_alpha16.yaml"     # 仅 MLP up_proj + down_proj（内容分支 W2+W3）
+  # 7) O-MLP 骨架
+  "E2_OMLP_r8_alpha16.yaml"
+  "E2_OMLP_plus_G_r8_alpha16.yaml"
+  "E2_OMLP_plus_GK_r8_alpha16.yaml"
+  "E2_OMLP_plus_G_plus_GK_r8_alpha16.yaml"
 )
-
+ROUND_E166=(
+  # 新增/扩展的细粒度实验（便于后续单独复跑）
+  # Attention 单打点
+  "E4_QONLY_r8_alpha16.yaml"
+  "E4_KONLY_r8_alpha16.yaml"
+  "E4_VONLY_r8_alpha16.yaml"
+  "E11_OONLY_r8_alpha16.yaml"
+  # Attention 组合
+  "E6_QVONLY_r8_alpha16.yaml"
+  "E6_QOONLY_r8_alpha16.yaml"
+  "E6_KOONLY_r8_alpha16.yaml"
+  "E6_VOONLY_r8_alpha16.yaml"
+  # Gating 分解
+  "E3_GK0ONLY_r8_alpha16.yaml"
+  "E3_GK1ONLY_r8_alpha16.yaml"
+  # MLP 单打点
+  "E4_MLPUPONLY_r8_alpha16.yaml"
+  "E4_MLPDOWNONLY_r8_alpha16.yaml"
+)
 ROUND_E155=(
   "E6_QKONLY_r8_alpha16.yaml"
   "E7_KVONLY_r8_alpha16.yaml"
