@@ -543,6 +543,39 @@ class DartDataset(NlgDatasetBase):
                 for rs in references
             ]
 
+            # ===== DEBUG: 检查生成质量 =====
+            try:
+                print("\n[DEBUG][DART] ----- compute_metrics -----")
+                print(f"[DEBUG][DART] Total samples: {len(predictions)}")
+                print(f"[DEBUG][DART] sep_token used: '{self.sep_token}'")
+                
+                # 打印前 5 个样本
+                for i in range(min(5, len(predictions))):
+                    print(f"\n[DEBUG][DART] Sample {i}:")
+                    pred_preview = predictions[i][:200] if predictions[i] else "(empty)"
+                    print(f"  Prediction: {pred_preview}...")
+                    refs = references[i] if i < len(references) else []
+                    if isinstance(refs, list) and refs:
+                        for j, r in enumerate(refs[:3]):
+                            ref_preview = r[:200] if r else "(empty)"
+                            print(f"  Reference {j}: {ref_preview}...")
+                    else:
+                        print(f"  Reference: (no references)")
+                
+                # 统计空预测和空参考
+                empty_preds = sum(1 for p in predictions if not p or not p.strip())
+                empty_refs = sum(1 for r in references if not r or (isinstance(r, list) and len(r) == 0))
+                avg_pred_len = np.mean([len(p.split()) for p in predictions if p]) if predictions else 0
+                avg_ref_len = np.mean([len(r.split()) for refs in references for r in refs if r]) if references else 0
+                print(f"\n[DEBUG][DART] Empty predictions: {empty_preds}/{len(predictions)}")
+                print(f"[DEBUG][DART] Empty references: {empty_refs}/{len(references)}")
+                print(f"[DEBUG][DART] Avg prediction length (words): {avg_pred_len:.1f}")
+                print(f"[DEBUG][DART] Avg reference length (words): {avg_ref_len:.1f}")
+                print("[DEBUG][DART] -----------------------------------------\n")
+            except Exception as e:
+                print(f"[DEBUG][DART] Debug failed: {repr(e)}")
+            # ===== END DEBUG =====
+
             # Metrics commonly reported for GEM/DART: BLEU, METEOR, chrF
             bleu = evaluate.load("bleu")
             meteor = evaluate.load("meteor")
