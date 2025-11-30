@@ -721,7 +721,12 @@ def main():
             cfg["eval_gen"]["num_beams"] = num_beams
             # Beam search 常用配置
             cfg["eval_gen"]["length_penalty"] = float(env.get("EVAL_GEN_LENGTH_PENALTY") or 1.0)
-            cfg["eval_gen"]["no_repeat_ngram_size"] = int(env.get("EVAL_GEN_NO_REPEAT_NGRAM") or 3)
+            # no_repeat_ngram_size: 默认 0（禁用），避免过度限制生成
+            # 只有显式设置环境变量才启用
+            _ngram_env = env.get("EVAL_GEN_NO_REPEAT_NGRAM")
+            if _ngram_env is not None and _ngram_env != "":
+                cfg["eval_gen"]["no_repeat_ngram_size"] = int(_ngram_env)
+            # 否则不设置（默认 0，不限制）
             cfg["eval_gen"]["early_stopping"] = True
             print(f"[GLA] Auto-configured beam search for {data_name}: num_beams={num_beams}")
         else:

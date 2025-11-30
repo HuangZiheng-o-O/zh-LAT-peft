@@ -701,7 +701,7 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
 
-# 🔧 离线模式
+# 离线模式
 export HF_HUB_OFFLINE=1
 export HF_EVALUATE_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
@@ -718,15 +718,18 @@ export HP_SAVE_STEPS=8000
 export HP_LOGGING_STEPS=1000
 export HP_NO_SAVE=1
 
-# Generation / decoding - ⚠️ 修改点
+# Generation / decoding
 export EVAL_GEN=1
-export EVAL_GEN_MAX_LENGTH=256          # ← 改小：DART 不需要 1024
+export EVAL_GEN_NUM_BEAMS=4
+export EVAL_GEN_MAX_LENGTH=128
 export EVAL_GEN_MIN_LENGTH=5
-export EVAL_GEN_NUM_BEAMS=4             # ← 新增：启用 beam search
+export EVAL_GEN_NO_REPEAT_NGRAM=0
+export EVAL_GEN_LENGTH_PENALTY=1.0
+export EVAL_GEN_EARLY_STOPPING=1
 export GLA_FORCE_LEFT_PAD=1
 export GLA_USE_MAX_NEW_TOKENS=1
 export GLA_USE_FUSED_SWIGLU=0
-export GLA_VERBOSE=1                    # ← 建议开启，确认 beam search 生效
+export GLA_VERBOSE=1
 
 # LR schedule
 export LR_SCHEDULER_TYPE=cosine
@@ -747,7 +750,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 # SwanLab
 export SWANLAB_ENABLE=1
-export SWANLAB_MODE=cloud            
+export SWANLAB_MODE=cloud
 export SWANLAB_PROJECT="gla-dart-beam-E15-1-4090-r12"
 export SWANLAB_EMAIL_YAML="/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/dangerous/email_notify.yaml"
 export SWANLAB_EMAIL_ON_START=0
