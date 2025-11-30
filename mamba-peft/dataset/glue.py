@@ -92,6 +92,23 @@ class GlueDataset(NluDatasetBase):
             self.id_to_int_label[tokenizer.vocab[str(i)]] = i
             self.choice_ids.append(tokenizer.vocab[str(i)])
 
+        # ===== RTE 专用 debug：看清 label / token 映射情况 =====
+        if self.name == "rte":
+            try:
+                print("\n[DEBUG][RTE] ----- GlueDataset.__init__ token mapping -----")
+                print("[DEBUG][RTE] tokenizer.vocab.get('0') =", tokenizer.vocab.get("0", None))
+                print("[DEBUG][RTE] tokenizer.vocab.get('1') =", tokenizer.vocab.get("1", None))
+                # 实际编码 '0'/'1' 时的 token 序列
+                print("[DEBUG][RTE] encode('0', no special) =", tokenizer.encode("0", add_special_tokens=False))
+                print("[DEBUG][RTE] encode('1', no special) =", tokenizer.encode("1", add_special_tokens=False))
+                # choice_ids 和 id_to_int_label 的核心信息
+                print("[DEBUG][RTE] choice_ids =", self.choice_ids)
+                for cid in self.choice_ids:
+                    print(f"[DEBUG][RTE] id_to_int_label[{cid}] ->", self.id_to_int_label[cid])
+            except Exception as e:
+                print("[DEBUG][RTE] token mapping debug failed:", repr(e))
+            print("[DEBUG][RTE] --------------------------------------------\n")
+
     def __len__(self):
         return len(self.data) if self.data is not None else len(self.get_hf_dataset())
     
@@ -179,6 +196,32 @@ class GlueDataset(NluDatasetBase):
             valid = predictions_int != self.ignore_index
             references_int_valid = references_int[valid]
             predictions_int_valid = predictions_int[valid]
+
+            # ===== RTE 专用 debug：看 eval_all_logits 模式下的样本利用情况 =====
+            if self.name == "rte":
+                try:
+                    print("\n[DEBUG][RTE] ----- compute_metrics (eval_all_logits=True) -----")
+                    print("[DEBUG][RTE] total tokens (references) =", references.shape[0])
+                    print("[DEBUG][RTE] id_to_int_label unique(references_int) =",
+                          np.unique(references_int, return_counts=True))
+                    print("[DEBUG][RTE] id_to_int_label unique(predictions_int) =",
+                          np.unique(predictions_int, return_counts=True))
+                    print("[DEBUG][RTE] valid_count =", int(np.sum(valid)),
+                          " out_of_cls =", int(np.sum(~valid)))
+                    # 参考 label token 是否落在 choice_ids 里
+                    in_choice_refs = np.isin(references, self.choice_ids)
+                    print("[DEBUG][RTE] references ∈ choice_ids 的数量 =",
+                          int(np.sum(in_choice_refs)),
+                          " / total =", references.shape[0])
+                    # 简单看一下前几个 label/pred 映射
+                    print("[DEBUG][RTE] first 20 raw references:", references[:20])
+                    print("[DEBUG][RTE] first 20 mapped references_int:", references_int[:20])
+                    print("[DEBUG][RTE] first 20 raw pred token ids:", predictions[:20])
+                    print("[DEBUG][RTE] first 20 mapped predictions_int:", predictions_int[:20])
+                    print("[DEBUG][RTE] -----------------------------------------------\n")
+                except Exception as e:
+                    print("[DEBUG][RTE] compute_metrics debug failed:", repr(e))
+
             if self.metric is not None:
                 res = self.metric.compute(predictions=predictions_int_valid, references=references_int_valid)
             else:
