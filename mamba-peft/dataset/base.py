@@ -111,12 +111,31 @@ class DatasetBase(ABC):
                             pass
                 else:
                     # Waiter: spin until cache file materializes (another process is writing it)
+                    # But detect stale locks: if lock is older than 10 minutes, assume it's stale and remove it
                     _debug_print(f"  WAITER: Spinning until cache file appears (lock held by another process)...")
                     spin_count = 0
+                    max_lock_age_seconds = 600  # 10 minutes
                     while lock_file.exists() or not cache_file.exists():
                         spin_count += 1
+                        # Check for stale lock
+                        if lock_file.exists():
+                            try:
+                                lock_age = time.time() - os.path.getmtime(str(lock_file))
+                                if lock_age > max_lock_age_seconds:
+                                    _debug_print(f"  STALE LOCK DETECTED: lock is {lock_age:.0f}s old (>{max_lock_age_seconds}s), removing...")
+                                    os.remove(lock_file)
+                                    _debug_print(f"  Stale lock removed, will try to acquire lock on next iteration")
+                                    # Don't break here; let the loop re-check and potentially acquire lock
+                            except Exception as e:
+                                _debug_print(f"  Error checking lock age: {e}")
                         if spin_count % 5 == 0:
-                            _debug_print(f"    Still waiting... (spin_count={spin_count}, lock_exists={lock_file.exists()}, cache_exists={cache_file.exists()})")
+                            lock_age_str = ""
+                            if lock_file.exists():
+                                try:
+                                    lock_age_str = f", lock_age={time.time() - os.path.getmtime(str(lock_file)):.0f}s"
+                                except Exception:
+                                    pass
+                            _debug_print(f"    Still waiting... (spin_count={spin_count}, lock_exists={lock_file.exists()}, cache_exists={cache_file.exists()}{lock_age_str})")
                         time.sleep(2)
                     _debug_print(f"  WAITER: Cache file ready, loading...")
                     with open(cache_file, "rb") as f:

@@ -131,13 +131,9 @@ class GlueDataset(NluDatasetBase):
             self.choice_ids.append(tokenizer.vocab[str(i)])
 
     def __len__(self):
-        _debug_print(f"  __len__ called: data is {'None' if self.data is None else f'loaded ({len(self.data)} samples)'}")
         if self.data is not None:
             return len(self.data)
-        _debug_print(f"  __len__: data is None, calling get_hf_dataset()...")
-        hf_ds = self.get_hf_dataset()
-        _debug_print(f"  __len__: get_hf_dataset() returned {len(hf_ds)} samples")
-        return len(hf_ds)
+        return len(self.get_hf_dataset())
     
     def get_cache_name(self):
         name = self.name
@@ -208,10 +204,8 @@ class GlueDataset(NluDatasetBase):
             return result
 
     def get_hf_dataset(self):
-        _debug_print(f"  get_hf_dataset START: hf_dataset is {'None' if self.hf_dataset is None else 'already loaded'}")
         if self.hf_dataset is None:
             self.hf_dataset = self.load_hf_dataset_split()
-        _debug_print(f"  get_hf_dataset DONE")
         return self.hf_dataset
 
     def get_input_label(self, idx):
