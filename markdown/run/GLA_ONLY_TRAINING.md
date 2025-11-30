@@ -1,5 +1,13 @@
 ## GLA‑only Training & Evaluation (HF generate) – Run Guide
 
+```bash
+find /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/data -name "*.lock" -delete
+rm -f /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/data/nyu-mll_glue/*.lock
+```
+```bash
+rm -f /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/data/nyu-mll_glue/*.pkl
+```
+
 原来的 learning_rate: 0.0003
 
 This document describes the clean GLA‑only training/eval pipeline that avoids any Mamba/SD‑LoRA decoder or resume code paths, and follows the official `flash-linear-attention` + Hugging Face `.generate()` best practices.
