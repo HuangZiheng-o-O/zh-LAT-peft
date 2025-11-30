@@ -326,7 +326,7 @@ ROUND_E11=( #18
 #[GPU 0] /tmp/gla_data_YQBvBa/E9_OplusHEAD_r8_alpha16.yaml  (HP_SEED=87; data=spider-tvt; ignoring seed in name/YAML)
 
 
-ROUND_E15=(# 分组更清晰：FULL → 主轴 → Attn细粒度 → Head → Gating → MLP → 增量 → O-MLP
+ROUND_E15=(# 26 个 分组更清晰：FULL → 主轴 → Attn细粒度 → Head → Gating → MLP → 增量 → O-MLP
 
   # 0) FULL 多模块（参考上限）
   "E1_QKVO_plus_G_plus_GK_plus_MLP_r8_alpha16.yaml"
@@ -351,19 +351,19 @@ ROUND_E15=(# 分组更清晰：FULL → 主轴 → Attn细粒度 → Head → Ga
   "E6_VOONLY_r8_alpha16.yaml"
 
   # 3) Head 相关
-  "E10_HEADONLY_r8_alpha16.yaml"
-  "E9_OplusHEAD_r8_alpha16.yaml"
+#  "E10_HEADONLY_r8_alpha16.yaml"
+#  "E9_OplusHEAD_r8_alpha16.yaml"
 
   # 4) Gating 细粒度
   "E3_GPROJONLY_r8_alpha16.yaml"
-  "E3_GK0ONLY_r8_alpha16.yaml"
-  "E3_GK1ONLY_r8_alpha16.yaml"
+#  "E3_GK0ONLY_r8_alpha16.yaml"
+#  "E3_GK1ONLY_r8_alpha16.yaml"
   "E3_GKONLY_r8_alpha16.yaml"
 
   # 5) MLP 细粒度（SwiGLU）
   "E4_MLPGATEONLY_r8_alpha16.yaml"
-  "E4_MLPUPONLY_r8_alpha16.yaml"
-  "E4_MLPDOWNONLY_r8_alpha16.yaml"
+#  "E4_MLPUPONLY_r8_alpha16.yaml"
+#  "E4_MLPDOWNONLY_r8_alpha16.yaml"
   "E4_MLPUPDOWN_r8_alpha16.yaml"
 
   # 6) 结构增量：在 QKVO 上增量 Gates/MLP
@@ -391,11 +391,11 @@ ROUND_E166=(
   "E6_KOONLY_r8_alpha16.yaml"
   "E6_VOONLY_r8_alpha16.yaml"
   # Gating 分解
-  "E3_GK0ONLY_r8_alpha16.yaml"
-  "E3_GK1ONLY_r8_alpha16.yaml"
+#  "E3_GK0ONLY_r8_alpha16.yaml"
+#  "E3_GK1ONLY_r8_alpha16.yaml"
   # MLP 单打点
-  "E4_MLPUPONLY_r8_alpha16.yaml"
-  "E4_MLPDOWNONLY_r8_alpha16.yaml"
+#  "E4_MLPUPONLY_r8_alpha16.yaml"
+#  "E4_MLPDOWNONLY_r8_alpha16.yaml"
 )
 ROUND_E155=(
   "E6_QKONLY_r8_alpha16.yaml"
