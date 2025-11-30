@@ -1,20 +1,72 @@
+import datetime
 
+def _debug_print(msg: str):
+    ts = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
+    print(f"[DEBUG][{ts}] [dataset/__init__] {msg}", flush=True)
 
+_debug_print("START importing dataset package...")
+
+_debug_print("  Importing numpy...")
 import numpy as np
+_debug_print("  numpy... OK")
+
+_debug_print("  Importing AlpacaDataModule...")
 from dataset.alpaca import AlpacaDataModule
+_debug_print("  AlpacaDataModule... OK")
+
+_debug_print("  Importing AlpacaEvalDataModule...")
 from dataset.alpaca_eval import AlpacaEvalDataModule
+_debug_print("  AlpacaEvalDataModule... OK")
+
+_debug_print("  Importing ArcDataModule...")
 from dataset.arc import ArcDataModule
+_debug_print("  ArcDataModule... OK")
+
+_debug_print("  Importing BoolQDataModule...")
 from dataset.boolq import BoolQDataModule
+_debug_print("  BoolQDataModule... OK")
+
+_debug_print("  Importing CifarDataModule...")
 from dataset.cifar import CifarDataModule
+_debug_print("  CifarDataModule... OK")
+
+_debug_print("  Importing DartDataModule...")
 from dataset.dart_data import DartDataModule
+_debug_print("  DartDataModule... OK")
+
+_debug_print("  Importing GlueDataModule (this may trigger evaluate.load)...")
 from dataset.glue import GlueDataModule
+_debug_print("  GlueDataModule... OK")
+
+_debug_print("  Importing MmluDataModule...")
 from dataset.mmlu import MmluDataModule
+_debug_print("  MmluDataModule... OK")
+
+_debug_print("  Importing MmluZeroShotDataModule...")
 from dataset.mmlu_zero_shot import MmluZeroShotDataModule
+_debug_print("  MmluZeroShotDataModule... OK")
+
+_debug_print("  Importing MnistDataModule...")
 from dataset.mnist import MnistDataModule
+_debug_print("  MnistDataModule... OK")
+
+_debug_print("  Importing PiqaDataModule...")
 from dataset.piqa import PiqaDataModule
+_debug_print("  PiqaDataModule... OK")
+
+_debug_print("  Importing RandomDataModule...")
 from dataset.random_data import RandomDataModule
+_debug_print("  RandomDataModule... OK")
+
+_debug_print("  Importing SamSumDataModule...")
 from dataset.samsum_data import SamSumDataModule
+_debug_print("  SamSumDataModule... OK")
+
+_debug_print("  Importing SpiderDataModule...")
 from dataset.spider_data import SpiderDataModule
+_debug_print("  SpiderDataModule... OK")
+
+_debug_print("DONE importing dataset package")
 
 
 def load_dataset(data, tokenizer, split, return_module=False, **kwargs):

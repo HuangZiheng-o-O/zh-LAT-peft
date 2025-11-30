@@ -1,12 +1,41 @@
-import transformers
-from transformers.models.auto import AutoTokenizer
-from datasets import load_dataset, concatenate_datasets
+import datetime
 
+def _debug_print(msg: str):
+    ts = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
+    print(f"[DEBUG][{ts}] [glue.py] {msg}", flush=True)
+
+_debug_print("START importing dataset/glue.py...")
+
+_debug_print("  Importing transformers...")
+import transformers
+_debug_print("  transformers... OK")
+
+_debug_print("  Importing transformers.models.auto.AutoTokenizer...")
+from transformers.models.auto import AutoTokenizer
+_debug_print("  AutoTokenizer... OK")
+
+_debug_print("  Importing datasets.load_dataset, concatenate_datasets...")
+from datasets import load_dataset, concatenate_datasets
+_debug_print("  datasets... OK")
+
+_debug_print("  Importing dataset.collator.DataCollator...")
 from dataset.collator import DataCollator
+_debug_print("  DataCollator... OK")
+
+_debug_print("  Importing .base.NluDatasetBase...")
 from .base import NluDatasetBase
+_debug_print("  NluDatasetBase... OK")
+
+_debug_print("  Importing evaluate (this may trigger network access if not cached)...")
 import evaluate
+_debug_print("  evaluate... OK")
+
+_debug_print("  Importing numpy, os...")
 import numpy as np
 import os
+_debug_print("  numpy, os... OK")
+
+_debug_print("DONE importing dataset/glue.py module-level")
 
 
 # https://github.com/microsoft/promptbench
@@ -55,34 +84,43 @@ num_labels = {
 
 class GlueDataset(NluDatasetBase):
     def __init__(self, tokenizer: AutoTokenizer, name, split="train", use_cache=True, eval_all_logits=True, has_test_split=False, **kwargs):
+        _debug_print(f"GlueDataset.__init__ START: name={name}, split={split}")
         # Allow overriding dataset id via env; default mirrors HF hub id
         path = os.environ.get("GLUE_DATASET_ID", "nyu-mll/glue")
         self.name = name
         self.hf_dataset = None
         # Try to load GLUE metric from evaluate; fall back to local dir or built-in metrics
         self.metric = None
+        _debug_print(f"  Calling evaluate.load('glue', '{name}')... (may hang if network blocked)")
         try:
             self.metric = evaluate.load("glue", name)
-        except Exception:
+            _debug_print(f"  evaluate.load('glue', '{name}')... OK")
+        except Exception as e:
+            _debug_print(f"  evaluate.load('glue', '{name}') FAILED: {e}")
             # Optional local directory for offline metric scripts
             local_metric_dir = (
                 os.environ.get("GLUE_METRIC_DIR")
                 or os.environ.get("HF_EVALUATE_LOCAL_GLUE_DIR")
                 or os.path.join(os.environ.get("HF_EVALUATE_CACHE", os.environ.get("HF_HOME", "")), "eval_metrics", "glue")
             )
+            _debug_print(f"  Trying local_metric_dir: {local_metric_dir}")
             try:
                 if local_metric_dir and os.path.isdir(local_metric_dir):
                     self.metric = evaluate.load(local_metric_dir, name)
-            except Exception:
+                    _debug_print(f"  Local metric loaded OK")
+            except Exception as e2:
+                _debug_print(f"  Local metric also FAILED: {e2}")
                 self.metric = None
         self.eval_all_logits = eval_all_logits
         self.has_test_split = has_test_split
 
         assert self.has_test_split
 
+        _debug_print(f"  Calling super().__init__ (NluDatasetBase)...")
         sep_tok = tokenizer.sep_token or getattr(tokenizer, "eos_token", None) or ""
         super().__init__(tokenizer, path, split, prompt_prefix=prompts[name] + sep_tok,  
                          use_cache=use_cache, **kwargs)
+        _debug_print(f"  super().__init__... OK")
 
         emb_size = 50280
         self.id_to_int_label = np.full(emb_size, self.ignore_index, dtype=int)

@@ -1,10 +1,24 @@
 import json
 import sys
+import datetime
 
+def _debug_print(msg: str):
+    ts = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
+    print(f"[DEBUG][{ts}] [hf.py] {msg}", flush=True)
+
+_debug_print("START importing mamba_ssm_peft/utils/hf.py...")
+
+_debug_print("  Importing torch...")
 import torch
+_debug_print(f"  torch {torch.__version__}... OK")
 
+_debug_print("  Importing transformers.utils (WEIGHTS_NAME, CONFIG_NAME)...")
 from transformers.utils import WEIGHTS_NAME, CONFIG_NAME
+_debug_print("  transformers.utils... OK")
+
+_debug_print("  Importing transformers.utils.hub.cached_file...")
 from transformers.utils.hub import cached_file
+_debug_print("  transformers.utils.hub.cached_file... OK")
 
 # Add flash-linear-attention to path for GLA support
 import sys

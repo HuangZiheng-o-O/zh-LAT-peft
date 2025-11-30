@@ -1,15 +1,41 @@
+import datetime
+import sys
 
+def _debug_print(msg: str):
+    ts = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
+    print(f"[DEBUG][{ts}] [mamba_ssm_peft/__init__] {msg}", flush=True)
 
+_debug_print("START importing mamba_ssm_peft package...")
+
+_debug_print("  Importing mixer_seq_simple.MambaLMHeadModel...")
 from mamba_ssm_peft.models.mixer_seq_simple import MambaLMHeadModel
+_debug_print("  mixer_seq_simple.MambaLMHeadModel... OK")
 
+_debug_print("  Importing torch...")
 import torch
+_debug_print(f"  torch {torch.__version__}... OK")
+
+_debug_print("  Importing json...")
 import json
+_debug_print("  json... OK")
 
+_debug_print("  Importing transformers.AutoTokenizer (may trigger network/cache access)...")
 from transformers import AutoTokenizer
-from pathlib import Path
-from peft import PeftModelForSeq2SeqLM
+_debug_print("  transformers.AutoTokenizer... OK")
 
+_debug_print("  Importing pathlib.Path...")
+from pathlib import Path
+_debug_print("  pathlib.Path... OK")
+
+_debug_print("  Importing peft.PeftModelForSeq2SeqLM...")
+from peft import PeftModelForSeq2SeqLM
+_debug_print("  peft.PeftModelForSeq2SeqLM... OK")
+
+_debug_print("  Importing peft.get_peft_model, PeftConfig...")
 from peft import get_peft_model, PeftConfig
+_debug_print("  peft.get_peft_model, PeftConfig... OK")
+
+_debug_print("DONE importing mamba_ssm_peft package")
 
 
 
