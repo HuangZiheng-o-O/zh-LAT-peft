@@ -27,7 +27,7 @@
 
     # 模式 A：最佳 checkpoint 模式
     conda activate mzsz
-    python /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/aggregate_dart.py \
+    python /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/aggregate_result/aggregate_dart.py \
       --base_dir /home/user/mzs_h/output/benchmark/glue \
       --dataset dart \
       --output /home/user/mzs_h/output/benchmark/glue_agg_dart
@@ -35,7 +35,7 @@
     # 模式 B：固定 step 模式（以 80000 为例）
     conda activate mzsz
     export DART_AGG_STEP=80000
-    python /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/aggregate_dart.py \
+    python /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/aggregate_result/aggregate_dart.py \
       --base_dir /home/user/mzs_h/output/benchmark/glue/dart_seed87 \
       --output /home/user/mzs_h/output/benchmark/glue_agg_dart
 
