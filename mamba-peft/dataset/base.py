@@ -7,6 +7,11 @@ from tqdm import tqdm
 import pickle
 import os
 import time
+import datetime
+
+def _debug_print(msg: str):
+    ts = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
+    print(f"[DEBUG][{ts}] [base.py] {msg}", flush=True)
 
 from utils.parallel_processor_fs import ParallelProcessorFS
 
@@ -21,6 +26,7 @@ class DatasetBase(ABC):
     
     def __init__(self, tokenizer: transformers.AutoTokenizer, path: str, split="train", prompt_prefix=None,
                  use_cache=True, num_parallel_workers=16, subset_size=None, mode="lm", max_seqlen=None):
+        _debug_print(f"DatasetBase.__init__ START: path={path}, split={split}, use_cache={use_cache}, num_parallel_workers={num_parallel_workers}")
         super().__init__()
 
         self.path = path
@@ -37,6 +43,7 @@ class DatasetBase(ABC):
         self.max_seqlen = max_seqlen
         if use_cache:
             cache_file_stem = self.get_cache_name()
+            _debug_print(f"  cache_file_stem = {cache_file_stem}")
 
             if subset_size is not None:
                 cache_file_stem += f"_{subset_size}"
@@ -44,12 +51,18 @@ class DatasetBase(ABC):
             cache_file = Path("data") / path.replace("/", "_") / f"{cache_file_stem}.pkl"
             cache_file.parent.mkdir(parents=True, exist_ok=True)
             lock_file = cache_file.with_suffix(cache_file.suffix + ".lock")
+            _debug_print(f"  cache_file = {cache_file}")
+            _debug_print(f"  lock_file = {lock_file}")
+            _debug_print(f"  cache_file.exists() = {cache_file.exists()}, lock_file.exists() = {lock_file.exists()}")
 
             # Fast-path: cache already exists and no writer lock → just load
             if cache_file.exists() and not lock_file.exists():
+                _debug_print(f"  FAST-PATH: Loading from cache...")
                 with open(cache_file, "rb") as f:
                     self.data = pickle.load(f)
+                _debug_print(f"  FAST-PATH: Loaded {len(self.data)} samples from cache")
             else:
+                _debug_print(f"  SLOW-PATH: Cache miss or locked, need to build data...")
                 # Cooperative lock to prevent multiple processes writing the same cache concurrently
                 got_lock = False
                 try:
@@ -57,17 +70,25 @@ class DatasetBase(ABC):
                     with os.fdopen(fd, "w") as lf:
                         lf.write(f"pid={os.getpid()} time={time.time()}\n")
                     got_lock = True
+                    _debug_print(f"  Acquired lock (pid={os.getpid()})")
                 except FileExistsError:
                     got_lock = False
+                    _debug_print(f"  Lock already held by another process")
 
                 if got_lock:
                     try:
                         if num_parallel_workers > 0:
                             assert subset_size is None
-                            data_ind = list(range(len(self)))
+                            _debug_print(f"  Calling len(self) to get dataset size...")
+                            dataset_len = len(self)
+                            _debug_print(f"  len(self) = {dataset_len}")
+                            data_ind = list(range(dataset_len))
+                            _debug_print(f"  Starting ParallelProcessorFS with {num_parallel_workers} workers...")
                             # ParallelProcessorFS is responsible for atomic writes to cache_file
                             self.data = ParallelProcessorFS(self.preproc, len(data_ind), num_parallel_workers, cache_file).run()
+                            _debug_print(f"  ParallelProcessorFS completed, got {len(self.data)} samples")
                         else:
+                            _debug_print(f"  Sequential processing (num_parallel_workers=0)...")
                             data_ind = list(range(len(self)))
                             if subset_size is not None:
                                 random.Random(0).shuffle(data_ind)
@@ -79,20 +100,30 @@ class DatasetBase(ABC):
                             with open(tmp_file, "wb") as f:
                                 pickle.dump(self.data, f)
                             os.replace(tmp_file, cache_file)
+                            _debug_print(f"  Sequential processing done, got {len(self.data)} samples")
                     finally:
                         # Release lock
                         try:
                             if lock_file.exists():
                                 os.remove(lock_file)
+                                _debug_print(f"  Released lock")
                         except Exception:
                             pass
                 else:
                     # Waiter: spin until cache file materializes (another process is writing it)
+                    _debug_print(f"  WAITER: Spinning until cache file appears (lock held by another process)...")
+                    spin_count = 0
                     while lock_file.exists() or not cache_file.exists():
+                        spin_count += 1
+                        if spin_count % 5 == 0:
+                            _debug_print(f"    Still waiting... (spin_count={spin_count}, lock_exists={lock_file.exists()}, cache_exists={cache_file.exists()})")
                         time.sleep(2)
+                    _debug_print(f"  WAITER: Cache file ready, loading...")
                     with open(cache_file, "rb") as f:
                         self.data = pickle.load(f)
+                    _debug_print(f"  WAITER: Loaded {len(self.data)} samples")
         else:
+            _debug_print(f"  NO-CACHE mode: Building data in-memory...")
             # Build data in-memory without writing cache
             data_ind = list(range(len(self)))
             if subset_size is not None:
@@ -100,6 +131,9 @@ class DatasetBase(ABC):
                 data_ind = data_ind[:subset_size]
             self.data = [self.preproc(idx) for idx in tqdm(data_ind)]
             self.data = [d for d in self.data if d is not None]
+            _debug_print(f"  NO-CACHE mode: Built {len(self.data)} samples")
+        
+        _debug_print(f"DatasetBase.__init__ DONE")
 
     def _ensure_materialized(self):
         """Lazily load/build self.data if it is None (e.g., after unpickling in a different context)."""

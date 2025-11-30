@@ -131,7 +131,13 @@ class GlueDataset(NluDatasetBase):
             self.choice_ids.append(tokenizer.vocab[str(i)])
 
     def __len__(self):
-        return len(self.data) if self.data is not None else len(self.get_hf_dataset())
+        _debug_print(f"  __len__ called: data is {'None' if self.data is None else f'loaded ({len(self.data)} samples)'}")
+        if self.data is not None:
+            return len(self.data)
+        _debug_print(f"  __len__: data is None, calling get_hf_dataset()...")
+        hf_ds = self.get_hf_dataset()
+        _debug_print(f"  __len__: get_hf_dataset() returned {len(hf_ds)} samples")
+        return len(hf_ds)
     
     def get_cache_name(self):
         name = self.name
@@ -142,16 +148,22 @@ class GlueDataset(NluDatasetBase):
         return f"cache_{name}_{self.split}"
 
     def _load_dataset(self, split):
+        _debug_print(f"  _load_dataset START: name={self.name}, split={split}, path={self.path}")
         if self.name == "mnli" and split == "val":
+            _debug_print(f"    MNLI special case: loading mnli_matched + mnli_mismatched...")
             hf_dataset = concatenate_datasets([
                 load_dataset(self.path, "mnli_matched", trust_remote_code=True)["validation"],
                 load_dataset(self.path, "mnli_mismatched", trust_remote_code=True)["validation"],
             ])
+            _debug_print(f"    MNLI concatenated OK")
         else:
             target_split = {"train": "train", "val": "validation", "test": "test"}[split]
+            _debug_print(f"    Calling load_dataset('{self.path}', '{self.name}')['{target_split}']...")
             try:
                 hf_dataset = load_dataset(self.path, self.name, trust_remote_code=True)[target_split]
-            except Exception:
+                _debug_print(f"    load_dataset OK, got {len(hf_dataset)} samples")
+            except Exception as e:
+                _debug_print(f"    load_dataset FAILED: {e}")
                 # Offline fallback: try local or alternative ids/paths
                 fallback_candidates = [
                     os.environ.get("GLUE_DATASET_PATH"),  # explicit local dir
@@ -162,33 +174,44 @@ class GlueDataset(NluDatasetBase):
                 for cand in fallback_candidates:
                     if not cand:
                         continue
+                    _debug_print(f"    Trying fallback: {cand}")
                     try:
                         hf_dataset = load_dataset(cand, self.name, trust_remote_code=True)[target_split]
+                        _debug_print(f"    Fallback {cand} OK")
                         break
                     except Exception as e:
+                        _debug_print(f"    Fallback {cand} FAILED: {e}")
                         last_err = e
                         hf_dataset = None
                 if hf_dataset is None:
                     raise last_err if last_err is not None else RuntimeError("Failed to load GLUE dataset (offline and no local fallback)")
 
+        _debug_print(f"  _load_dataset DONE")
         return hf_dataset
 
     def load_hf_dataset_split(self):
+        _debug_print(f"  load_hf_dataset_split START: split={self.split}, has_test_split={self.has_test_split}")
         assert self.has_test_split
 
         if self.split == "test":
+            _debug_print(f"    split='test' -> calling _load_dataset('val')")
             return self._load_dataset("val")
         else:
             # prefix, split, *seed_id = self.split.split("-")
             # assert prefix == "train"
             # assert len(seed_id) == 0
+            _debug_print(f"    split='{self.split}' -> calling _load_dataset('train')")
             data = self._load_dataset("train")
-            return data.train_test_split(test_size=0.2, seed=self.shuffle_seeds[0])[{"train": "train", "val": "test"}[self.split]]
+            _debug_print(f"    Calling train_test_split(test_size=0.2)...")
+            result = data.train_test_split(test_size=0.2, seed=self.shuffle_seeds[0])[{"train": "train", "val": "test"}[self.split]]
+            _debug_print(f"    train_test_split DONE, got {len(result)} samples")
+            return result
 
     def get_hf_dataset(self):
+        _debug_print(f"  get_hf_dataset START: hf_dataset is {'None' if self.hf_dataset is None else 'already loaded'}")
         if self.hf_dataset is None:
             self.hf_dataset = self.load_hf_dataset_split()
-
+        _debug_print(f"  get_hf_dataset DONE")
         return self.hf_dataset
 
     def get_input_label(self, idx):
