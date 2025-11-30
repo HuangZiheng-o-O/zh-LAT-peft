@@ -132,16 +132,37 @@ def build_and_run_trainer_gla_only(
         yaml.safe_dump(cfg, f)
 
     # 构造生成式评估 decoder（GLA HF-native）
+    # 支持 beam search（通过 use_cache=False 实现，因为 FLA Cache 不支持 reorder_cache）
     eval_generator = None
     if eval_gen is not None:
         _eval = dict(eval_gen)
-        max_length = int(_eval.get("max_length", 1024))
+        max_length = int(_eval.get("max_length", 128))  # 合理默认值
         min_length = int(_eval.get("min_length", 5))
+        # num_beams: 从 eval_gen 配置或环境变量获取
+        # 对于 DART 等 data-to-text 任务，beam search (4-5) 是标准配置
+        num_beams = _eval.get("num_beams", None)
+        if num_beams is None:
+            # 环境变量优先级最高
+            _nb_env = os.environ.get("EVAL_GEN_NUM_BEAMS")
+            if _nb_env is not None and _nb_env != "":
+                try:
+                    num_beams = int(_nb_env)
+                except ValueError:
+                    pass
+        # 其他可选参数
+        length_penalty = float(_eval.get("length_penalty", 1.0))
+        no_repeat_ngram_size = int(_eval.get("no_repeat_ngram_size", 0))
+        early_stopping = _eval.get("early_stopping", True)
+        
         eval_generator = create_gla_decoder(
             tokenizer,
             max_length=max_length,
             min_length=min_length,
+            num_beams=num_beams,
             do_sample=False,
+            length_penalty=length_penalty,
+            no_repeat_ngram_size=no_repeat_ngram_size,
+            early_stopping=early_stopping,
         )
 
     # 验证/评估 data module：生成任务用 "gen" 模式，否则 "lm"
@@ -655,7 +676,9 @@ def main():
     if eval_bs_env is not None and eval_bs_env > 0:
         cfg["eval_batch_size"] = eval_bs_env
 
-    # eval_gen 自动注入：保持与旧 train.py 一致（生成任务 + EVAL_GEN）
+    # eval_gen 自动注入：为生成任务配置合理的默认值
+    # - DART/SamSum: beam search (num_beams=4) 显著提升 BLEU/METEOR
+    # - Spider: greedy decoding（SQL 生成不需要 beam search）
     def _truthy(x: Optional[str]) -> bool:
         if x is None:
             return False
@@ -671,12 +694,38 @@ def main():
     )
     force_eval_gen = _truthy(env.get("EVAL_GEN"))
     if (cfg.get("eval_gen") is None) and (is_gen_task or force_eval_gen):
-        max_len = _maybe(env.get("EVAL_GEN_MAX_LENGTH"), int) or 1024
+        # 默认值：针对任务类型优化
+        max_len = _maybe(env.get("EVAL_GEN_MAX_LENGTH"), int) or 128
         min_len = _maybe(env.get("EVAL_GEN_MIN_LENGTH"), int) or 5
+        num_beams = _maybe(env.get("EVAL_GEN_NUM_BEAMS"), int)
+        
+        # 任务特定的解码策略
+        if num_beams is None:
+            if data_name.startswith("dart"):
+                num_beams = 4  # DART: beam search 显著提升 BLEU/METEOR
+            elif data_name.startswith("samsum"):
+                num_beams = 4  # SamSum: 摘要任务受益于 beam search
+            elif data_name.startswith("spider"):
+                num_beams = 1  # Spider: SQL 生成使用 greedy（更精确）
+            # 其他任务默认 greedy
+            
+        # 如果 num_beams == 1，使用 greedy
+        if num_beams == 1:
+            num_beams = None  # None 表示 greedy
+            
         cfg["eval_gen"] = {
             "max_length": int(max_len),
             "min_length": int(min_len),
         }
+        if num_beams is not None and num_beams > 1:
+            cfg["eval_gen"]["num_beams"] = num_beams
+            # Beam search 常用配置
+            cfg["eval_gen"]["length_penalty"] = float(env.get("EVAL_GEN_LENGTH_PENALTY") or 1.0)
+            cfg["eval_gen"]["no_repeat_ngram_size"] = int(env.get("EVAL_GEN_NO_REPEAT_NGRAM") or 3)
+            cfg["eval_gen"]["early_stopping"] = True
+            print(f"[GLA] Auto-configured beam search for {data_name}: num_beams={num_beams}")
+        else:
+            print(f"[GLA] Using greedy decoding for {data_name}")
 
     # 输出目录与旧 get_output_path_for_cfg 完全一致
     output_dir = get_output_path_for_cfg(args.cfg, cfg)
