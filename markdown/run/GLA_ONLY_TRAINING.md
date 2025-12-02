@@ -532,7 +532,7 @@ export WANDB_DIR=/mnt/data4/user_cache/wandb
 
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
-
+# chmod +x *.sh
 # 离线/本地资源（可选）
 #export GLUE_DATASET_ID=nyu-mll/glue
 #export GLUE_METRIC_DIR=/home/user/mzs_h/data/hf_cache/eval_metrics/glue
@@ -578,12 +578,15 @@ export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 ./gla_batch_tmux_clean_multidata.sh \
-  --suite E158 \
+  --suite E15 \
   --round 1 \
-  --pairs "87:glue-tvt_cola 87:glue-tvt_rte 87:glue-tvt_mnli 87:glue-tvt_qnli 87:glue-tvt_sst2 87:glue-tvt_mrpc 87:glue-tvt_qqp" \
+  --pairs "87:glue-tvt_sst2 87:glue-tvt_qqp 87:glue-tvt_mnli" \
   --gpus "0 1 2 3 4 5 6" \
-  --name glue_multidata_e158
+  --name glue_multidata_e15
 
+#87:glue-tvt_cola 87:glue-tvt_rte  87:glue-tvt_mrpc  87:glue-tvt_qnli 
+# 87:
+# 87:
 ```
 
 没有
@@ -850,7 +853,7 @@ export TRANSFORMERS_VERBOSITY=error
 # SwanLab（可选）
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="gla-glue-tvt_qnli-4090"
+export SWANLAB_PROJECT="gla-glue-tvt_qnli-2-4090-Dec2"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
