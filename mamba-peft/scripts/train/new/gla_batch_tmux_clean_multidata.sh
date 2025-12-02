@@ -275,6 +275,6 @@ tmux new-session -s "$SESSION_NAME" "cd \"$SCRIPT_DIR\"; $CMD"
 echo ""
 echo "tmux session '$SESSION_NAME' has finished or been detached."
 echo "Master log is at: $MASTER_LOG"
-echo "tail -n 50 $MASTER_LOG"
+echo "tail -n 200 $MASTER_LOG"
 
 
