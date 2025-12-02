@@ -1,10 +1,10 @@
 
-
 from multiprocessing import Process, Value
 from pathlib import Path
 import pickle
 from tqdm import tqdm
 import os
+import time
 
 
 class ParallelProcessorFS:
@@ -22,8 +22,13 @@ class ParallelProcessorFS:
     def _worker(self, worker_idx, counter):
         out = {}
 
-        pbar = tqdm(total=self.size, desc="Parallel processing") if worker_idx == 0 else None
+        pbar = tqdm(total=self.size, desc="Parallel processing", position=0) if worker_idx == 0 else None
         idx_last = 0
+        processed_count = 0
+        start_time = time.time()
+
+        # Debug: first call timing
+        first_call_logged = False
 
         while True:
             with counter.get_lock():
@@ -35,7 +40,20 @@ class ParallelProcessorFS:
                 counter.value += 1
 
             try:
+                t0 = time.time()
                 out[idx] = self.func(idx)
+                elapsed = time.time() - t0
+                processed_count += 1
+                
+                # Log first call and every 1000 samples for worker 0
+                if not first_call_logged:
+                    print(f"[Worker {worker_idx}] First sample processed in {elapsed:.3f}s", flush=True)
+                    first_call_logged = True
+                elif worker_idx == 0 and processed_count % 5000 == 0:
+                    total_elapsed = time.time() - start_time
+                    rate = processed_count / total_elapsed if total_elapsed > 0 else 0
+                    print(f"[Worker 0] Processed {processed_count} samples, rate={rate:.1f} samples/s", flush=True)
+                    
             except Exception as e:
                 print(f"[Worker {worker_idx}] Error processing idx={idx}: {type(e).__name__}: {e}")
                 import traceback
@@ -48,6 +66,10 @@ class ParallelProcessorFS:
 
         if pbar is not None:
             pbar.close()
+        
+        total_elapsed = time.time() - start_time
+        rate = processed_count / total_elapsed if total_elapsed > 0 else 0
+        print(f"[Worker {worker_idx}] Done: {processed_count} samples in {total_elapsed:.1f}s ({rate:.1f} samples/s)", flush=True)
         # Atomic write: write to tmp then replace
         final_path = self.worker_files[worker_idx]
         tmp_path = final_path.with_name(f"{final_path.name}.tmp.{os.getpid()}")

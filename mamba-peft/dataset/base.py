@@ -83,6 +83,12 @@ class DatasetBase(ABC):
                             dataset_len = len(self)
                             _debug_print(f"  len(self) = {dataset_len}")
                             data_ind = list(range(dataset_len))
+                            
+                            # Pre-materialize data for efficient parallel processing (if supported)
+                            if hasattr(self, 'materialize_for_parallel'):
+                                _debug_print(f"  Calling materialize_for_parallel() for efficient worker access...")
+                                self.materialize_for_parallel()
+                            
                             _debug_print(f"  Starting ParallelProcessorFS with {num_parallel_workers} workers...")
                             # ParallelProcessorFS is responsible for atomic writes to cache_file
                             self.data = ParallelProcessorFS(self.preproc, len(data_ind), num_parallel_workers, cache_file).run()
@@ -125,7 +131,52 @@ class DatasetBase(ABC):
                                     _debug_print(f"  STALE LOCK DETECTED: lock is {lock_age:.0f}s old (>{max_lock_age_seconds}s), removing...")
                                     os.remove(lock_file)
                                     _debug_print(f"  Stale lock removed, will try to acquire lock on next iteration")
-                                    # Don't break here; let the loop re-check and potentially acquire lock
+                                    # Try to acquire the lock ourselves and build the cache to unblock waiters
+                                    try:
+                                        fd2 = os.open(str(lock_file), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                                        with os.fdopen(fd2, "w") as lf2:
+                                            lf2.write(f"pid={os.getpid()} time={time.time()}\n")
+                                        _debug_print(f"  WAITER: Acquired lock after stale removal (pid={os.getpid()}), building cache...")
+                                        try:
+                                            if num_parallel_workers > 0:
+                                                assert subset_size is None
+                                                _debug_print(f"  WAITER: Calling len(self) to get dataset size...")
+                                                dataset_len = len(self)
+                                                _debug_print(f"  WAITER: len(self) = {dataset_len}")
+                                                data_ind = list(range(dataset_len))
+                                                # Pre-materialize if supported for better parallel perf
+                                                if hasattr(self, 'materialize_for_parallel'):
+                                                    _debug_print(f"  WAITER: Calling materialize_for_parallel()...")
+                                                    self.materialize_for_parallel()
+                                                _debug_print(f"  WAITER: Starting ParallelProcessorFS with {num_parallel_workers} workers...")
+                                                self.data = ParallelProcessorFS(self.preproc, len(data_ind), num_parallel_workers, cache_file).run()
+                                                _debug_print(f"  WAITER: ParallelProcessorFS completed, got {len(self.data)} samples")
+                                            else:
+                                                _debug_print(f"  WAITER: Sequential processing (num_parallel_workers=0)...")
+                                                data_ind = list(range(len(self)))
+                                                if subset_size is not None:
+                                                    random.Random(0).shuffle(data_ind)
+                                                    data_ind = data_ind[:subset_size]
+                                                self.data = [self.preproc(idx) for idx in tqdm(data_ind)]
+                                                self.data = [d for d in self.data if d is not None]
+                                                # Atomic write final cache
+                                                tmp_file = cache_file.with_suffix(cache_file.suffix + ".tmp")
+                                                with open(tmp_file, "wb") as f:
+                                                    pickle.dump(self.data, f)
+                                                os.replace(tmp_file, cache_file)
+                                                _debug_print(f"  WAITER: Sequential processing done, got {len(self.data)} samples")
+                                        finally:
+                                            try:
+                                                if lock_file.exists():
+                                                    os.remove(lock_file)
+                                                    _debug_print(f"  WAITER: Released lock after building cache")
+                                            except Exception:
+                                                pass
+                                        # After building the cache ourselves, break out of wait loop
+                                        break
+                                    except FileExistsError:
+                                        # Another process acquired the lock first; keep waiting
+                                        pass
                             except Exception as e:
                                 _debug_print(f"  Error checking lock age: {e}")
                         if spin_count % 5 == 0:

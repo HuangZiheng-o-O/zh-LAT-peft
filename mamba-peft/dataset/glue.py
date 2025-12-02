@@ -205,21 +205,61 @@ class GlueDataset(NluDatasetBase):
 
     def get_hf_dataset(self):
         if self.hf_dataset is None:
+            import os
+            _debug_print(f"  get_hf_dataset: hf_dataset is None, loading... (pid={os.getpid()})")
             self.hf_dataset = self.load_hf_dataset_split()
+            _debug_print(f"  get_hf_dataset: loaded {len(self.hf_dataset)} samples (pid={os.getpid()})")
         return self.hf_dataset
+    
+    def materialize_for_parallel(self):
+        """Pre-materialize HF dataset columns as Python lists for efficient parallel processing.
+        
+        HuggingFace datasets use memory-mapped files which can cause issues when forking
+        to worker processes. This method converts the relevant columns to plain Python lists.
+        """
+        hf_ds = self.get_hf_dataset()
+        key1, key2 = task_to_keys[self.name]
+        
+        _debug_print(f"  materialize_for_parallel: Converting columns to lists...")
+        # Convert to plain Python lists for efficient pickling/forking
+        self._materialized_data = {
+            key1: list(hf_ds[key1]),
+            "label": list(hf_ds["label"]),
+        }
+        if key2 is not None:
+            self._materialized_data[key2] = list(hf_ds[key2])
+        _debug_print(f"  materialize_for_parallel: Done, {len(self._materialized_data[key1])} samples")
+    
+    def get_input_label_fast(self, idx):
+        """Fast version of get_input_label using pre-materialized data."""
+        key1, key2 = task_to_keys[self.name]
+        
+        input = self._materialized_data[key1][idx]
+        
+        if key2 is not None:
+            sep = getattr(self.tokenizer, "sep_token", None) or getattr(self.tokenizer, "eos_token", None) or ""
+            input = input + sep + self._materialized_data[key2][idx]
+        
+        label = self._materialized_data["label"][idx]
+        
+        return input, label
 
     def get_input_label(self, idx):
-        self.get_hf_dataset()
+        # Use fast path if data has been materialized for parallel processing
+        if hasattr(self, '_materialized_data') and self._materialized_data is not None:
+            return self.get_input_label_fast(idx)
+        
+        hf_ds = self.get_hf_dataset()
 
         key1, key2 = task_to_keys[self.name]
 
-        input = self.hf_dataset[key1][idx]
+        input = hf_ds[key1][idx]
 
         if key2 is not None:
             sep = getattr(self.tokenizer, "sep_token", None) or getattr(self.tokenizer, "eos_token", None) or ""
-            input = input + sep + self.hf_dataset[key2][idx]
+            input = input + sep + hf_ds[key2][idx]
 
-        label = self.hf_dataset["label"][idx]
+        label = hf_ds["label"][idx]
 
         return input, label
     
