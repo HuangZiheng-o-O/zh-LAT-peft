@@ -264,6 +264,8 @@ class GlueDataset(NluDatasetBase):
         return input, label
     
     def compute_metrics(self, eval_preds):
+        # Some batches may contain padding labels (-100). Filter them out to avoid sklearn
+        # complaining about "multiclass with average='binary'" when spurious values leak in.
         if self.eval_all_logits:
             references = np.concatenate(eval_preds.label_ids)
             predictions = np.concatenate(eval_preds.predictions).argmax(-1)
@@ -271,7 +273,7 @@ class GlueDataset(NluDatasetBase):
             references_int = self.id_to_int_label[references]
             predictions_int = self.id_to_int_label[predictions]
 
-            valid = predictions_int != self.ignore_index
+            valid = (predictions_int != self.ignore_index) & (references_int != self.ignore_index)
             references_int_valid = references_int[valid]
             predictions_int_valid = predictions_int[valid]
             if self.metric is not None:
@@ -279,13 +281,18 @@ class GlueDataset(NluDatasetBase):
             else:
                 res = _compute_glue_metrics_local(self.name, predictions_int_valid, references_int_valid)
 
-            res = {**res, "out_of_cls": np.sum(~valid)}
+            res = {**res, "out_of_cls": int(np.sum(~valid))}
         else:
             references = np.concatenate(eval_preds.label_ids)
             predictions = np.concatenate(eval_preds.predictions)  # .argmax(-1)
 
-            references_ind = np.array([self.choice_ids.index(r) for r in references])
-            predictions_ind = predictions[:, self.choice_ids].argmax(1)
+            # Filter out padding labels as well
+            valid = references != self.ignore_index
+            references_valid = references[valid]
+            predictions_valid = predictions[valid]
+
+            references_ind = np.array([self.choice_ids.index(r) for r in references_valid])
+            predictions_ind = predictions_valid[:, self.choice_ids].argmax(1)
             if self.metric is not None:
                 res = self.metric.compute(predictions=predictions_ind, references=references_ind)
             else:
