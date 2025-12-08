@@ -533,7 +533,8 @@ for _k in \
   HP_PEFT_R HP_PEFT_ALPHA HP_PEFT_DROPOUT HP_INIT HP_PISSA_FAST \
   HP_MAX_STEPS HP_EVAL_STEPS HP_SAVE_STEPS HP_LOGGING_STEPS \
   HP_LORAGA_BATCH_SIZE HP_LORAGA_STEPS HP_LORAGA_LAYERWISE HP_LORAGA_STABLE_C \
-  LR_SCHEDULER_TYPE LR_WARMUP_STEPS LR_WARMUP_RATIO
+  LR_SCHEDULER_TYPE LR_WARMUP_STEPS LR_WARMUP_RATIO \
+  GLA_LAUNCH_STAGGER_MINUTES
 do
   v="${!_k-}"
   if [[ -n "${v:-}" ]]; then
@@ -813,6 +814,11 @@ run_round () {
   # Make a temp dir for this round's YAML copies with injected data
   local TMP_CFG_DIR
   TMP_CFG_DIR="$(mktemp -d /tmp/gla_data_XXXXXX)"
+  local _stagger_min="${GLA_LAUNCH_STAGGER_MINUTES:-0}"
+  # normalize to integer minutes if possible; non-numeric -> 0
+  if ! [[ "${_stagger_min}" =~ ^[0-9]+$ ]]; then
+    _stagger_min=0
+  fi
   for i in "${!RESOLVED_CFGS[@]}"; do
     local CFG="${RESOLVED_CFGS[$i]}"
     # choose slot by index cycling when fewer jobs than slots
@@ -821,6 +827,13 @@ run_round () {
     local CFG_INJ
     CFG_INJ="$(make_tmp_cfg_with_data "$CFG" "$TMP_CFG_DIR")"
     echo "[GPU ${GPU}] ${CFG_INJ}  (HP_SEED=${FORCE_SEED}; data=${DATA}; ignoring seed in name/YAML)"
+    if (( _stagger_min > 0 )); then
+      local _delay_sec=$(( _stagger_min * 60 * i ))
+      if (( _delay_sec > 0 )); then
+        echo "[GPU ${GPU}] delaying launch by ${_delay_sec}s (stagger ${_stagger_min} min per job)"
+        sleep "${_delay_sec}"
+      fi
+    fi
     HP_SEED=${FORCE_SEED} CUDA_VISIBLE_DEVICES="$GPU" \
       python "$LAUNCHER_PY" --cfg "$CFG_INJ" --overwrite &
     PIDS+=("$!")

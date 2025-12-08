@@ -144,6 +144,8 @@ HDR
   printf 'export EVAL_GEN_MAX_LENGTH=%q\n' "${EVAL_GEN_MAX_LENGTH:-}"
   printf 'export EVAL_GEN_MIN_LENGTH=%q\n' "${EVAL_GEN_MIN_LENGTH:-}"
   printf 'export EVAL_GEN_NUM_BEAMS=%q\n' "${EVAL_GEN_NUM_BEAMS:-}"
+  # Optional launch staggering (minutes between job starts)
+  printf 'export GLA_LAUNCH_STAGGER_MINUTES=%q\n' "${GLA_LAUNCH_STAGGER_MINUTES:-}"
   # Other common env vars
   printf 'export GRADIENT_CHECKPOINTING=%q\n' "${GRADIENT_CHECKPOINTING:-}"
   printf 'export LOGITS_TO_KEEP=%q\n' "${LOGITS_TO_KEEP:-}"
