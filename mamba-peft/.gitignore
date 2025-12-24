@@ -29,3 +29,4 @@ checkpoint-*
 # Sensitive email notifier secrets (keep example only)
 /dangerous/*.yaml
 !/dangerous/email_notify.example.yaml
+/cfg/my_lora_exp/yaml_with batch size.zip
