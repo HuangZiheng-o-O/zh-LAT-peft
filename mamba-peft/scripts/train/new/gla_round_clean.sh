@@ -487,7 +487,6 @@ cleanup() {
 trap cleanup INT TERM
 
 ROUND="${1:-1}"        # first arg kept for backward compat/docs; may be number or 'all'
-SEED="${SEED:-42}"     # informational only (NOT used for training)
 FORCE_SEED=87         # actual seed used in training (HP_SEED). Ignore any seed elsewhere. FORCE_SEED=127 确实能够全局控制随机性，确保所有实验（除了数据集shuffle的固定种子外）都在相同的随机种子下运行。13 21 42 87 127
 DATA="${DATA:-glue-tvt_cola}"  # injected dataset name (can override via env: DATA=AAA)
 
@@ -528,7 +527,6 @@ for _k in \
   LOGITS_TO_KEEP \
   NUM_DATA_WORKERS \
   FORCE_SEED \
-  SEED \
   HP_DATA HP_BATCH_SIZE HP_LR HP_EPOCHS HP_EVAL_BATCH_SIZE HP_PREC HP_SEED \
   HP_PEFT_R HP_PEFT_ALPHA HP_PEFT_DROPOUT HP_INIT HP_PISSA_FAST \
   HP_MAX_STEPS HP_EVAL_STEPS HP_SAVE_STEPS HP_LOGGING_STEPS \
