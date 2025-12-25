@@ -201,6 +201,12 @@ class GenericLMTrainer(Trainer):
         return (lm_loss, logits_valid, label_ids_valid)
 
     def generation_step(self, generator, model, inputs):
+        """
+        Run generation for a single batch.
+
+        IMPORTANT: Inputs from dataloader are on CPU by default.
+        We must move them to the model's device before generation.
+        """
         if inputs is None:
             return ([], [])
         input_ids = inputs.get("input_ids") if isinstance(inputs, dict) else None
@@ -208,6 +214,15 @@ class GenericLMTrainer(Trainer):
         attention_mask = inputs.get("attention_mask") if isinstance(inputs, dict) else None
         if input_ids is None or label_ids is None:
             return ([], [])
+
+        # Move inputs to model device (critical for generation!)
+        # DataLoader returns CPU tensors; model is typically on GPU
+        device = next(model.parameters()).device
+        input_ids = input_ids.to(device)
+        if attention_mask is not None:
+            attention_mask = attention_mask.to(device)
+        # label_ids stays on CPU - only used for comparison after generation
+
         out_seq = generator(model, input_ids, attention_mask=attention_mask)
         if hasattr(out_seq, "sequences"):
             out_seq = out_seq.sequences
@@ -215,6 +230,11 @@ class GenericLMTrainer(Trainer):
             out_seq = out_seq.unsqueeze(0)
         if label_ids.dim() == 1:
             label_ids = label_ids.unsqueeze(0)
+
+        # Move generated sequences back to CPU for downstream processing
+        # This ensures consistent device handling in EvalPredictionWithText
+        out_seq = out_seq.cpu()
+
         pred_list = [row for row in out_seq]
         label_list = [row for row in label_ids]
         return (pred_list, label_list)
