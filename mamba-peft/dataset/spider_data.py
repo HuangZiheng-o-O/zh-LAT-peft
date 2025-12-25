@@ -1,3 +1,22 @@
+"""
+Spider Dataset for Text-to-SQL generation tasks.
+
+Cache Format (v2):
+    Each cached sample is a tuple: ((input_ids, label_ids), meta)
+    where meta = {"db_id": str, "query": str}
+
+Cache Versioning:
+    - SPIDER_CACHE_VERSION is embedded in cache filename
+    - When format changes, increment version to auto-invalidate old caches
+    - Old caches with different versions are automatically ignored
+
+Backward Compatibility:
+    - If an old cache (v1 format without meta) is loaded, the code will:
+      1. Detect the format mismatch
+      2. Attempt to rebuild meta from HF dataset
+      3. If rebuild fails, provide clear error with remediation steps
+"""
+
 from pathlib import Path
 import os
 import requests
@@ -13,7 +32,21 @@ from .base import NlgDatasetBase
 import json
 import numpy as np
 import pandas as pd
-from typing import List, Dict
+from typing import List, Dict, Optional, Tuple, Any
+import warnings
+
+# Cache format version - increment when cache structure changes
+# v1: (input_ids, label_ids) - no metadata
+# v2: ((input_ids, label_ids), {"db_id": str, "query": str}) - with metadata
+SPIDER_CACHE_VERSION = "v2"
+
+
+def _spider_debug_print(msg: str):
+    """Debug logging for Spider dataset operations."""
+    import datetime
+    if os.environ.get("SPIDER_DEBUG", "0").lower() in ("1", "true", "yes", "on"):
+        ts = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
+        print(f"[DEBUG][{ts}] [spider_data.py] {msg}", flush=True)
 
 
 class SpiderDataset(NlgDatasetBase):
@@ -83,12 +116,20 @@ class SpiderDataset(NlgDatasetBase):
         return Evaluator.eval_hardness(None, sql_proc)
     
     def get_cache_name(self):
+        """
+        Generate cache filename with version identifier.
+
+        Format: cache_{path}_{split}_seqlen{max_seqlen}_{version}[_hardness]
+
+        The version suffix ensures old caches are automatically invalidated
+        when the cache format changes (e.g., adding metadata fields).
+        """
         name = self.path.replace('/', '_')
 
         if self.has_test_split:
             name += "-tvt"
 
-        name = f"cache_{name}_{self.split}_seqlen{self.max_seqlen}"
+        name = f"cache_{name}_{self.split}_seqlen{self.max_seqlen}_{SPIDER_CACHE_VERSION}"
 
         if self.hardness is not None:
             name += "_" + "_".join(self.hardness)
@@ -241,38 +282,257 @@ class SpiderDataset(NlgDatasetBase):
         }
         return inputs_labels, meta
     
-    def get_ids(self, idx):
-        return self.data[idx][0]
+    def _detect_cache_format(self) -> str:
+        """
+        Detect the format of loaded cache data.
 
-    def get_db_id(self, idx):
-        return self.data[idx][1]["db_id"]
+        Returns:
+            "v2": New format with metadata - ((input_ids, label_ids), {"db_id": ..., "query": ...})
+            "v1": Old format without metadata - (input_ids, label_ids)
+            "unknown": Unrecognized format
+        """
+        if not self.data or len(self.data) == 0:
+            return "unknown"
+
+        sample = self.data[0]
+
+        # v2 format: ((input_ids, label_ids), meta_dict)
+        if (isinstance(sample, (tuple, list)) and len(sample) == 2 and
+            isinstance(sample[0], (tuple, list)) and len(sample[0]) == 2 and
+            isinstance(sample[1], dict) and "query" in sample[1] and "db_id" in sample[1]):
+            return "v2"
+
+        # v1 format: (input_ids, label_ids) - tensors directly
+        if (isinstance(sample, (tuple, list)) and len(sample) == 2 and
+            hasattr(sample[0], 'shape') and hasattr(sample[1], 'shape')):
+            return "v1"
+
+        return "unknown"
+
+    def _migrate_cache_v1_to_v2(self) -> bool:
+        """
+        Attempt to migrate v1 cache format to v2 by rebuilding metadata from HF dataset.
+
+        This is a best-effort migration that:
+        1. Loads the HF dataset
+        2. Matches each cached sample to its original index
+        3. Attaches the metadata (db_id, query)
+
+        Returns:
+            True if migration succeeded, False otherwise
+
+        Note:
+            This assumes cache order matches HF dataset order, which is true if
+            the cache was built sequentially without shuffling.
+        """
+        _spider_debug_print("Attempting to migrate v1 cache to v2 format...")
+
+        try:
+            hf_ds, _ = self.get_hf_dataset()
+            hf_len = len(hf_ds)
+            cache_len = len(self.data)
+
+            if cache_len > hf_len:
+                _spider_debug_print(f"Cache length ({cache_len}) > HF dataset length ({hf_len}), cannot migrate")
+                return False
+
+            migrated_data = []
+            for i, sample in enumerate(self.data):
+                if i >= hf_len:
+                    _spider_debug_print(f"Index {i} out of bounds for HF dataset, stopping migration")
+                    break
+
+                # Extract input_ids, label_ids from v1 format
+                input_ids, label_ids = sample
+
+                # Build metadata from HF dataset
+                meta = {
+                    "db_id": hf_ds["db_id"][i],
+                    "query": str(hf_ds["query"][i]).lower().strip(),
+                }
+
+                migrated_data.append(((input_ids, label_ids), meta))
+
+            self.data = migrated_data
+            self._cache_migrated = True
+            _spider_debug_print(f"Successfully migrated {len(migrated_data)} samples to v2 format")
+
+            # Warn user about the migration
+            warnings.warn(
+                f"[SpiderDataset] Migrated {len(migrated_data)} samples from v1 to v2 cache format in memory. "
+                f"For best performance, delete old cache files and let them rebuild. "
+                f"Old cache pattern: cache_*_seqlen*[^v].pkl (without version suffix)",
+                UserWarning
+            )
+            return True
+
+        except Exception as e:
+            _spider_debug_print(f"Migration failed: {e}")
+            return False
+
+    def _validate_and_migrate_cache(self):
+        """
+        Validate cache format and attempt migration if needed.
+
+        Called after cache is loaded to ensure data is in the expected format.
+        """
+        if self.data is None or len(self.data) == 0:
+            return
+
+        # Skip if already validated/migrated
+        if getattr(self, '_cache_validated', False):
+            return
+
+        cache_format = self._detect_cache_format()
+        _spider_debug_print(f"Detected cache format: {cache_format}")
+
+        if cache_format == "v2":
+            # Already in correct format
+            self._cache_validated = True
+            return
+
+        if cache_format == "v1":
+            # Try to migrate
+            if self._migrate_cache_v1_to_v2():
+                self._cache_validated = True
+                return
+            else:
+                # Migration failed, will rely on fallback in compute_metrics
+                _spider_debug_print("Migration failed, will use fallback in compute_metrics")
+                self._cache_validated = True
+                return
+
+        # Unknown format - log warning but continue
+        _spider_debug_print(f"Unknown cache format, proceeding with caution")
+        self._cache_validated = True
+
+    def get_ids(self, idx):
+        """
+        Get (input_ids, label_ids) for a sample.
+
+        Handles both v1 and v2 cache formats gracefully.
+        """
+        # Ensure cache is validated/migrated
+        if not getattr(self, '_cache_validated', False):
+            self._validate_and_migrate_cache()
+
+        sample = self.data[idx]
+
+        # v2 format: ((input_ids, label_ids), meta)
+        if (isinstance(sample, (tuple, list)) and len(sample) == 2 and
+            isinstance(sample[0], (tuple, list)) and len(sample[0]) == 2):
+            return sample[0]
+
+        # v1 format or fallback: (input_ids, label_ids)
+        return sample
+
+    def get_meta(self, idx) -> Optional[Dict[str, str]]:
+        """
+        Get metadata for a sample if available.
+
+        Returns:
+            {"db_id": str, "query": str} if available, None otherwise
+        """
+        if not getattr(self, '_cache_validated', False):
+            self._validate_and_migrate_cache()
+
+        sample = self.data[idx]
+
+        # v2 format: ((input_ids, label_ids), meta)
+        if (isinstance(sample, (tuple, list)) and len(sample) == 2 and
+            isinstance(sample[1], dict)):
+            return sample[1]
+
+        return None
+
+    def get_db_id(self, idx) -> Optional[str]:
+        """Get db_id for a sample, with fallback to HF dataset."""
+        meta = self.get_meta(idx)
+        if meta and "db_id" in meta:
+            return meta["db_id"]
+
+        # Fallback: try to get from HF dataset
+        try:
+            hf_ds, _ = self.get_hf_dataset()
+            if idx < len(hf_ds):
+                return hf_ds["db_id"][idx]
+        except Exception:
+            pass
+
+        return None
+
+    def get_query(self, idx) -> Optional[str]:
+        """Get ground truth query for a sample, with fallback to HF dataset."""
+        meta = self.get_meta(idx)
+        if meta and "query" in meta:
+            return meta["query"]
+
+        # Fallback: try to get from HF dataset
+        try:
+            hf_ds, _ = self.get_hf_dataset()
+            if idx < len(hf_ds):
+                return str(hf_ds["query"][idx]).lower().strip()
+        except Exception:
+            pass
+
+        return None
     
     def compute_metrics(self, eval_preds, eval_mask=None):
         if self.mode == "gen":
             # Ensure dataset and HF view are initialized (handles lazy reload cases)
             if self.data is None:
-                # Import from base without circular import
-                from .base import DatasetBase  # type: ignore
-                DatasetBase._ensure_materialized(self)  # type: ignore[attr-defined]
+                from .base import DatasetBase
+                DatasetBase._ensure_materialized(self)
+
+            # Validate and migrate cache if needed
+            if not getattr(self, '_cache_validated', False):
+                self._validate_and_migrate_cache()
 
             metric = SpiderMetric()
-
             size = len(self)
-            # Guard against legacy caches that don't carry 'query' in metadata
-            sample_meta = self.data[0][1] if (self.data and len(self.data) > 0) else {}
-            if "query" not in sample_meta:
+
+            # Collect db_ids and queries using getter methods with fallback support
+            db_ids = []
+            gt_queries = []
+            fallback_count = 0
+
+            for i in range(size):
+                db_id = self.get_db_id(i)
+                query = self.get_query(i)
+
+                if db_id is None or query is None:
+                    fallback_count += 1
+                    # Last resort: try to rebuild from HF dataset
+                    try:
+                        hf_ds, _ = self.get_hf_dataset()
+                        if i < len(hf_ds):
+                            db_id = db_id or hf_ds["db_id"][i]
+                            query = query or str(hf_ds["query"][i]).lower().strip()
+                    except Exception as e:
+                        _spider_debug_print(f"Failed to get metadata for sample {i}: {e}")
+
+                if db_id is None or query is None:
+                    raise RuntimeError(
+                        f"[SpiderDataset] Cannot retrieve metadata (db_id, query) for sample {i}. "
+                        f"This may indicate a corrupted cache or data mismatch.\n\n"
+                        f"Remediation options:\n"
+                        f"1. Delete cache: rm -rf data/xlangai_spider*/cache_*.pkl\n"
+                        f"2. Set new cache tag: export DATA_CACHE_TAG=v2_rebuild\n"
+                        f"3. Check HF dataset availability: ensure Spider data is accessible"
+                    )
+
+                db_ids.append(db_id)
+                gt_queries.append(query)
+
+            if fallback_count > 0:
+                _spider_debug_print(f"Used HF fallback for {fallback_count}/{size} samples")
+
+            if len(db_ids) != len(eval_preds.preds):
                 raise RuntimeError(
-                    "SpiderDataset.compute_metrics expected per-sample metadata with 'query', "
-                    "but current cache is missing it. Please clear the Spider cache directory "
-                    "(e.g., data/xlangai_spider_*/cache_*.pkl) or set DATA_CACHE_TAG to a new "
-                    "value and rerun so the dataset can be rebuilt."
+                    f"[SpiderDataset] Metadata count ({len(db_ids)}) does not match "
+                    f"prediction count ({len(eval_preds.preds)}). "
+                    f"This may indicate an evaluation dataset mismatch."
                 )
-
-            # For each in-memory example, use the attached db_id + canonical SQL query.
-            db_ids = [self.data[i][1]["db_id"] for i in range(size)]
-            gt_queries = [self.data[i][1]["query"] for i in range(size)]
-
-            assert len(db_ids) == len(eval_preds.preds) == len(gt_queries)
 
             predictions = list(zip(eval_preds.preds, db_ids))
             references = list(zip(gt_queries, db_ids))
@@ -340,7 +600,8 @@ class SpiderDataset(NlgDatasetBase):
                 # Check if prediction is incorrect (exact match == 0)
                 try:
                     from metrics.spider.evaluation import get_sql, Schema, get_schema
-                    db_path = os.path.join(self.db_dir, db_id, f"{db_id}.sqlite")
+                    db_dir = self._db_dir or (Path("data") / self.path.replace("/", "_") / "spider" / "database")
+                    db_path = os.path.join(str(db_dir), db_id, f"{db_id}.sqlite")
                     schema = Schema(get_schema(db_path))
                     pred_parsed = get_sql(schema, pred_sql)
                     gold_parsed = get_sql(schema, gold_sql)
