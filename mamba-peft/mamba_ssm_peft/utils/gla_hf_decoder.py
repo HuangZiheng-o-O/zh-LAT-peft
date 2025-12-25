@@ -1,3 +1,14 @@
+"""
+GLA HuggingFace Decoder for text generation.
+
+This decoder wraps HuggingFace's generate() method for GLA models from the FLA library.
+It ensures proper handling of attention_mask for correct generation with padding.
+
+Environment Variables:
+- GLA_USE_MAX_NEW_TOKENS=1 (default): Use max_new_tokens semantics
+- GLA_VERBOSE=1: Enable verbose logging and padding warnings
+- GLA_STRICT_LEFT_PAD=1: Raise error on right-padding detection
+"""
 import torch
 from dataclasses import dataclass
 from typing import Optional, Any

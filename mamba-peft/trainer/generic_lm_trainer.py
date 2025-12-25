@@ -1,3 +1,38 @@
+"""
+Generic Language Model Trainer for GLA (Gated Linear Attention) and similar architectures.
+
+This trainer is designed to work with the FLA (Flash Linear Attention) library's GLA models.
+It properly handles attention_mask to ensure correct training behavior.
+
+Key Design Considerations for GLA:
+==================================
+
+1. **attention_mask is REQUIRED for GLA**
+   Unlike Transformer's softmax attention, GLA uses linear state accumulation:
+       S_t = Diag(α_t) · S_{t-1} + k_t^T ⊗ v_t
+
+   Without attention_mask, padding tokens pollute the hidden state S_t.
+   The FLA library implements an "unpadding" strategy that completely removes
+   padding tokens from computation when attention_mask is provided.
+
+2. **Left Padding for Generation**
+   Generation tasks should use left padding (tokenizer.padding_side = "left")
+   to ensure the last tokens are always valid (not padding).
+
+3. **Loss Calculation**
+   Loss is only computed at positions where label_ids != -100, so padding
+   positions in labels are correctly ignored.
+
+Environment Variables:
+- GLA_LOG_PADDING_STATS=1: Log padding ratio every 500 steps for debugging
+- GLA_FORCE_LEFT_PAD=1: Force left padding in tokenizer (set in train_gla_only.py)
+
+References:
+- GLA Paper: "Gated Linear Attention Transformers with Hardware-Efficient Training"
+  https://arxiv.org/abs/2312.06635
+- FLA Library: https://github.com/sustcsonglin/flash-linear-attention
+"""
+
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
@@ -83,13 +118,48 @@ class GenericLMTrainer(Trainer):
         print(output_txt_valid, "==", label_txt_valid)
 
     def _forward(self, model, inputs):
+        """
+        Forward pass for training and evaluation.
+
+        IMPORTANT: For GLA (Gated Linear Attention) models from the FLA library,
+        References:
+        - GLA Paper: https://arxiv.org/abs/2312.06635
+        - FLA Implementation: fla/layers/gla.py (see get_unpad_data usage)
+        """
         input_ids = inputs["input_ids"]
         label_ids = inputs["label_ids"]
+        attention_mask = inputs.get("attention_mask")
+
+        # Build model forward kwargs
         add_inputs = {}
+
+        # Pass attention_mask for GLA/Linear Attention models
+        # This enables the unpadding strategy in FLA library, which:
+        # 1. Removes padding tokens before computation (via index_first_axis)
+        # 2. Uses cu_seqlens to track sequence boundaries in Triton kernels
+        # 3. Restores output shape after computation (via pad_input)
+        if attention_mask is not None:
+            add_inputs["attention_mask"] = attention_mask
+
+        # Handle PEFT models that accept label_ids
         if isinstance(model, PeftModel):
             base = model.base_model
             if "label_ids" in base.forward.__code__.co_varnames:
                 add_inputs["label_ids"] = label_ids
+
+        # Optional: Log padding statistics for debugging
+        # Enable via environment variable: GLA_LOG_PADDING_STATS=1
+        if attention_mask is not None and os.environ.get("GLA_LOG_PADDING_STATS", "0") == "1":
+            if hasattr(self, 'state') and self.state.global_step % 500 == 0:
+                valid_tokens = attention_mask.sum().item()
+                total_tokens = attention_mask.numel()
+                valid_ratio = valid_tokens / total_tokens if total_tokens > 0 else 1.0
+                logger.info(
+                    f"[Step {self.state.global_step}] Padding stats: "
+                    f"valid={valid_ratio:.1%}, pad={1-valid_ratio:.1%}, "
+                    f"batch_shape={tuple(input_ids.shape)}"
+                )
+
         lm_logits = model(input_ids, **add_inputs).logits
         return input_ids, label_ids, lm_logits
 
