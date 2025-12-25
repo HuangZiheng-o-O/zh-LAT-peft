@@ -156,3 +156,136 @@ def load_gla_tokenizer(model_id="fla-hub/gla-1.3B-100B", trust_remote_code=True)
     """
     from transformers import AutoTokenizer
     return AutoTokenizer.from_pretrained(model_id, trust_remote_code=trust_remote_code)
+
+
+# ============================================================================
+# ADDITIONAL LINEAR ATTENTION MODEL LOADERS
+# ============================================================================
+# These functions provide consistent interfaces for loading other FLA models.
+# They follow the same pattern as load_gla() for backward compatibility.
+
+def load_retnet(model_id, trust_remote_code=True, device="cuda", dtype=torch.bfloat16):
+    """
+    Load RetNet model (Retentive Network).
+
+    RetNet uses multi-scale retention mechanism for efficient sequence modeling.
+    Reference: "Retentive Network: A Successor to Transformer for Large Language Models"
+               https://arxiv.org/abs/2307.08621
+
+    Args:
+        model_id: HuggingFace model ID or local path
+        trust_remote_code: Whether to trust remote code
+        device: Target device ("cuda", "cpu", or "auto")
+        dtype: Model dtype (default: torch.bfloat16)
+
+    Returns:
+        Dict with "model" and "tokenizer" keys
+    """
+    from fla.models.retnet import RetNetForCausalLM, RetNetConfig
+    from transformers import AutoTokenizer
+
+    # Load config
+    try:
+        config = RetNetConfig.from_pretrained(model_id)
+    except Exception as e:
+        raise RuntimeError(
+            f"[RetNet] Failed to load RetNetConfig.from_pretrained('{model_id}'). "
+            f"Error: {e}"
+        ) from e
+
+    # Disable fused SwiGLU for compatibility (same as GLA)
+    try:
+        if hasattr(config, "fuse_swiglu"):
+            config.fuse_swiglu = False
+    except Exception:
+        pass
+
+    # Apply SwiGLU patch (reuse the same logic as GLA)
+    try:
+        import torch.nn.functional as F
+        from importlib import import_module
+        _mlp = import_module('fla.modules.mlp')
+        _act = import_module('fla.modules.activations')
+
+        def _pt_swiglu(x, y):
+            return F.silu(x) * y
+
+        def _pt_swiglu_linear(x, y, weight, bias):
+            return F.linear(F.silu(x) * y, weight, bias)
+
+        _mlp.swiglu = _pt_swiglu
+        _mlp.swiglu_linear = _pt_swiglu_linear
+        _act.swiglu = _pt_swiglu
+        _act.swiglu_linear = _pt_swiglu_linear
+        print("[RetNet] fuse_swiglu disabled; using PyTorch SwiGLU.")
+    except Exception as patch_err:
+        print(f"[RetNet][warn] Failed to apply SwiGLU runtime patch: {patch_err}")
+
+    # Load tokenizer and model
+    tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=trust_remote_code)
+    model = RetNetForCausalLM.from_pretrained(
+        model_id,
+        config=config,
+        torch_dtype=dtype,
+        device_map="auto" if device == "auto" else None,
+    )
+    if device != "auto" and device is not None:
+        model = model.to(device=device)
+    return {"model": model, "tokenizer": tokenizer}
+
+
+def load_mamba2(model_id, trust_remote_code=True, device="cuda", dtype=torch.bfloat16):
+    """
+    Load Mamba2 model (State Space Model).
+
+    Mamba2 uses selective state space mechanisms with efficient hardware-aware design.
+    Note: Mamba2 uses cache_params instead of past_key_values for caching.
+
+    Reference: "Transformers are SSMs: Generalized Models and Efficient Algorithms
+               Through Structured State Space Duality"
+               https://arxiv.org/abs/2405.21060
+
+    Args:
+        model_id: HuggingFace model ID or local path
+        trust_remote_code: Whether to trust remote code
+        device: Target device ("cuda", "cpu", or "auto")
+        dtype: Model dtype (default: torch.bfloat16)
+
+    Returns:
+        Dict with "model" and "tokenizer" keys
+    """
+    from fla.models.mamba2 import Mamba2ForCausalLM, Mamba2Config
+    from transformers import AutoTokenizer
+
+    # Load config
+    try:
+        config = Mamba2Config.from_pretrained(model_id)
+    except Exception as e:
+        raise RuntimeError(
+            f"[Mamba2] Failed to load Mamba2Config.from_pretrained('{model_id}'). "
+            f"Error: {e}"
+        ) from e
+
+    # Load tokenizer and model
+    tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=trust_remote_code)
+    model = Mamba2ForCausalLM.from_pretrained(
+        model_id,
+        config=config,
+        torch_dtype=dtype,
+        device_map="auto" if device == "auto" else None,
+    )
+    if device != "auto" and device is not None:
+        model = model.to(device=device)
+    return {"model": model, "tokenizer": tokenizer}
+
+
+def load_retnet_tokenizer(model_id, trust_remote_code=True):
+    """Load RetNet tokenizer."""
+    from transformers import AutoTokenizer
+    return AutoTokenizer.from_pretrained(model_id, trust_remote_code=trust_remote_code)
+
+
+def load_mamba2_tokenizer(model_id, trust_remote_code=True):
+    """Load Mamba2 tokenizer."""
+    from transformers import AutoTokenizer
+    return AutoTokenizer.from_pretrained(model_id, trust_remote_code=trust_remote_code)
