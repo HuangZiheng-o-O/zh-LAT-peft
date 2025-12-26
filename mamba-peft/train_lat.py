@@ -80,12 +80,17 @@ def _env_bool(name: str, default: bool) -> bool:
     return str(v).lower() in ("1", "true", "yes", "on")
 
 
+
 def _env_float(name: str, default: float) -> float:
-    try:
-        v = os.environ.get(name)
-        return float(v) if v is not None else default
-    except Exception:
+    v = os.environ.get(name)
+    if v is None:
         return default
+    try:
+        return float(v)
+    except ValueError as e:
+        raise ValueError(
+            f"Environment variable '{name}' must be a float, got '{v}'"
+        )
 
 
 def _lock_share(name: str, model_type: str = "LAT") -> bool:
