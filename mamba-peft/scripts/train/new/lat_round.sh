@@ -18,29 +18,53 @@ LAUNCHER_PY="train_lat.py"
 #########
 : "${ROUND_E_MASTER[@]:-}" >/dev/null 2>&1 || declare -a ROUND_E_MASTER=()
 # Configuration arrays (same as gla_round_clean.sh)
-ROUND_E15=(# 26 configs
+ROUND_E15=(# 26 个 分组更清晰：FULL → 主轴 → Attn细粒度 → Head → Gating → MLP → 增量 → O-MLP
+
+  # 0) FULL 多模块（参考上限）
   "E1_QKVO_plus_G_plus_GK_plus_MLP_r8_alpha16.yaml"
+
+  # 1) 主轴基线（Attn / Gating / MLP）
   "E1_QKVO_r8_alpha16.yaml"
   "E3_GATINGONLY_r8_alpha16.yaml"
   "E4_MLPONLY_r8_alpha16.yaml"
+
+  # 2) Attention 细粒度
+  # 2.1 单打点（q/k/v/o）
   "E4_QONLY_r8_alpha16.yaml"
   "E4_KONLY_r8_alpha16.yaml"
   "E4_VONLY_r8_alpha16.yaml"
   "E11_OONLY_r8_alpha16.yaml"
+  # 2.2 两两组合
   "E6_QKONLY_r8_alpha16.yaml"
   "E7_KVONLY_r8_alpha16.yaml"
   "E6_QVONLY_r8_alpha16.yaml"
   "E6_QOONLY_r8_alpha16.yaml"
   "E6_KOONLY_r8_alpha16.yaml"
   "E6_VOONLY_r8_alpha16.yaml"
+
+  # 3) Head 相关
+#  "E10_HEADONLY_r8_alpha16.yaml"
+#  "E9_OplusHEAD_r8_alpha16.yaml"
+
+  # 4) Gating 细粒度
   "E3_GPROJONLY_r8_alpha16.yaml"
+#  "E3_GK0ONLY_r8_alpha16.yaml"
+#  "E3_GK1ONLY_r8_alpha16.yaml"
   "E3_GKONLY_r8_alpha16.yaml"
+
+  # 5) MLP 细粒度（SwiGLU）
   "E4_MLPGATEONLY_r8_alpha16.yaml"
+#  "E4_MLPUPONLY_r8_alpha16.yaml"
+#  "E4_MLPDOWNONLY_r8_alpha16.yaml"
   "E4_MLPUPDOWN_r8_alpha16.yaml"
+
+  # 6) 结构增量：在 QKVO 上增量 Gates/MLP
   "E1_QKVO_plus_G_r8_alpha16.yaml"
   "E1_QKVO_plus_GK_r8_alpha16.yaml"
   "E1_QKVO_plus_G_plus_GK_r8_alpha16.yaml"
   "E1_QKVO_plus_MLP_r8_alpha16.yaml"
+
+  # 7) O-MLP 骨架
   "E2_OMLP_r8_alpha16.yaml"
   "E2_OMLP_plus_G_r8_alpha16.yaml"
   "E2_OMLP_plus_GK_r8_alpha16.yaml"
