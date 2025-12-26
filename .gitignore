@@ -3,3 +3,4 @@
 .DS_Store
 */.DS_Store
 spider_data
+/mamba-peft-sd_lora/
