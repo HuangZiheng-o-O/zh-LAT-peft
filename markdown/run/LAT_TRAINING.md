@@ -1,10 +1,14 @@
-## Run Guide
+## Run Guide (LAT Framework)
+
 
 ### spider
 
 ```bash
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
+
+# === LAT框架: 指定模型类型 ===
+export MODEL_TYPE=gla
 
 export NLTK_DATA=/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/data/nltk_data
 export SPIDER_LOCAL_DIR=/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/data/spider_data
@@ -18,8 +22,6 @@ export EVAL_GEN=1
 export EVAL_GEN_MAX_LENGTH=256
 export EVAL_GEN_MIN_LENGTH=0
 export EVAL_GEN_NUM_BEAMS=1
-
-export GLA_FORCE_LEFT_PAD=1 
 
 export LR_SCHEDULER_TYPE=cosine
 export LR_WARMUP_RATIO=0.1
@@ -47,12 +49,13 @@ export LOGITS_TO_KEEP=1
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 
-./gla_batch_tmux_clean.sh \
+./lat_batch_tmux.sh \
   --suite E155 \
   --round all \
   --pairs "87:spider-tvt" \
   --gpus "0 1 3 4 6" \
-  --gpu-plan "2,2,2,2,2"
+  --gpu-plan "2,2,2,2,2" \
+  --model-type gla
 ```
 
 
@@ -63,14 +66,17 @@ export SWANLAB_EMAIL_ON_FINISH=0
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
 
+# === LAT框架: 指定模型类型 ===
+export MODEL_TYPE=gla
+
 ########################################
 # ↓↓↓ 覆盖旧版本中已有的变量（只是数值不同） ↓↓↓
 ########################################
 
 # ✔ 替换 EVAL_GEN 配置
 export EVAL_GEN=1
-export EVAL_GEN_MAX_LENGTH=128     
-export EVAL_GEN_MIN_LENGTH=8              
+export EVAL_GEN_MAX_LENGTH=128
+export EVAL_GEN_MIN_LENGTH=8
 
 # ✔ 解码/GLA（同名变量更新）
 export GLA_FORCE_LEFT_PAD=1
@@ -119,12 +125,13 @@ export SAMSUM_LOCAL_DIR=/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/data/samsum
 #export DATALOADER_PIN_MEMORY=1
 #export DATALOADER_PERSISTENT_WORKERS=0
 
-./gla_batch_tmux_clean.sh \
+./lat_batch_tmux.sh \
   --suite E15 \
   --round 2 \
   --pairs "87:samsum" \
   --gpus "3 4 5 6" \
-  --gpu-plan "2,2,2,2"
+  --gpu-plan "2,2,2,2" \
+  --model-type gla
 
 ```
   --suite E15 \
@@ -172,6 +179,9 @@ export WANDB_DIR=/mnt/data4/user_cache/wandb
 conda activate mzsz
 
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
+
+# === LAT框架: 指定模型类型 ===
+export MODEL_TYPE=gla
 
 # 🔧 新增：强制离线模式，防止网络死锁
 export HF_HUB_OFFLINE=1
@@ -227,12 +237,13 @@ export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
 
-./gla_batch_tmux_clean.sh \
+./lat_batch_tmux.sh \
   --suite E15 \
   --round all \
   --pairs "87:dart" \
   --gpus "1 2 3 4 5 6 7" \
-  --gpu-plan "2,2,2,2,2,2,2"
+  --gpu-plan "2,2,2,2,2,2,2" \
+  --model-type gla
 ```
 
 ### GLUE glue_multidata_e15
@@ -241,6 +252,10 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
+
+# === LAT框架: 指定模型类型 ===
+export MODEL_TYPE=gla
+
 # chmod +x *.sh
 # 离线/本地资源（可选）
 #export GLUE_DATASET_ID=nyu-mll/glue
@@ -286,14 +301,16 @@ export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
 
-./gla_batch_tmux_clean_multidata.sh \
+# 注意: multidata 功能直接通过 --pairs 传多个数据集实现
+./lat_batch_tmux.sh \
   --suite E15 \
   --round 1 \
   --pairs "87:glue-tvt_sst2 87:glue-tvt_qqp 87:glue-tvt_mnli" \
   --gpus "0 1 2 3 4 5 6" \
-  --name glue_multidata_e15
+  --name glue_multidata_e15 \
+  --model-type gla
 
-#87:glue-tvt_cola 87:glue-tvt_rte  87:glue-tvt_mrpc  87:glue-tvt_qnli 
+#87:glue-tvt_cola 87:glue-tvt_rte  87:glue-tvt_mrpc  87:glue-tvt_qnli
 # 87:
 # 87:
 ```
@@ -305,6 +322,9 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 ```bash
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
+
+# === LAT框架: 指定模型类型 ===
+export MODEL_TYPE=gla
 
 # 离线/本地资源（可选）
 #export GLUE_DATASET_ID=nyu-mll/glue
@@ -354,13 +374,15 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 export HF_HUB_OFFLINE=1
 export HF_EVALUATE_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
-./gla_batch_tmux_clean.sh \
+
+./lat_batch_tmux.sh \
   --suite E15 \
   --round all \
   --pairs "87:glue-tvt_cola" \
   --gpus "0 1 2 3 4 5 6" \
-  --gpu-plan "2,2,2,2,2,2,2"
- 
+  --gpu-plan "2,2,2,2,2,2,2" \
+  --model-type gla
+
 ```
 
 ### tvt_rte
@@ -369,6 +391,9 @@ export TRANSFORMERS_OFFLINE=1
 
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
+
+# === LAT框架: 指定模型类型 ===
+export MODEL_TYPE=gla
 
 # 禁止生成
 export EVAL_GEN=0
@@ -382,7 +407,7 @@ export HP_LR=0.00005        # ★从 4e-4 大幅降到 5e-5
 # ==== 评测/保存/日志 ====
 export HP_EVAL_BATCH_SIZE=64
 export HP_EVAL_STEPS=100    # 从 200 改成 100，更密集观察过拟合
-export HP_SAVE_STEPS=400    # 从 800 改成 400，更早留一个“没过拟合”的 checkpoint
+export HP_SAVE_STEPS=400    # 从 800 改成 400，更早留一个"没过拟合"的 checkpoint
 export HP_LOGGING_STEPS=50
 
 # ==== 调度 ====
@@ -409,13 +434,14 @@ export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
 
-./gla_batch_tmux_clean.sh \
+./lat_batch_tmux.sh \
   --suite E15 \
   --round all \
   --pairs "87:glue-tvt_rte" \
   --gpus "0 1 2 3 4 5 6 7" \
-  --gpu-plan "2,2,2,2,2,2,2,2"
-  
+  --gpu-plan "2,2,2,2,2,2,2,2" \
+  --model-type gla
+
 ```
 
 ### QNLI 基本信息
@@ -450,6 +476,9 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
+
+# === LAT框架: 指定模型类型 ===
+export MODEL_TYPE=gla
 
 # 严格离线 + 指向你的本地 HF 缓存
 export HF_HUB_OFFLINE=1
@@ -495,12 +524,13 @@ export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
 
-./gla_batch_tmux_clean.sh \
+./lat_batch_tmux.sh \
   --suite E15 \
   --round all \
   --pairs "87:glue-tvt_qnli" \
   --gpus "0 1 2 3 4 5 6" \
-  --gpu-plan "1,1,2,2,2,2,2"
+  --gpu-plan "1,1,2,2,2,2,2" \
+  --model-type gla
 ```
 
 - 想显式指定数据集 ID（但默认已是这个）:
@@ -519,6 +549,9 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
 
+# === LAT框架: 指定模型类型 ===
+export MODEL_TYPE=gla
+
 ########################
 # 严格离线 + 本地 HF 缓存
 ########################
@@ -531,7 +564,7 @@ export HF_EVALUATE_CACHE="$HF_HOME"
 ########################################
 # GLUE / MNLI：多领域三分类 NLI
 ########################################
-# 告诉 train_gla_only.py：这是 GLUE 的 mnli 任务
+# 告诉 train_lat.py：这是 GLUE 的 mnli 任务
 # glue.py 会自动把 dev = matched + mismatched 合并
 export HP_DATA=mnli
 
@@ -547,7 +580,7 @@ export HP_LR=0.0004           # 4e-4：与 QNLI / LoNAS-BERT MNLI 设置保持�
 # 评测 / 保存 / 日志
 ########################################
 export HP_EVAL_BATCH_SIZE=64
-export HP_EVAL_STEPS=500      
+export HP_EVAL_STEPS=500
 export HP_SAVE_STEPS=1000     # save 比 eval 稍稀
 
 export HP_LOGGING_STEPS=100
@@ -585,12 +618,13 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 ##############################
 # 启动 MNLI 训练
 ##############################
-./gla_batch_tmux_clean.sh \
+./lat_batch_tmux.sh \
   --suite E15 \
   --round all \
   --pairs "87:glue-tvt_mnli" \
   --gpus "1 2 3 4 5 6" \
-  --gpu-plan "1,1,1,1,1,1"
+  --gpu-plan "1,1,1,1,1,1" \
+  --model-type gla
 ```
 
 ### SST-2
@@ -601,6 +635,9 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 # =========================
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
+
+# === LAT框架: 指定模型类型 ===
+export MODEL_TYPE=gla
 
 ########################
 # 严格离线 + 本地 HF 缓存
@@ -614,7 +651,7 @@ export HF_EVALUATE_CACHE="$HF_HOME"
 ########################################
 # GLUE / SST-2：单句二分类
 ########################################
-# 告诉 train_gla_only.py：这是 GLUE 的 sst2 任务
+# 告诉 train_lat.py：这是 GLUE 的 sst2 任务
 export HP_DATA=sst2
 
 # 纯分类任务：禁用生成；val=test → 使用 tvt 中的 test 作为官方 dev
@@ -667,12 +704,13 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 ##############################
 # 启动 SST-2 训练
 ##############################
-./gla_batch_tmux_clean.sh \
+./lat_batch_tmux.sh \
   --suite E15 \
   --round all \
   --pairs "87:glue-tvt_sst2" \
   --gpus "0 1 2 3 4 5 6" \
-  --gpu-plan "2,2,2,2,2,2,2"
+  --gpu-plan "2,2,2,2,2,2,2" \
+  --model-type gla
 ```
 
 ### QQP
@@ -683,6 +721,9 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 # =========================
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
+
+# === LAT框架: 指定模型类型 ===
+export MODEL_TYPE=gla
 
 ########################
 # 严格离线 + 本地 HF 缓存
@@ -714,7 +755,7 @@ export HP_LR=0.0003         # 3e-4：相比 MNLI 稍低一点，更稳
 ########################################
 # 评测 / 保存 / 日志
 ########################################
-# QQP 和 MNLI 同属“大样本句对任务”，一般 eval 周期会
+# QQP 和 MNLI 同属"大样本句对任务"，一般 eval 周期会
 # 比 SST-2 / QNLI 稍稀一点；这里对齐 MNLI：
 export HP_EVAL_BATCH_SIZE=64
 export HP_EVAL_STEPS=500    # 大任务常用 ~500 step 评测一次
@@ -751,17 +792,19 @@ export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
 
+# 支持 LAT_* 或 GLA_* 前缀
 export GLA_LAUNCH_STAGGER_MINUTES=10
 
 ##############################
 # 启动 QQP 训练
 ##############################
-./gla_batch_tmux_clean.sh \
+./lat_batch_tmux.sh \
   --suite E15 \
   --round 3 \
   --pairs "87:glue-tvt_qqp" \
   --gpus "0 1 2 3 4 5 7" \
-  --gpu-plan "1,1,1,1,1,1,1"
+  --gpu-plan "1,1,1,1,1,1,1" \
+  --model-type gla
 ```
 
 ### MRPC
@@ -772,6 +815,9 @@ export GLA_LAUNCH_STAGGER_MINUTES=10
 ############################
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
+
+# === LAT框架: 指定模型类型 ===
+export MODEL_TYPE=gla
 
 ############################
 # 2. 任务类型 & 运行模式
@@ -786,14 +832,14 @@ export EVAL_GEN=0
 # MRPC 训练集：3668 对；总共只有 ~5800 对，属于 *小数据* GLUE 任务
 # 典型做法是：epoch 比 MNLI/QQP 更多一点（因为步数少）
 
-export HP_EPOCHS=10        # 解释见下面：对齐 LoNAS-BERT 的“总步数级别”
+export HP_EPOCHS=10        # 解释见下面：对齐 LoNAS-BERT 的"总步数级别"
 export HP_BATCH_SIZE=8     # 沿用你当前所有 GLUE 任务的 batch 设置
 
 # LoNAS-BERT GLUE 表里：
 #   MRPC:   lr = 5e-4, Epoch = 35, Batch = 32
 #   MNLI:   lr = 4e-4
 #   QQP:    lr = 3e-4
-#   SST-2:  lr = 3e-4 
+#   SST-2:  lr = 3e-4
 # 所以 MRPC 在它们那套里是 **学习率最高的一个小任务**。
 # 你这套 GLA 里：MNLI=4e-4，QQP/SST-2=3e-4 已经对齐了这个相对关系，
 # 那 MRPC 用 5e-4 是合理延续。
@@ -804,7 +850,7 @@ export HP_LR=0.0005        # 5e-4：与 LoNAS-BERT MRPC 超参同量级
 ############################
 # MRPC 一个 epoch 的 step：3668 / 8 ≈ 459 steps
 # 10 个 epoch ≈ 4590 个优化步，和 LoNAS-BERT (35 epoch, bs 32) 的总步数同级：
-#   35 * 3668 / 32 ≈ 4012 步  
+#   35 * 3668 / 32 ≈ 4012 步
 # 所以 eval 每 100 步，大约：
 #   每个 epoch 评测 ~4–5 次，10 个 epoch 一共 ~45 次评测，粒度够细。
 export HP_EVAL_BATCH_SIZE=64
@@ -845,10 +891,11 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 ############################
 # 8. 启动 MRPC 训练
 ############################
-./gla_batch_tmux_clean.sh \
+./lat_batch_tmux.sh \
   --suite E15 \
   --round all \
   --pairs "87:glue-tvt_mrpc" \
   --gpus "0 1 2 3 4 5 6" \
-  --gpu-plan "2,2,2,2,2,2,2"
+  --gpu-plan "2,2,2,2,2,2,2" \
+  --model-type gla
 ```
