@@ -594,7 +594,7 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 没有
 87:glue-tvt_wnli
 glue_multidata_e15是  tmux session 名称
- 
+
 
 ```bash
 conda activate mzsz
@@ -640,17 +640,20 @@ export TRANSFORMERS_VERBOSITY=error
 # SwanLab（改项目名区分，邮件按需开）
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="biaozhun-tvt_cola-2-4090-1"
+export SWANLAB_PROJECT="cola-1-4090-Dec25-2"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
 
+export HF_HUB_OFFLINE=1
+export HF_EVALUATE_OFFLINE=1
+export TRANSFORMERS_OFFLINE=1
 ./gla_batch_tmux_clean.sh \
   --suite E15 \
   --round all \
   --pairs "87:glue-tvt_cola" \
-  --gpus "1 2 3 4 5" \
-  --gpu-plan "2,2,2,2,2"
+  --gpus "0 1 2 3 4 5 6" \
+  --gpu-plan "2,2,2,2,2,2,2"
  
 ```
 
@@ -778,7 +781,7 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 
 
- 
+
 
 给你一套“严格正确、可离线”的 glue-tvt_qnli 启动配置和命令，参数都按 QNLI 的任务性质与数据规模给出。
 
@@ -853,7 +856,7 @@ export TRANSFORMERS_VERBOSITY=error
 # SwanLab（可选）
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="gla-glue-tvt_qnli-2-4090-Dec2"
+export SWANLAB_PROJECT="tvt_qnli-2-4090-Dec25"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -862,8 +865,8 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
   --suite E15 \
   --round all \
   --pairs "87:glue-tvt_qnli" \
-  --gpus "0 1 2 3 4 5" \
-  --gpu-plan "2,2,2,2,2,2"
+  --gpus "0 1 2 3 4 5 6" \
+  --gpu-plan "1,1,2,2,2,2,2"
 ```
 
 可选项（仅在需要时设置）:
