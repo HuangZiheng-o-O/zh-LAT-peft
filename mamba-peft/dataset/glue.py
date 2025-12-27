@@ -33,7 +33,11 @@ _debug_print("  evaluate... OK")
 _debug_print("  Importing numpy, os...")
 import numpy as np
 import os
+from pathlib import Path
 _debug_print("  numpy, os... OK")
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_GLUE_DATA_ROOT = PROJECT_ROOT / "data" / "nyu-mll_glue"
 
 _debug_print("DONE importing dataset/glue.py module-level")
 
@@ -164,7 +168,7 @@ class GlueDataset(NluDatasetBase):
                 fallback_candidates = [
                     os.environ.get("GLUE_DATASET_PATH"),  # explicit local dir
                     "glue",  # official dataset id
-                    "/home/user/mzs_h/data/nyu-mll_glue",  # user's provided local data root
+                    str(DEFAULT_GLUE_DATA_ROOT),  # repo-relative local data root
                 ]
                 last_err = None
                 for cand in fallback_candidates:

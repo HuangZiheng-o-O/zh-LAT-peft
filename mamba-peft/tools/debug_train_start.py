@@ -1,23 +1,24 @@
 #!/usr/bin/env python3
 # tools/check_loader_workers.py
 import os, sys, traceback
+from pathlib import Path
 
 # Ensure repo root is on sys.path BEFORE importing project modules
-CODE_ROOT = os.environ.get("CODE_ROOT", "/home/user/mzs_h/code/zh-LAT-peft/mamba-peft")
-if CODE_ROOT not in sys.path:
-    sys.path.insert(0, CODE_ROOT)
+CURRENT_FILE = Path(__file__).resolve()
+DEFAULT_CODE_ROOT = CURRENT_FILE.parents[1]
+CODE_ROOT = Path(os.environ.get("CODE_ROOT", DEFAULT_CODE_ROOT))
+if str(CODE_ROOT) not in sys.path:
+    sys.path.insert(0, str(CODE_ROOT))
 
-os.environ.setdefault("DART_LOCAL_DIR", f"{CODE_ROOT}/data/GEM_dart")
+os.environ.setdefault("DART_LOCAL_DIR", str(CODE_ROOT / "data" / "GEM_dart"))
 
 from torch.utils.data import DataLoader
 from dataset.dart_data import DartDataset
 from dataset.collator import DataCollator
 from transformers import AutoTokenizer
 
-tok = AutoTokenizer.from_pretrained(
-    os.environ.get("TOKENIZER_DIR", "/home/user/mzs_h/model/second-gla-1.3B-100B/gla-1.3B-100B"),
-    trust_remote_code=True,
-)
+tokenizer_src = os.environ.get("TOKENIZER_DIR") or os.environ.get("LAT_MODEL", "fla-hub/gla-1.3B-100B")
+tok = AutoTokenizer.from_pretrained(tokenizer_src, trust_remote_code=True)
 
 def probe(split, mode, batch_size=4, num_workers=4, steps=2):
     print(f"\n== {split}:{mode} bs={batch_size} workers={num_workers} ==")

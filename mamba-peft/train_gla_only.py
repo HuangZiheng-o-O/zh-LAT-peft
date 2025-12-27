@@ -34,6 +34,9 @@ from mamba_ssm_peft import get_trainable_parameters_ratio, print_trainable_param
 from mamba_ssm_peft.utils.gla_hf_decoder import create_gla_decoder
 from train_gla_adapter import prepare_gla_model_and_tokenizer
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_NOW_OUTPUT_ROOT = REPO_ROOT / "output" / "benchmark" / "glue"
+NOW_OUTPUT_ROOT = Path(os.environ.get("LAT_OUTPUT_ROOT", DEFAULT_NOW_OUTPUT_ROOT)).expanduser()
 
 def _env_bool(name: str, default: bool) -> bool:
     v = os.environ.get(name)
@@ -530,9 +533,9 @@ def run_train(
 def get_output_path_for_cfg(cfg_path, cfg):
     """
     目标：
-      /home/user/mzs_h/output/benchmark/glue/<data>_seed<seed>/<yaml_stem>
+      <NOW_OUTPUT_ROOT>/<data>_seed<seed>/<yaml_stem>
     回退（缺 data/seed 时）：
-      /home/user/mzs_h/output/benchmark/glue/cola_gla/<yaml_stem>
+      <NOW_OUTPUT_ROOT>/cola_gla/<yaml_stem>
     """
     yaml_stem = Path(cfg_path).stem
     data = cfg.get("data")
@@ -540,9 +543,9 @@ def get_output_path_for_cfg(cfg_path, cfg):
 
     if data and seed is not None:
         folder = f"{data}_seed{seed}"
-        return Path("/home/user/mzs_h/output/benchmark/glue") / folder / yaml_stem
+        return NOW_OUTPUT_ROOT / folder / yaml_stem
     # fallback 与旧逻辑一致
-    return Path("/home/user/mzs_h/output/benchmark/glue/cola_gla") / yaml_stem
+    return NOW_OUTPUT_ROOT / "cola_gla" / yaml_stem
 
 def _find_last_checkpoint(root: Path) -> Optional[Path]:
     """

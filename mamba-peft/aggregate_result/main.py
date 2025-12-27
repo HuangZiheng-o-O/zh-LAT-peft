@@ -16,7 +16,7 @@ from .dataset_aggregator import summarize_dataset
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Aggregate GLUE experiments: CSVs, plots, summaries.")
     p.add_argument("--base_dir", type=str, required=True,
-                   help="Base dir containing dataset folders (e.g., /home/user/mzs_h/output/benchmark/glue)")
+                   help="Base dir containing dataset folders (e.g., <repo>/output/benchmark/glue)")
     p.add_argument("--dataset", type=str, default=None,
                    help="Optional dataset filter (e.g., glue-tvt_rte or rte). If omitted, process all under base_dir.")
     p.add_argument("--output", type=str, required=True,
@@ -104,5 +104,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 

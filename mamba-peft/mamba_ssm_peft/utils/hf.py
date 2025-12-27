@@ -24,8 +24,6 @@ _debug_print("  transformers.utils.hub.cached_file... OK")
 import sys
 import os
 
-#if os.path.exists('/home/user/mzs_h/code/flash-linear-attention'):
-#   sys.path.insert(0, '/home/user/mzs_h/code/flash-linear-attention')
 # --- Robustly locate flash-linear-attention (prefer new submodule path) ---
 current_dir = os.path.dirname(os.path.abspath(__file__))
 repo_root = os.path.abspath(os.path.join(current_dir, '..', '..', '..'))  # .../zh-LAT-peft

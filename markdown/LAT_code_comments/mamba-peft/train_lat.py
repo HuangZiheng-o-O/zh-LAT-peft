@@ -949,7 +949,7 @@ def get_output_path_for_cfg(cfg_path, cfg):
     根据 cfg 路径与 cfg 内容决定输出目录。
 
     目标路径规则：
-      /home/user/mzs_h/output/benchmark/glue/<data>_seed<seed>/<yaml_stem>
+      <repo>/output/benchmark/glue/<data>_seed<seed>/<yaml_stem>
 
     其中：
     - yaml_stem = Path(cfg_path).stem（配置文件名去掉扩展名）
@@ -958,20 +958,17 @@ def get_output_path_for_cfg(cfg_path, cfg):
 
     fallback：
     - 如果 data 或 seed 缺失：
-      /home/user/mzs_h/output/benchmark/glue/cola_gla/<yaml_stem>
-
-    注意：
-    - 这里路径写死在 /home/user/mzs_h/...，强耦合你的运行环境
-    - 若换机器，需要修改这里或通过外部传参
+      <repo>/output/benchmark/glue/cola_gla/<yaml_stem>
     """
     yaml_stem = Path(cfg_path).stem
     data = cfg.get("data")
     seed = cfg.get("seed")
+    base_root = Path(__file__).resolve().parents[3] / "output" / "benchmark" / "glue"
 
     if data and seed is not None:
         folder = f"{data}_seed{seed}"
-        return Path("/home/user/mzs_h/output/benchmark/glue") / folder / yaml_stem
-    return Path("/home/user/mzs_h/output/benchmark/glue/cola_gla") / yaml_stem
+        return base_root / folder / yaml_stem
+    return base_root / "cola_gla" / yaml_stem
 
 
 def _find_last_checkpoint(root: Path) -> Optional[Path]:

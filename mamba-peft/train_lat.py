@@ -72,6 +72,10 @@ from lat_adapter import prepare_lat_model_and_tokenizer
 from mamba_ssm_peft.utils.lat_decoder import create_lat_decoder
 from mamba_ssm_peft.utils.lat_model_loader import get_lat_env, get_lat_env_bool
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_NOW_OUTPUT_ROOT = REPO_ROOT / "output" / "benchmark" / "glue"
+NOW_OUTPUT_ROOT = Path(os.environ.get("LAT_OUTPUT_ROOT", DEFAULT_NOW_OUTPUT_ROOT)).expanduser()
+
 
 def _env_bool(name: str, default: bool) -> bool:
     v = os.environ.get(name)
@@ -578,9 +582,9 @@ def run_train(
 def get_output_path_for_cfg(cfg_path, cfg):
     """
     Target path:
-      /home/user/mzs_h/output/benchmark/glue/<data>_seed<seed>/<yaml_stem>
+      <NOW_OUTPUT_ROOT>/<data>_seed<seed>/<yaml_stem>
     Fallback (missing data/seed):
-      /home/user/mzs_h/output/benchmark/glue/cola_gla/<yaml_stem>
+      <NOW_OUTPUT_ROOT>/cola_gla/<yaml_stem>
     """
     yaml_stem = Path(cfg_path).stem
     data = cfg.get("data")
@@ -588,8 +592,8 @@ def get_output_path_for_cfg(cfg_path, cfg):
 
     if data and seed is not None:
         folder = f"{data}_seed{seed}"
-        return Path("/home/user/mzs_h/output/benchmark/glue") / folder / yaml_stem
-    return Path("/home/user/mzs_h/output/benchmark/glue/cola_gla") / yaml_stem
+        return NOW_OUTPUT_ROOT / folder / yaml_stem
+    return NOW_OUTPUT_ROOT / "cola_gla" / yaml_stem
 
 
 def _find_last_checkpoint(root: Path) -> Optional[Path]:

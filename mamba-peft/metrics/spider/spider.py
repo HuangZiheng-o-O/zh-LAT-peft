@@ -4,6 +4,10 @@ import os
 from pathlib import Path
 from typing import Optional
 
+CURRENT_FILE = Path(__file__).resolve()
+CODE_ROOT = CURRENT_FILE.parents[2]
+DEFAULT_SPIDER_ROOT = CODE_ROOT / "data" / "spider_data"
+
 
 class SpiderMetric():
     def __init__(self) -> None:
@@ -11,10 +15,10 @@ class SpiderMetric():
         self._configure_nltk_from_env()
         # Priority:
         # 1) SPIDER_LOCAL_DIR (if set and exists)
-        # 2) /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/data/spider_data (if exists)
+        # 2) <repo>/mamba-peft/data/spider_data (if exists)
         # 3) fallback to data/xlangai_spider/spider
         root_env = os.environ.get("SPIDER_LOCAL_DIR")
-        explicit_root = Path("/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/data/spider_data")
+        explicit_root = DEFAULT_SPIDER_ROOT
         root_path: Optional[Path] = None
 
         if root_env and Path(root_env).exists():

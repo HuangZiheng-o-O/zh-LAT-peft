@@ -14,6 +14,8 @@ import evaluate
 import numpy as np
 import pandas as pd
 
+CODE_ROOT = Path(__file__).resolve().parents[1]
+
 
 def _ensure_local_nltk_data():
     data_root = os.environ.get("NLTK_DATA")
@@ -89,6 +91,7 @@ class DartDataset(NlgDatasetBase):
 
     def _raise_data_missing_error(self, expected_path: Path, reason: str):
         """抛出清晰的数据缺失错误，包含详细的解决指引。"""
+        code_root = CODE_ROOT
         error_msg = f"""
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║                           🚨 DART 数据缺失错误                             ║
@@ -100,7 +103,7 @@ class DartDataset(NlgDatasetBase):
 ║ 🔧 解决方法（选择其一）:
 ║
 ║   方法1 - 使用 HuggingFace CLI（推荐，稳定可靠）:
-║   cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft
+║   cd {code_root}
 ║   huggingface-cli download --repo-type dataset GEM/dart --local-dir {expected_path}
 ║
 ║   方法2 - 使用 Python 脚本:
@@ -684,6 +687,5 @@ class DartDataModule:
     def __init__(self, tokenizer: transformers.PreTrainedTokenizer, **kwargs):
         self.dataset = DartDataset(tokenizer=tokenizer, **kwargs)
         self.data_collator = DataCollator(tokenizer=tokenizer)
-
 
 

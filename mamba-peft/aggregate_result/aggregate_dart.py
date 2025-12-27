@@ -27,17 +27,17 @@
 
     # 模式 A：最佳 checkpoint 模式
     conda activate mzsz
-    python /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/aggregate_result/aggregate_dart.py \
-      --base_dir /home/user/mzs_h/output/benchmark/glue \
+    python aggregate_result/aggregate_dart.py \
+      --base_dir <repo>/output/benchmark/glue \
       --dataset dart \
-      --output /home/user/mzs_h/output/benchmark/glue_agg_dart
+      --output <repo>/output/benchmark/glue_agg_dart
 
     # 模式 B：固定 step 模式（以 80000 为例）
     conda activate mzsz
     export DART_AGG_STEP=80000
-    python /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/aggregate_result/aggregate_dart.py \
-      --base_dir /home/user/mzs_h/output/benchmark/glue/dart_seed87 \
-      --output /home/user/mzs_h/output/benchmark/glue_agg_dart
+    python aggregate_result/aggregate_dart.py \
+      --base_dir <repo>/output/benchmark/glue/dart_seed87 \
+      --output <repo>/output/benchmark/glue_agg_dart
 
 你也可以在保存到当前目录后使用：
     python -m aggregate_dart  ...
@@ -396,8 +396,8 @@ def parse_args() -> argparse.Namespace:
         required=True,
         help=(
             "训练输出根目录，或者单个数据集目录。"
-            "例如：/home/user/mzs_h/output/benchmark/glue "
-            "或 /home/user/mzs_h/output/benchmark/glue/dart_seed87"
+            "例如：<repo>/output/benchmark/glue "
+            "或 <repo>/output/benchmark/glue/dart_seed87"
         ),
     )
     parser.add_argument(
@@ -412,7 +412,7 @@ def parse_args() -> argparse.Namespace:
         required=True,
         help=(
             "聚合输出根目录，每个数据集会在下面生成一个子目录，"
-            "例如：/home/user/mzs_h/output/benchmark/glue_agg_dart"
+            "例如：<repo>/output/benchmark/glue_agg_dart"
         ),
     )
     parser.add_argument(
