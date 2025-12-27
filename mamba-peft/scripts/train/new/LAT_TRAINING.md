@@ -7,6 +7,10 @@
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
 
+export MODEL_TYPE=gla
+export LAT_MODEL=/home/user/mzs_h/model/second-gla-1.3B-100B/gla-1.3B-100B
+export LAT_PREC=bf16 
+    
 # === LAT框架: 指定模型类型 ===
 export MODEL_TYPE=gla
 
@@ -65,6 +69,10 @@ export SWANLAB_EMAIL_ON_FINISH=0
 ```bash
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
+
+export MODEL_TYPE=gla
+export LAT_MODEL=/home/user/mzs_h/model/second-gla-1.3B-100B/gla-1.3B-100B
+export LAT_PREC=bf16 
 
 # === LAT框架: 指定模型类型 ===
 export MODEL_TYPE=gla
@@ -177,8 +185,11 @@ export WANDB_DIR=/mnt/data4/user_cache/wandb
 
 ```bash
 conda activate mzsz
-
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
+
+export MODEL_TYPE=gla
+export LAT_MODEL=/home/user/mzs_h/model/second-gla-1.3B-100B/gla-1.3B-100B
+export LAT_PREC=bf16 
 
 # === LAT框架: 指定模型类型 ===
 export MODEL_TYPE=gla
@@ -253,6 +264,10 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
 
+export MODEL_TYPE=gla
+export LAT_MODEL=/home/user/mzs_h/model/second-gla-1.3B-100B/gla-1.3B-100B
+export LAT_PREC=bf16 
+
 # === LAT框架: 指定模型类型 ===
 export MODEL_TYPE=gla
 
@@ -304,7 +319,7 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 # 注意: multidata 功能直接通过 --pairs 传多个数据集实现
 ./lat_batch_tmux.sh \
   --suite E15 \
-  --round 1 \
+  --round all \
   --pairs "87:glue-tvt_sst2 87:glue-tvt_qqp 87:glue-tvt_mnli" \
   --gpus "0 1 2 3 4 5 6" \
   --name glue_multidata_e15 \
@@ -317,11 +332,19 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 
 
-### tvt_cola
+### ok tvt_cola
+
+https://swanlab.cn/@zh2701/cola-1-4090-Dec25-2/overview
+
+
 
 ```bash
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
+
+export MODEL_TYPE=gla
+export LAT_MODEL=/home/user/mzs_h/model/second-gla-1.3B-100B/gla-1.3B-100B
+export LAT_PREC=bf16 
 
 # === LAT框架: 指定模型类型 ===
 export MODEL_TYPE=gla
@@ -385,12 +408,18 @@ export TRANSFORMERS_OFFLINE=1
 
 ```
 
-### tvt_rte
+### ok tvt_rte
+
+https://swanlab.cn/@zh2701/rte-2-4090-Dec25/overview
 
 ```bash
 
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
+
+export MODEL_TYPE=gla
+export LAT_MODEL=/home/user/mzs_h/model/second-gla-1.3B-100B/gla-1.3B-100B
+export LAT_PREC=bf16 
 
 # === LAT框架: 指定模型类型 ===
 export MODEL_TYPE=gla
@@ -429,7 +458,7 @@ export TRANSFORMERS_VERBOSITY=error
 # SwanLab
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="rte-1-4090-lr5e5-round5"  # 项目名也改一下方便区分
+export SWANLAB_PROJECT="rte-2-4090-Dec25"   
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -438,13 +467,15 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
   --suite E15 \
   --round all \
   --pairs "87:glue-tvt_rte" \
-  --gpus "0 1 2 3 4 5 6 7" \
-  --gpu-plan "2,2,2,2,2,2,2,2" \
+  --gpus "4 5 6" \
+  --gpu-plan "2,2,1" \
   --model-type gla
 
 ```
 
-### QNLI 基本信息
+### ok QNLI  
+
+https://swanlab.cn/@zh2701/tvt_qnli-2-4090-Dec25/overview
 
 - 任务：二分类自然语言推理（Question, Sentence → entailment / not_entailment）
 - 输入字段：question + sentence（代码里拼接用 `sep_token`）
@@ -476,6 +507,10 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
+
+export MODEL_TYPE=gla
+export LAT_MODEL=/home/user/mzs_h/model/second-gla-1.3B-100B/gla-1.3B-100B
+export LAT_PREC=bf16 
 
 # === LAT框架: 指定模型类型 ===
 export MODEL_TYPE=gla
@@ -540,7 +575,13 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 
 
-### MNLI
+### ok MNLI 在2-4090中断 直接在3090重新跑 打算
+
+export SWANLAB_PROJECT="gla-glue-tvt_mnli-2-4090-Dec25"
+
+https://swanlab.cn/@zh2701/gla-glue-tvt_mnli-2-4090-Dec25/overview
+
+
 
 ```bash
 # =========================
@@ -548,6 +589,10 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 # =========================
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
+
+export MODEL_TYPE=gla
+export LAT_MODEL=/home/user/mzs_h/model/second-gla-1.3B-100B/gla-1.3B-100B
+export LAT_PREC=bf16 
 
 # === LAT框架: 指定模型类型 ===
 export MODEL_TYPE=gla
@@ -610,7 +655,7 @@ export TRANSFORMERS_VERBOSITY=error
 ############
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="gla-glue-tvt_mnli-2-4090-Dec25"
+export SWANLAB_PROJECT="gla-glue-tvt_mnli-3090-Dec27"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -627,7 +672,96 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
   --model-type gla
 ```
 
-### SST-2
+
+
+
+
+```java
+# =========================
+# MNLI 训练命令（修正版）
+# =========================
+conda activate mzsz
+cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
+
+# === LAT框架: 指定模型类型 ===
+export MODEL_TYPE=gla
+
+########################
+# 严格离线 + 本地 HF 缓存
+########################
+export HF_HUB_OFFLINE=0
+export TRANSFORMERS_OFFLINE=1
+export HF_HOME=/home/user/mzs_h/data/hf_cache
+export HF_DATASETS_CACHE="$HF_HOME"
+export HF_EVALUATE_CACHE="$HF_HOME"
+
+########################################
+# GLUE / MNLI：多领域三分类 NLI
+########################################
+# 告诉 train_lat.py：这是 GLUE 的 mnli 任务
+# glue.py 会自动把 dev = matched + mismatched 合并
+export HP_DATA=mnli
+
+export EVAL_GEN=0
+export HP_VAL_SPLIT=test      # 按 glue-tvt 约定：test=官方 dev
+
+# 超参（结合 GLUE 论文 / RapidBERT / LoNAS-BERT）
+export HP_EPOCHS=3            # 大数据 GLUE 上经典设置
+export HP_BATCH_SIZE=8
+export HP_LR=0.0004           # 4e-4：与 QNLI / LoNAS-BERT MNLI 设置保持同量级
+
+########################################
+# 评测 / 保存 / 日志
+########################################
+export HP_EVAL_BATCH_SIZE=64
+export HP_EVAL_STEPS=500
+export HP_SAVE_STEPS=1000     # save 比 eval 稍稀
+
+export HP_LOGGING_STEPS=100
+
+#############
+# 学习率调度
+#############
+export LR_SCHEDULER_TYPE=cosine
+export LR_WARMUP_RATIO=0.1
+
+#########################
+# DataLoader / Runtime
+#########################
+export NUM_DATA_WORKERS=4
+export DATALOADER_PREFETCH_FACTOR=2
+export DATALOADER_PIN_MEMORY=1
+export DATALOADER_PERSISTENT_WORKERS=0
+export GRADIENT_CHECKPOINTING=true
+export TOKENIZERS_PARALLELISM=false
+export OMP_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export TRANSFORMERS_VERBOSITY=error
+
+############
+# SwanLab（可选）
+############
+export SWANLAB_ENABLE=0
+export SWANLAB_EMAIL_ON_START=0
+export SWANLAB_EMAIL_ON_FINISH=0
+export SWANLAB_EMAIL_ON_INTERRUPT=0
+
+##############################
+# 启动 MNLI 训练
+##############################
+./lat_batch_tmux.sh \
+  --suite E15 \
+  --round all \
+  --pairs "87:glue-tvt_mnli" \
+  --gpus "1" \
+  --gpu-plan "1" \
+  --model-type gla
+```
+
+### OK SST-2
+
+https://swanlab.cn/@zh2701/sst2-1-4090-Dec26/overview
 
 ```bash
 # =========================
@@ -635,6 +769,10 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 # =========================
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
+
+export MODEL_TYPE=gla
+export LAT_MODEL=/home/user/mzs_h/model/second-gla-1.3B-100B/gla-1.3B-100B
+export LAT_PREC=bf16 
 
 # === LAT框架: 指定模型类型 ===
 export MODEL_TYPE=gla
@@ -696,7 +834,7 @@ export TRANSFORMERS_VERBOSITY=error
 ############
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="gla-glue-tvt_sst2-1-4090-f1"
+export SWANLAB_PROJECT="sst2-1-4090-Dec26"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -708,12 +846,14 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
   --suite E15 \
   --round all \
   --pairs "87:glue-tvt_sst2" \
-  --gpus "0 1 2 3 4 5 6" \
+  --gpus "1 2 3 4 5 6 7" \
   --gpu-plan "2,2,2,2,2,2,2" \
   --model-type gla
 ```
 
 ### QQP
+
+
 
 ```bash
 # =========================
@@ -721,6 +861,11 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 # =========================
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
+
+export MODEL_TYPE=gla
+export LAT_MODEL=/home/user/mzs_h/model/second-gla-1.3B-100B/gla-1.3B-100B
+export LAT_PREC=bf16 
+
 
 # === LAT框架: 指定模型类型 ===
 export MODEL_TYPE=gla
@@ -787,27 +932,27 @@ export TRANSFORMERS_VERBOSITY=error
 ############
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="gla-glue-tvt_qqp-1-4090-Dec7-1-round3"
+export SWANLAB_PROJECT="gla-glue-tvt_qqp-2-4090-Dec27"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 # 支持 LAT_* 或 GLA_* 前缀
-export GLA_LAUNCH_STAGGER_MINUTES=10
+export GLA_LAUNCH_STAGGER_MINUTES=15
 
 ##############################
 # 启动 QQP 训练
 ##############################
 ./lat_batch_tmux.sh \
   --suite E15 \
-  --round 3 \
+  --round all \
   --pairs "87:glue-tvt_qqp" \
-  --gpus "0 1 2 3 4 5 7" \
+  --gpus "0 1 2 3 4 5 6" \
   --gpu-plan "1,1,1,1,1,1,1" \
   --model-type gla
 ```
 
-### MRPC
+### ok MRPC
 
 ```bash
 ############################
@@ -815,6 +960,10 @@ export GLA_LAUNCH_STAGGER_MINUTES=10
 ############################
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
+
+export MODEL_TYPE=gla
+export LAT_MODEL=/home/user/mzs_h/model/second-gla-1.3B-100B/gla-1.3B-100B
+export LAT_PREC=bf16 
 
 # === LAT框架: 指定模型类型 ===
 export MODEL_TYPE=gla

@@ -36,6 +36,8 @@ PAIRS=""
 SESSION_NAME=""
 LOG_DIR="/home/user/mzs_h/log"
 MODEL_TYPE="${MODEL_TYPE:-auto}"  # NEW: Model type (gla, retnet, mamba2, auto)
+MODEL_PATH="${LAT_MODEL:-${GLA_MODEL:-}}"
+MODEL_PREC="${LAT_PREC:-${HP_PREC:-}}"
 
 print_help() {
   cat <<'EOF'
@@ -47,6 +49,8 @@ Options:
   --round       Round index or 'all' (default: all)
   --pairs       Comma- or space-separated list of seed:data, e.g. "127:AAA,87:BBB"
   --model-type  Model type: gla, retnet, mamba2, auto (default: auto)
+  --model       Base model path or HF id (overrides YAML model field)
+  --prec        Precision override passed to train_lat.py (bf16|fp16|fp32)
   --name        Optional tmux session name (auto-generated if omitted)
   --logdir      Where to store logs (default: /home/user/mzs_h/log)
   --gpus        Space- or comma-separated GPU IDs (overrides auto-detect)
@@ -77,6 +81,8 @@ while [[ $# -gt 0 ]]; do
     --round)      ROUND="$2"; shift 2;;
     --pairs)      PAIRS="$2"; shift 2;;
     --model-type) MODEL_TYPE="$2"; shift 2;;
+    --model)      MODEL_PATH="$2"; shift 2;;
+    --prec)       MODEL_PREC="$2"; HP_PREC="$2"; shift 2;;
     --name)       SESSION_NAME="$2"; shift 2;;
     --logdir)     LOG_DIR="$2"; shift 2;;
     --gpus)       export GPU_IDS="$2"; shift 2;;
@@ -94,6 +100,17 @@ fi
 
 # Export MODEL_TYPE for child processes
 export MODEL_TYPE
+LAT_MODEL="$MODEL_PATH"
+LAT_PREC="$MODEL_PREC"
+if [[ -n "${LAT_PREC:-}" ]]; then
+  HP_PREC="$LAT_PREC"
+fi
+if [[ -n "${LAT_MODEL:-}" ]]; then
+  export LAT_MODEL
+fi
+if [[ -n "${LAT_PREC:-}" ]]; then
+  export LAT_PREC
+fi
 
 # Normalize separators -> space list
 PAIRS_NORM="$(echo "$PAIRS" | tr ',' ' ')"
@@ -132,6 +149,8 @@ HDR
   printf 'export GPU_IDS=%q\n' "${GPU_IDS:-}"
   printf 'export GPU_PLAN=%q\n' "${GPU_PLAN:-}"
   printf 'export PISSA_FAST=%q\n' "${PISSA_FAST:-0}"
+  printf 'export LAT_MODEL=%q\n' "${LAT_MODEL:-}"
+  printf 'export LAT_PREC=%q\n' "${LAT_PREC:-}"
 
   # SwanLab env
   printf 'export SWANLAB_ENABLE=%q\n' "${SWANLAB_ENABLE:-}"

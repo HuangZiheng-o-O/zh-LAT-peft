@@ -101,6 +101,8 @@ def build_and_run_trainer_gla_only(
     debug: bool,
     gradient_checkpointing: bool = False,
     logits_to_keep: int | None = None,
+    train_data_module=None,
+    val_data_module=None,
 ):
     """
     纯 GLA-only 的训练和评估入口：
@@ -124,7 +126,8 @@ def build_and_run_trainer_gla_only(
         print(f"[GLA][warn] Failed to enforce left padding policy early: {_e}")
 
     # 构建 train data module（真正用来训练的）
-    train_data_module = load_dataset(data, tokenizer, "train", return_module=True)
+    if train_data_module is None:
+        train_data_module = load_dataset(data, tokenizer, "train", return_module=True)
 
     # 保存 cfg.yaml（保持与旧 train.py 一致）
     Path(output_dir).mkdir(parents=True, exist_ok=True)
@@ -145,13 +148,14 @@ def build_and_run_trainer_gla_only(
         )
 
     # 验证/评估 data module：生成任务用 "gen" 模式，否则 "lm"
-    val_data_module = load_dataset(
-        val_data if val_data is not None else data,
-        tokenizer,
-        val_data_split,
-        mode="lm" if eval_generator is None else "gen",
-        return_module=True,
-    )
+    if val_data_module is None:
+        val_data_module = load_dataset(
+            val_data if val_data is not None else data,
+            tokenizer,
+            val_data_split,
+            mode="lm" if eval_generator is None else "gen",
+            return_module=True,
+        )
     compute_metrics = val_data_module.dataset.compute_metrics
 
     # debug 模式下截断数据规模
@@ -429,13 +433,13 @@ def run_train(
     else:
         print("[GLA] Respecting tokenizer's original padding policy (GLA_FORCE_LEFT_PAD=0).")
 
-    # 预构建 train data module，仅用于计算长度和 steps
-    train_data_module_for_len = load_dataset(
+    # 预构建 train data module：既用于 step 计算，也直接复用到 Trainer
+    train_data_module = load_dataset(
         data, tokenizer_obj, "train", return_module=True
     )
 
     its_per_epoch = int(
-        np.ceil(len(train_data_module_for_len.dataset) / batch_size)
+        np.ceil(len(train_data_module.dataset) / batch_size)
     )
 
     # 与旧 train.py 保持一致的 logging / steps / env override 逻辑
@@ -511,6 +515,7 @@ def run_train(
             debug=debug,
             gradient_checkpointing=gradient_checkpointing,
             logits_to_keep=logits_to_keep,
+            train_data_module=train_data_module,
         )
     finally:
         if created_lock:
@@ -698,5 +703,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-

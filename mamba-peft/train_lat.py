@@ -145,6 +145,8 @@ def build_and_run_trainer_lat(
     debug: bool,
     gradient_checkpointing: bool = False,
     logits_to_keep: int | None = None,
+    train_data_module=None,
+    val_data_module=None,
 ):
     """
     Unified Linear Attention training and evaluation entry point:
@@ -170,8 +172,9 @@ def build_and_run_trainer_lat(
     except Exception as _e:
         print(f"[{log_tag}][warn] Failed to enforce left padding policy early: {_e}")
 
-    # Build train data module
-    train_data_module = load_dataset(data, tokenizer, "train", return_module=True)
+    # Build train data module (reuse pre-built module when provided)
+    if train_data_module is None:
+        train_data_module = load_dataset(data, tokenizer, "train", return_module=True)
 
     # Save cfg.yaml
     Path(output_dir).mkdir(parents=True, exist_ok=True)
@@ -193,13 +196,14 @@ def build_and_run_trainer_lat(
         )
 
     # Build validation data module
-    val_data_module = load_dataset(
-        val_data if val_data is not None else data,
-        tokenizer,
-        val_data_split,
-        mode="lm" if eval_generator is None else "gen",
-        return_module=True,
-    )
+    if val_data_module is None:
+        val_data_module = load_dataset(
+            val_data if val_data is not None else data,
+            tokenizer,
+            val_data_split,
+            mode="lm" if eval_generator is None else "gen",
+            return_module=True,
+        )
     compute_metrics = val_data_module.dataset.compute_metrics
 
     # Debug mode: truncate dataset size
@@ -478,14 +482,13 @@ def run_train(
             print(f"[{log_tag}][warn] Failed to enforce left padding policy: {e}")
     else:
         print(f"[{log_tag}] Respecting tokenizer's original padding policy.")
-
-    # Build train data module for length calculation
-    train_data_module_for_len = load_dataset(
+    # Build train data module once (reuse for both length calc and trainer)
+    train_data_module = load_dataset(
         data, tokenizer_obj, "train", return_module=True
     )
 
     its_per_epoch = int(
-        np.ceil(len(train_data_module_for_len.dataset) / batch_size)
+        np.ceil(len(train_data_module.dataset) / batch_size)
     )
 
     # Logging and steps configuration with env overrides
@@ -560,6 +563,7 @@ def run_train(
             debug=debug,
             gradient_checkpointing=gradient_checkpointing,
             logits_to_keep=logits_to_keep,
+            train_data_module=train_data_module,
         )
     finally:
         if created_lock:
@@ -632,6 +636,14 @@ def main():
 
     # Apply environment overrides
     env = os.environ
+
+    model_env = env.get("LAT_MODEL") or env.get("GLA_MODEL")
+    if model_env and not args.model:
+        args.model = model_env
+
+    prec_cli_env = env.get("LAT_PREC")
+    if prec_cli_env and not args.prec:
+        args.prec = prec_cli_env
 
     def _maybe(v, cast):
         return cast(v) if v is not None and v != "" else None

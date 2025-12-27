@@ -1,9 +1,1 @@
-learning_rate: 0.0003
-model: /home/user/mzs_h/model/second-gla-1.3B-100B/gla-1.3B-100B
 peft: cfg/my_lora_exp/peft/lora_omlp_r8_a8.json
-prec: bf16
-seed: 42
-
-
-
-

@@ -1,4 +1,1 @@
-learning_rate: 0.0003
-model: /home/user/mzs_h/model/second-gla-1.3B-100B/gla-1.3B-100B
 peft: cfg/my_lora_exp/peft/lora_QKVO_plus_G_plus_GK_DoRA_r8_alpha16.json
-prec: bf16

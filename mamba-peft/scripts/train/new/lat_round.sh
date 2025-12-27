@@ -9,6 +9,8 @@ set -euo pipefail
 
 # MODEL_TYPE: gla, retnet, mamba2, or auto (default: auto)
 MODEL_TYPE="${MODEL_TYPE:-auto}"
+LAT_MODEL="${LAT_MODEL:-${GLA_MODEL:-}}"
+LAT_PREC="${LAT_PREC:-${HP_PREC:-}}"
 
 # Launcher Python script - uses unified entry point
 LAUNCHER_PY="train_lat.py"
@@ -459,9 +461,16 @@ run_round () {
         sleep "${_delay_sec}"
       fi
     fi
-    # Pass MODEL_TYPE to the unified launcher
+    # Pass MODEL_TYPE and optional model/precision overrides to the unified launcher
+    local -a _cmd=(python "$LAUNCHER_PY" --cfg "$CFG_INJ" --model-type "${MODEL_TYPE}" --overwrite)
+    if [[ -n "${LAT_MODEL:-}" ]]; then
+      _cmd+=("--model" "${LAT_MODEL}")
+    fi
+    if [[ -n "${LAT_PREC:-}" ]]; then
+      _cmd+=("--prec" "${LAT_PREC}")
+    fi
     MODEL_TYPE="${MODEL_TYPE}" HP_SEED=${FORCE_SEED} CUDA_VISIBLE_DEVICES="$GPU" \
-      python "$LAUNCHER_PY" --cfg "$CFG_INJ" --model-type "${MODEL_TYPE}" --overwrite &
+      "${_cmd[@]}" &
     PIDS+=("$!")
   done
 
