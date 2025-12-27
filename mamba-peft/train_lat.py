@@ -66,6 +66,7 @@ os.environ["WANDB_PROJECT"] = "mamba-peft"
 from dataset import load_dataset
 from trainer.generic_lm_trainer import GenericLMTrainer, GenericLMTrainingArguments
 from mamba_ssm_peft import get_trainable_parameters_ratio, print_trainable_parameter_names
+from utils.runtime_stats import gpu_memory_tracker
 
 # Unified imports
 from lat_adapter import prepare_lat_model_and_tokenizer
@@ -365,7 +366,8 @@ def build_and_run_trainer_lat(
 
     # Train with best-effort email notifications
     try:
-        trainer.train(resume_from_checkpoint=resume_from_checkpoint)
+        with gpu_memory_tracker(output_dir):
+            trainer.train(resume_from_checkpoint=resume_from_checkpoint)
         try:
             _fin_env = str(os.environ.get("SWANLAB_EMAIL_ON_FINISH", "1")).lower()
             if _sl_enable and _fin_env in ("1", "true", "yes", "on"):

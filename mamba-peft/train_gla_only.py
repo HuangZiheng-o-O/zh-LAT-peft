@@ -33,6 +33,7 @@ from trainer.generic_lm_trainer import GenericLMTrainer, GenericLMTrainingArgume
 from mamba_ssm_peft import get_trainable_parameters_ratio, print_trainable_parameter_names
 from mamba_ssm_peft.utils.gla_hf_decoder import create_gla_decoder
 from train_gla_adapter import prepare_gla_model_and_tokenizer
+from utils.runtime_stats import gpu_memory_tracker
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_NOW_OUTPUT_ROOT = REPO_ROOT / "output" / "benchmark" / "glue"
@@ -319,7 +320,8 @@ def build_and_run_trainer_gla_only(
 
     # Train with best-effort email notifications on failure/success (does not interfere with SwanLab core)
     try:
-        trainer.train(resume_from_checkpoint=resume_from_checkpoint)
+        with gpu_memory_tracker(output_dir):
+            trainer.train(resume_from_checkpoint=resume_from_checkpoint)
         try:
             # Optional FINISHED email fallback (SWANLAB_EMAIL_ON_FINISH controls; default on)
             _fin_env = str(os.environ.get("SWANLAB_EMAIL_ON_FINISH", "1")).lower()

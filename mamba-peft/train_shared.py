@@ -10,6 +10,7 @@ from trainer.mamba_trainer import MambaTrainer, MambaTrainingArguments
 from dataset import load_dataset
 from mamba_ssm_peft import get_trainable_parameters_ratio, print_trainable_parameter_names
 from mamba_ssm_peft.utils.decoder import create_decoder
+from utils.runtime_stats import gpu_memory_tracker
 
 
 def build_and_run_trainer(
@@ -204,7 +205,8 @@ def build_and_run_trainer(
     )
 
     try:
-    trainer.train(resume_from_checkpoint=resume_from_checkpoint)
+        with gpu_memory_tracker(output_dir):
+            trainer.train(resume_from_checkpoint=resume_from_checkpoint)
         try:
             from scripts.utils.email_notify import send_event_email  # type: ignore
             _fin_env = str(os.environ.get("SWANLAB_EMAIL_ON_FINISH", "1")).lower()
@@ -221,5 +223,4 @@ def build_and_run_trainer(
         except Exception:
             pass
         raise
-
 
