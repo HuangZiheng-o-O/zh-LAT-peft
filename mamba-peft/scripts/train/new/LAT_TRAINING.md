@@ -1,5 +1,14 @@
 ## Run Guide (LAT Framework)
 
+```
+
+  export HP_USE_DORA=1      # force DoRA even if JSON lacks the flag
+  export HP_USE_RSLoRA=0    # ensure RSLoRA is off
+  export MODEL_TYPE=gla
+  export LAT_MODEL=/home/user/mzs_h/model/second-gla-1.3B-100B/gla-1.3B-100B
+  export LAT_PREC=bf16 
+
+```
 
 ### spider
 

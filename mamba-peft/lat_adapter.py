@@ -145,6 +145,25 @@ def _apply_peft_env_overrides(peft_json: Dict[str, Any]) -> Dict[str, Any]:
         except Exception:
             pass
 
+    # HP_USE_DORA / HP_USE_RSLoRA (truthy env toggles)
+    def _truthy(value: Optional[str]) -> Optional[bool]:
+        if value is None:
+            return None
+        v = str(value).strip().lower()
+        if v in ("1", "true", "yes", "on"):
+            return True
+        if v in ("0", "false", "no", "off"):
+            return False
+        return None
+
+    use_dora_env = _truthy(env.get("HP_USE_DORA"))
+    if use_dora_env is not None:
+        peft_json["use_dora"] = use_dora_env
+
+    use_rslora_env = _truthy(env.get("HP_USE_RSLoRA"))
+    if use_rslora_env is not None:
+        peft_json["use_rslora"] = use_rslora_env
+
     return peft_json
 
 
