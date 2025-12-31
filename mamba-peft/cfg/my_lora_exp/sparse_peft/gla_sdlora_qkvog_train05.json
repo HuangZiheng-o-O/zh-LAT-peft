@@ -10,7 +10,12 @@
     },
     "num_warmup_it": 100,
     "target_modules": [
-        "gk_proj.1"
+        "gk_proj.1",
+        "q_proj",
+        "k_proj",
+        "v_proj",
+        "o_proj",
+        "g_proj"
     ],
     "lora_targets": [
         "q_proj",

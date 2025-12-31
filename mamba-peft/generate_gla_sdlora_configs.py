@@ -52,6 +52,11 @@ def generate_config(
 
     assert freeze_fraction >= 0.0, f"Freeze fraction is negative: {freeze_fraction}"
 
+    target_modules = ["gk_proj.1"]
+    for module_name in lora_targets:
+        if module_name not in target_modules:
+            target_modules.append(module_name)
+
     config = {
         "peft_type": "GLA_SD_LORA",
         "select_mode": "CHANNELS_ONLY",
@@ -63,7 +68,7 @@ def generate_config(
             "channel": freeze_fraction
         },
         "num_warmup_it": num_warmup_it,
-        "target_modules": ["gk_proj.1"],
+        "target_modules": target_modules,
         "lora_targets": lora_targets,
         "finetune_parameters": None,
         "sdlora_alpha": {

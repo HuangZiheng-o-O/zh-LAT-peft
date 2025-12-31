@@ -815,9 +815,14 @@ class GlaSdLoraParameter(nn.Module, BaseTunerLayer):
 
         # Apply adapter to trainable channels
         if self.train_mask.any():
-            # Scatter adapter values into the trainable positions
-            adapter_bias = torch.zeros_like(weight)
-            adapter_bias[self.train_mask] = adapter.flatten()[:self.train_mask.sum().item()]
+            # [FIX Critical] Use masked_scatter to preserve gradient flow
+            # torch.masked_scatter is differentiable, unlike boolean indexing assignment
+            # This ensures sdlora_adapter.grad is not None during training
+            adapter_bias = torch.masked_scatter(
+                torch.zeros_like(weight),
+                self.train_mask,
+                adapter.flatten()
+            )
             weight_new = weight_new + self.sdlora_alpha * adapter_bias
 
         return weight_new, bias_new

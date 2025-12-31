@@ -365,6 +365,14 @@ def prepare_lat_model_and_tokenizer(
             if "lora_targets" not in peft_json or peft_json["lora_targets"] is None:
                 peft_json["lora_targets"] = _get_lora_targets_for_sdlora(resolved_model_type)
 
+            # Ensure BaseTuner walks every LoRA target by adding them to target_modules
+            target_modules = peft_json.get("target_modules") or []
+            lora_targets = peft_json.get("lora_targets") or []
+            for module_name in lora_targets:
+                if module_name not in target_modules:
+                    target_modules.append(module_name)
+            peft_json["target_modules"] = target_modules
+
             # Remove non-config fields from dict
             peft_json.pop("peft_type", None)  # Not a valid GlaSdLoraConfig field
             peft_json.pop("_comment", None)   # Comment field for documentation
