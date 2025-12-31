@@ -49,7 +49,7 @@ UPDATED: 2025-12-30
 
   Key Implementation Details
 
-  1. ZERO_MASK_VALUE = -20.0: Correct for GLA's logsigmoid gate (vs Mamba's 10)
+  1. ZERO_MASK_VALUE = -100.0: Correct for GLA's logsigmoid gate with /16 normalization (vs Mamba's 10)
   2. Target modules: gk_proj.1 (gate projection second layer)
   3. Dimension selection: Channel-only (no state dimension like Mamba)
   4. Phase transition: Via model.should_training_stop property

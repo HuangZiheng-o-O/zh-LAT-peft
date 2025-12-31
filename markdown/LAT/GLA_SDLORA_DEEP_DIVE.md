@@ -117,13 +117,13 @@ SD-LoRA partitions all dimensions into three categories:
 │                                                                  │
 │  ┌────────────┐  ┌────────────┐  ┌────────────┐                 │
 │  │   TRAIN    │  │   FREEZE   │  │    ZERO    │                 │
-│  │   (40%)    │  │   (30%)    │  │   (30%)    │                 │
+│  │   (40%)    │  │   (50%)    │  │   (10%)    │                 │
 │  │            │  │            │  │            │                 │
 │  │ Most       │  │ Medium     │  │ Least      │                 │
 │  │ important  │  │ importance │  │ important  │                 │
 │  │            │  │            │  │            │                 │
 │  │ Gradients  │  │ Weights    │  │ Set to     │                 │
-│  │ updated    │  │ frozen     │  │ -20        │                 │
+│  │ updated    │  │ frozen     │  │ -100       │                 │
 │  └────────────┘  └────────────┘  └────────────┘                 │
 │                                                                  │
 │  ◄─── High Importance ──────────── Low Importance ───►          │
@@ -139,14 +139,15 @@ SD-LoRA partitions all dimensions into three categories:
 # Result: State decays completely → "forgetting"
 ```
 
-**GLA uses `-20` for zeroing:**
+**GLA uses `-100` for zeroing:**
 ```python
-# In GLA: gate = logsigmoid(gk) / normalizer
-# gk = -20 → logsigmoid(-20) ≈ -20
-# Result: gate ≈ exp(-20/τ) ≈ 0 → State decays → "forgetting"
+# In GLA: gate = exp(logsigmoid(gk) / normalizer)
+# where normalizer (gate_logit_normalizer) = 16
+# gk = -100 → logsigmoid(-100)/16 ≈ -6.25
+# Result: gate ≈ exp(-6.25) ≈ 0.002 → State nearly fully decays → "forgetting"
 ```
 
-This numerical difference is crucial for correct behavior!
+This numerical choice ensures near-complete information decay (only 0.2% retained).
 
 ---
 
@@ -215,7 +216,7 @@ When warmup completes, the model:
 │     │  weight_new = weight.clone()        │                     │
 │     │                                     │                     │
 │     │  # Apply zero mask                  │                     │
-│     │  weight_new[zero_mask] = -20.0      │                     │
+│     │  weight_new[zero_mask] = -100.0     │                     │
 │     │                                     │                     │
 │     │  # Apply adapter to train dims      │                     │
 │     │  weight_new[train_mask] += adapter  │                     │
@@ -271,8 +272,8 @@ PeftConfig
             │
             ├── target_modules: ["gk_proj.1"]     # SDT targets
             ├── lora_targets: ["q_proj", ...]     # LoRA targets
-            ├── num_zero: {"channel": 0.3}        # 30% zeroed
-            ├── num_freeze: {"channel": 0.3}      # 30% frozen
+            ├── num_zero: {"channel": 0.1}        # 10% zeroed
+            ├── num_freeze: {"channel": 0.5}      # 50% frozen
             └── num_warmup_it: 100                # Warmup steps
 
 BaseTuner
@@ -311,7 +312,7 @@ def forward(self, x):
         weight_new = weight.clone()
 
         # Zero unimportant dimensions (gate → 0 → forget)
-        weight_new[self.zero_mask] = -20.0
+        weight_new[self.zero_mask] = -100.0
 
         # Add adapter to trainable dimensions
         weight_new[self.train_mask] += α * self.sdlora_adapter
@@ -357,7 +358,7 @@ The modified weight at training time:
 
 ```
 W'[d, :] =
-  ⎧ -20.0                    if d ∈ D_zero   (forget gate)
+  ⎧ -100.0                   if d ∈ D_zero   (forget gate)
   ⎨ W[d, :] + α·A[d', :]     if d ∈ D_train  (adapt)
   ⎩ W[d, :]                  if d ∈ D_freeze (preserve)
 
@@ -389,8 +390,8 @@ python train_lat.py --cfg configs/gla.yaml --peft configs/gla_sdlora/default.jso
     "target_modules": ["gk_proj.1"],
     "lora_targets": ["q_proj", "k_proj", "v_proj", "o_proj"],
     "proj_lora_r": 8,
-    "num_zero": {"channel": 0.3},
-    "num_freeze": {"channel": 0.3},
+    "num_zero": {"channel": 0.1},
+    "num_freeze": {"channel": 0.5},
     "num_warmup_it": 100
 }
 ```
@@ -401,8 +402,8 @@ python train_lat.py --cfg configs/gla.yaml --peft configs/gla_sdlora/default.jso
 |----------|-------------|---------|
 | `HP_PEFT_TYPE` | PEFT type (lora, sdlora) | lora |
 | `HP_WARMUP_IT` | Warmup iterations | 100 |
-| `HP_ZERO_RATIO` | Fraction of dimensions to zero | 0.3 |
-| `HP_FREEZE_RATIO` | Fraction of dimensions to freeze | 0.3 |
+| `HP_ZERO_RATIO` | Fraction of dimensions to zero | 0.1 |
+| `HP_FREEZE_RATIO` | Fraction of dimensions to freeze | 0.5 |
 | `HP_PEFT_R` | LoRA rank for projection layers | 8 |
 
 ### 7.4 Batch Training with Shell Scripts
@@ -431,19 +432,22 @@ We select on K (channel) because:
 2. Modifying K affects what information is stored in state
 3. V modification would affect output representation, not memory
 
-### 8.2 Why -20 for Zero Mask?
+### 8.2 Why -100 for Zero Mask?
 
 The GLA gate computation:
 ```python
 gk = self.gk_proj(hidden_states)
-gk = F.logsigmoid(gk) / self.gate_logit_normalizer
+gk = F.logsigmoid(gk) / self.gate_logit_normalizer  # normalizer = 16
 gate = gk.exp()  # Used in recurrence
 ```
 
-For `gk = -20`:
-- `logsigmoid(-20) ≈ -20`
-- `gate = exp(-20/τ) ≈ 0` for typical `τ ≈ 8-16`
-- State contribution from this dimension is effectively zeroed
+For `gk = -100`:
+- `logsigmoid(-100) ≈ -100`
+- `normalized_gk = -100 / 16 = -6.25`
+- `gate = exp(-6.25) ≈ 0.002` (only 0.2% retained)
+- State contribution from this dimension is nearly fully zeroed
+
+Note: Previous value of -20 was insufficient (exp(-1.25) ≈ 0.29, retaining 29%).
 
 ### 8.3 Why Two-Phase Training?
 
@@ -473,7 +477,7 @@ SD-LoRA's advantage: It combines structured sparsity (SDT) with low-rank adaptat
 GLA SD-LoRA represents a sophisticated adaptation of sparse dimension tuning for linear attention architectures. The key contributions are:
 
 1. **Architectural adaptation**: Targeting `gk_proj.1` instead of direct parameters
-2. **Numerical correctness**: Using `-20` for gate zeroing with logsigmoid
+2. **Numerical correctness**: Using `-100` for gate zeroing with logsigmoid (accounts for /16 normalization)
 3. **Unified integration**: Seamless switching between LoRA and SD-LoRA via environment variables
 4. **Two-phase training**: Warmup for importance estimation, then sparse training
 

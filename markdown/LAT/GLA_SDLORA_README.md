@@ -19,11 +19,13 @@ SD-LoRA:        训练低秩矩阵 + 稀疏选择的关键维度 (~0.5-2%)
 
 SD-LoRA 将参数维度分为三类：
 
-| 类别 | 处理方式 | 典型比例 |
+| 类别 | 处理方式 | 默认比例 |
 |------|----------|----------|
-| **Zero (剪枝)** | 设为极端值，等效于移除 | 30% |
-| **Freeze (冻结)** | 保持原值不更新 | 30% |
 | **Train (训练)** | 正常梯度更新 | 40% |
+| **Freeze (冻结)** | 保持原值不更新 | 50% |
+| **Zero (剪枝)** | 设为极端值，等效于移除 | 10% |
+
+> **注意**: 当前默认值 (40/50/10) 相比原始设置 (40/30/30) 更保守地冻结更多维度。
 
 ---
 
@@ -68,7 +70,7 @@ SD-LoRA 将参数维度分为三类：
 |------|-------|-----|------|
 | **门控参数** | `A_log` 是直接参数 | `gk_proj` 是投影层 | SDT目标不同 |
 | **状态形状** | 向量 (D×N) | 矩阵 (H×K×V) | 维度选择策略不同 |
-| **零值掩码** | 设为10 (exp→0) | 设为-20 (logsigmoid→-∞) | 数值处理不同 |
+| **零值掩码** | 设为10 (exp→0) | 设为-100 (logsigmoid/16→-6.25) | 数值处理不同 |
 
 **因此，不能直接复用 Mamba SD-LoRA 代码，需要针对 GLA 重新设计。**
 
@@ -105,8 +107,8 @@ mamba-peft/
 class GlaSdLoraConfig(PeftConfig):
     # SDT 配置
     target_modules: ["gk_proj.1"]     # SDT 目标: 门控投影第二层
-    num_zero: {"channel": 0.3}        # 30% 维度设为零
-    num_freeze: {"channel": 0.3}      # 30% 维度冻结
+    num_zero: {"channel": 0.1}        # 10% 维度设为零
+    num_freeze: {"channel": 0.5}      # 50% 维度冻结
     num_warmup_it: 100                # 热身迭代次数
 
     # LoRA 配置
@@ -143,7 +145,7 @@ class GlaSdLoraConfig(PeftConfig):
 │  │  3. weight_new = apply_masks(weight, sdlora_adapter)     │ │
 │  │                                                          │ │
 │  │  • 只有 train_mask 中的维度接收梯度                       │ │
-│  │  • zero_mask 中的维度设为 -20 (门控失效)                  │ │
+│  │  • zero_mask 中的维度设为 -100 (门控失效)                 │ │
 │  └─────────────────────────────────────────────────────────┘ │
 │                                                               │
 └──────────────────────────────────────────────────────────────┘
@@ -182,7 +184,7 @@ class GlaSdLoraConfig(PeftConfig):
 │     │  ↑高重要性                          低重要性↑            │  │
 │     │                                                        │  │
 │     │ 分配:                                                   │  │
-│     │ [  Train (40%)  |  Freeze (30%)  |  Zero (30%)  ]     │  │
+│     │ [  Train (40%)  |  Freeze (50%)  |  Zero (10%)  ]     │  │
 │     └────────────────────────────────────────────────────────┘  │
 │                                                                  │
 │  2. 正常训练 (只更新 Train 维度)                                  │
@@ -202,19 +204,22 @@ GLA 的门控使用 `logsigmoid`:
 gk = F.logsigmoid(gk) / gate_logit_normalizer
 
 # 当 gk 很大的负数时:
-#   logsigmoid(-20) ≈ -20
-#   gate ≈ exp(-20/τ) ≈ 0
-#   → 状态完全衰减，等效于"遗忘"
+#   logsigmoid(-100) ≈ -100
+#   gate ≈ exp(-100/τ) ≈ exp(-6.25) ≈ 0.002
+#   → 状态几乎完全衰减，等效于"遗忘"
 ```
 
-因此，GLA SD-LoRA 使用 `-20` 作为零值掩码（而非 Mamba 的 `10`）:
+因此，GLA SD-LoRA 使用 `-100` 作为零值掩码（而非 Mamba 的 `10`）:
 
 ```python
 # gla_sd_lora.py
-ZERO_MASK_VALUE = -20.0
+# 注意: gate_logit_normalizer = 16 (默认值)
+# gk=-100 → logsigmoid(-100)/16 ≈ -6.25 → exp(-6.25) ≈ 0.002 (仅0.2%保留)
+# 之前的-20不够: exp(-1.25) ≈ 0.29 (29%保留!)
+ZERO_MASK_VALUE = -100.0
 
 def build_train_param(self, param, adapter):
-    # 对 zero_mask 中的维度设为 -20
+    # 对 zero_mask 中的维度设为 -100
     param_new = torch.where(
         self.zero_mask,
         torch.full_like(param, self.ZERO_MASK_VALUE),
@@ -257,8 +262,8 @@ HP_ZERO_RATIO=0.4 HP_FREEZE_RATIO=0.4 python train_gla_sdlora.py ...
     "target_modules": ["gk_proj.1"],
     "lora_targets": ["q_proj", "k_proj", "v_proj", "o_proj"],
     "proj_lora_r": 8,
-    "num_zero": {"channel": 0.3},
-    "num_freeze": {"channel": 0.3},
+    "num_zero": {"channel": 0.1},
+    "num_freeze": {"channel": 0.5},
     "num_warmup_it": 100
 }
 ```
@@ -282,7 +287,7 @@ seed: 42
 |------|---------------|-------------|------|
 | **SDT目标** | `A_log` | `gk_proj.1` | 都是控制状态衰减的核心参数 |
 | **维度选择** | Channel + State | Channel only | GLA 矩阵状态结构不同 |
-| **零值掩码** | `10` | `-20` | 数值语义不同 (exp vs logsigmoid) |
+| **零值掩码** | `10` | `-100` | 数值语义不同 (exp vs logsigmoid/16) |
 | **基础调优器** | `MambaBaseTuner` | `GLABaseTuner` | 模型结构不同 |
 | **配置类** | `SdLoraConfig` | `GlaSdLoraConfig` | 参数略有不同 |
 | **参数包装** | `SdLoraParameter` | `GlaSdLoraParameter` | 核心逻辑相似，细节不同 |
@@ -300,7 +305,7 @@ seed: 42
 针对 GLA 重新实现的部分:
 ├── 目标模块识别 (gk_proj vs A_log)
 ├── 维度解析 (只有 channel，无 state)
-├── 零值掩码数值 (-20 vs 10)
+├── 零值掩码数值 (-100 vs 10)
 ├── 块级定位 (GatedLinearAttention vs Mamba mixer)
 └── 基础调优器 (GLABaseTuner)
 ```

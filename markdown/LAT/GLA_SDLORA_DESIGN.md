@@ -157,10 +157,10 @@ GLA_SDLORA_TARGETS = {
 
     # Dimension configuration
     "num_zero": {
-        "channel": 0.3,   # Zero 30% of key dimensions
+        "channel": 0.1,   # Zero 10% of key dimensions
     },
     "num_freeze": {
-        "channel": 0.3,   # Freeze 30% of key dimensions
+        "channel": 0.5,   # Freeze 50% of key dimensions
     },
     # Remaining 40% are trainable
 }
@@ -263,8 +263,8 @@ HP_ZERO_RATIO=0.5 HP_FREEZE_RATIO=0.3 python train_gla_sdlora.py --cfg configs/g
     "peft_type": "GLA_SD_LORA",
     "select_mode": "CHANNELS_ONLY",
     "proj_lora_r": 8,
-    "num_zero": {"channel": 0.3},
-    "num_freeze": {"channel": 0.3},
+    "num_zero": {"channel": 0.1},
+    "num_freeze": {"channel": 0.5},
     "num_warmup_it": 100,
     "target_modules": ["gk_proj.1"],
     "lora_targets": ["q_proj", "k_proj", "v_proj", "o_proj"]
