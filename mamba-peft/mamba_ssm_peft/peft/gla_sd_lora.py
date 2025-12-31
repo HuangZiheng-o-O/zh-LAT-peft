@@ -160,7 +160,28 @@ class GlaSdLoraModel(GLABaseTuner):
 
     def _create_new_module(self, peft_config, adapter_name, target, target_name):
         """Create a new adapter module for the target."""
-        module_name = next(n for n, m in self.model.named_modules() if m is target)
+        # [FIX Issue #4] Improved module name resolution with error handling
+        matching_names = [n for n, m in self.model.named_modules() if m is target]
+
+        if not matching_names:
+            raise RuntimeError(
+                f"Cannot find module '{target_name}' in model. "
+                f"Target object: {type(target).__name__}. "
+                "This should not happen - the target was matched but cannot be found by identity."
+            )
+
+        if len(matching_names) > 1:
+            # Multiple matches - use the one that ends with target_name
+            filtered = [n for n in matching_names if n.endswith(target_name)]
+            if len(filtered) == 1:
+                module_name = filtered[0]
+            else:
+                # Ambiguous - warn and use first match
+                print(f"[SD-LoRA] WARNING: Multiple modules match target '{target_name}': {matching_names}. "
+                      f"Using first match: {matching_names[0]}")
+                module_name = matching_names[0]
+        else:
+            module_name = matching_names[0]
 
         # Check if this is a LoRA target (applies to linear projection layers)
         # Note: g_proj may not exist if use_output_gate=False in the GLA layer
@@ -218,22 +239,115 @@ class GlaSdLoraModel(GLABaseTuner):
         return [m for m in self.model.modules() if isinstance(m, GlaSdLoraParameter)]
 
     def get_sdlora_mode(self):
-        """Get the current SD-LoRA mode (warmup or train)."""
-        mode = [m.get_sdlora_mode() for m in self.model.modules() if isinstance(m, GlaSdLoraParameter)]
-        if not mode:
-            return "train"
-        assert len(set(mode)) == 1
-        return mode[0]
+        """Get the current SD-LoRA mode (warmup or train).
 
-    def load_config(self, path):
-        """Load SD-LoRA configuration from path."""
-        for m in self._get_sdlora_params():
-            m.load_config(path)
+        Raises:
+            RuntimeError: If no GlaSdLoraParameter modules are found (configuration error).
+        """
+        # [FIX Issue #3] Raise error instead of silent fallback
+        params = self._get_sdlora_params()
+        if not params:
+            raise RuntimeError(
+                "No GlaSdLoraParameter modules found in the model. "
+                "This indicates a configuration error - check that target_modules "
+                f"(e.g., 'gk_proj.1') matches actual module names in the model. "
+                f"Available modules: {[n for n, _ in self.model.named_modules() if 'gk_proj' in n][:10]}"
+            )
+        modes = [m.get_sdlora_mode() for m in params]
+        if len(set(modes)) != 1:
+            raise RuntimeError(
+                f"Inconsistent SD-LoRA modes across modules: {dict(zip([m.module_name for m in params], modes))}. "
+                "All modules must be in the same mode."
+            )
+        return modes[0]
+
+    def load_config(self, path, required=False):
+        """Load SD-LoRA configuration from path.
+
+        Args:
+            path: Directory containing .pkl config files
+            required: If True, raise error if config files don't exist (for Phase 2)
+
+        Returns:
+            int: Number of config files successfully loaded
+
+        Raises:
+            RuntimeError: If required=True and no config files are found/loaded
+        """
+        params = self._get_sdlora_params()
+        if not params:
+            raise RuntimeError(
+                "No GlaSdLoraParameter modules found. Cannot load config."
+            )
+
+        loaded_count = 0
+        missing_files = []
+        for m in params:
+            success = m.load_config(path, required=required)
+            if success:
+                loaded_count += 1
+            else:
+                missing_files.append(m.module_name)
+
+        if required and loaded_count == 0:
+            raise RuntimeError(
+                f"[SD-LoRA] FATAL: No config files loaded from {path}. "
+                f"Missing files for modules: {missing_files}. "
+                "Phase 2 cannot proceed without warmup gradient data."
+            )
+
+        if required and missing_files:
+            raise RuntimeError(
+                f"[SD-LoRA] FATAL: Some config files missing from {path}: {missing_files}. "
+                f"Only {loaded_count}/{len(params)} modules loaded."
+            )
+
+        print(f"[SD-LoRA] Loaded {loaded_count}/{len(params)} config files from {path}")
+        return loaded_count
 
     def save_config(self, path):
-        """Save SD-LoRA configuration to path."""
-        for m in self._get_sdlora_params():
+        """Save SD-LoRA configuration to path.
+
+        Returns:
+            int: Number of config files saved
+
+        Raises:
+            RuntimeError: If no modules found to save
+        """
+        params = self._get_sdlora_params()
+        if not params:
+            raise RuntimeError(
+                "No GlaSdLoraParameter modules found. Cannot save config."
+            )
+
+        saved_count = 0
+        for m in params:
             m.save_config(path)
+            saved_count += 1
+
+        print(f"[SD-LoRA] Saved {saved_count} config files to {path}")
+        return saved_count
+
+    def verify_train_mode(self):
+        """Verify all SD-LoRA modules are in train mode.
+
+        Returns:
+            bool: True if all modules are in train mode
+
+        Raises:
+            RuntimeError: If any module is not in train mode
+        """
+        params = self._get_sdlora_params()
+        if not params:
+            raise RuntimeError("No GlaSdLoraParameter modules found.")
+
+        not_in_train = [(m.module_name, m.get_sdlora_mode()) for m in params if m.get_sdlora_mode() != "train"]
+        if not_in_train:
+            raise RuntimeError(
+                f"[SD-LoRA] FATAL: Some modules are not in train mode: {not_in_train}. "
+                "This indicates load_config failed or warmup data is missing."
+            )
+        return True
 
     @property
     def should_training_stop(self):
@@ -291,6 +405,19 @@ class GlaSdLoraParameter(nn.Module, BaseTunerLayer):
         super().__init__()
         BaseTunerLayer.__init__(self)
 
+        # Validate inputs
+        if base_layer is None:
+            raise ValueError(f"base_layer cannot be None for module {module_name}")
+
+        if not module_name:
+            raise ValueError("module_name cannot be empty")
+
+        if num_warmup_it is None:
+            raise ValueError(
+                f"[{module_name}] num_warmup_it cannot be None. "
+                "Set to 0 or positive value for warmup, or -1 to skip warmup."
+            )
+
         self.base_layer = base_layer
         self.module_name = module_name.replace(".", "_")
         self.select_mode = select_mode
@@ -304,12 +431,40 @@ class GlaSdLoraParameter(nn.Module, BaseTunerLayer):
         self.sdlora_alpha = sdlora_alpha
         self.get_block = lambda: block
 
+        # Validate dimension ratios
+        param_info = self.get_model_param_info()
+        total_channels = param_info.out_features
+        total_dims = self.num_zero["channel"] + self.num_freeze["channel"] + self.num_train["channel"]
+
+        if total_dims != total_channels:
+            raise ValueError(
+                f"[{self.module_name}] Dimension mismatch: "
+                f"zero({self.num_zero['channel']}) + freeze({self.num_freeze['channel']}) + "
+                f"train({self.num_train['channel']}) = {total_dims}, "
+                f"but total channels = {total_channels}"
+            )
+
+        if self.num_train["channel"] <= 0:
+            raise ValueError(
+                f"[{self.module_name}] num_train must be positive, got {self.num_train['channel']}. "
+                f"Check num_zero and num_freeze ratios (they sum to >= 1.0)"
+            )
+
+        print(f"[{self.module_name}] SD-LoRA config: "
+              f"train={self.num_train['channel']}, freeze={self.num_freeze['channel']}, "
+              f"zero={self.num_zero['channel']} (total={total_channels})")
+
         # Save in state dict
         self.register_buffer("it_counter", torch.tensor(0).long())
 
         # Create gradient accumulator and adapter parameters
         self.sdlora_grad = self._create_grad_param()
         self.sdlora_adapter = self._create_adapter_param()
+
+        if self.sdlora_grad is None:
+            raise RuntimeError(f"[{self.module_name}] Failed to create sdlora_grad")
+        if self.sdlora_adapter is None:
+            raise RuntimeError(f"[{self.module_name}] Failed to create sdlora_adapter")
 
         self.set_sdlora_mode("warmup" if self.training and self.num_warmup_it >= 0 else "train")
         self.set_adapter(self.active_adapters)
@@ -389,27 +544,112 @@ class GlaSdLoraParameter(nn.Module, BaseTunerLayer):
         """Get configuration file path."""
         return Path(path) / (self.module_name + ".pkl")
 
-    def load_config(self, path):
-        """Load configuration from file."""
+    def load_config(self, path, required=False):
+        """Load configuration from file.
+
+        Args:
+            path: Directory containing the config file
+            required: If True, raise error if file doesn't exist
+
+        Returns:
+            bool: True if config was loaded successfully, False otherwise
+
+        Raises:
+            RuntimeError: If required=True and file doesn't exist
+            RuntimeError: If file exists but loading fails
+        """
         cfg_path = self._get_cfg_file(path)
-        if cfg_path.exists():
-            if self.sdlora_grad is not None:
-                with open(cfg_path, "rb") as f:
-                    with torch.no_grad():
-                        self.sdlora_grad.data[:] = pickle.load(f)
-            print(f"Loaded {cfg_path}")
+
+        if not cfg_path.exists():
+            if required:
+                raise RuntimeError(
+                    f"[{self.module_name}] FATAL: Config file not found: {cfg_path}. "
+                    "This is required for Phase 2 training. Did Phase 1 (warmup) complete successfully?"
+                )
+            # For Phase 1, missing file is OK (first run)
+            return False
+
+        if self.sdlora_grad is None:
+            raise RuntimeError(
+                f"[{self.module_name}] Cannot load config: sdlora_grad is None"
+            )
+
+        try:
+            with open(cfg_path, "rb") as f:
+                loaded_data = pickle.load(f)
+
+            # Validate loaded data shape matches current parameter
+            if loaded_data.shape != self.sdlora_grad.shape:
+                raise RuntimeError(
+                    f"[{self.module_name}] Config shape mismatch: "
+                    f"loaded {loaded_data.shape} vs expected {self.sdlora_grad.shape}. "
+                    "Model architecture may have changed since warmup."
+                )
+
+            with torch.no_grad():
+                self.sdlora_grad.data[:] = loaded_data
+
+            # Verify non-zero gradients were loaded (warmup should have accumulated something)
+            grad_norm = self.sdlora_grad.data.norm().item()
+            if grad_norm == 0:
+                print(f"[{self.module_name}] WARNING: Loaded gradient has zero norm. "
+                      "Warmup may not have accumulated meaningful gradients.")
+
+            print(f"[{self.module_name}] Loaded config from {cfg_path} (grad_norm={grad_norm:.4f})")
             self.set_sdlora_mode("train")
+            return True
+
+        except Exception as e:
+            raise RuntimeError(
+                f"[{self.module_name}] Failed to load config from {cfg_path}: {e}"
+            ) from e
 
     def save_config(self, path):
-        """Save configuration to file."""
+        """Save configuration to file.
+
+        Saves the accumulated gradient data (sdlora_grad) which is used
+        to determine dimension importance for Phase 2.
+
+        Raises:
+            RuntimeError: If sdlora_grad is None or save fails
+        """
         cfg_path = self._get_cfg_file(path)
-        Path(path).mkdir(parents=True, exist_ok=True)
-        grad = self.sdlora_grad
-        if grad is not None:
-            grad = grad.data
-        with open(cfg_path, "wb") as f:
-            pickle.dump(grad, f)
-        print(f"Saved {cfg_path}")
+
+        if self.sdlora_grad is None:
+            raise RuntimeError(
+                f"[{self.module_name}] Cannot save config: sdlora_grad is None. "
+                "This should not happen - sdlora_grad should be initialized in __init__."
+            )
+
+        grad_data = self.sdlora_grad.data
+        grad_norm = grad_data.norm().item()
+
+        # Warn if gradient norm is zero (warmup may not have run or failed)
+        if grad_norm == 0:
+            print(f"[{self.module_name}] WARNING: Saving zero-norm gradient. "
+                  "Warmup may not have accumulated meaningful gradients. "
+                  "Check if warmup training actually ran and updated parameters.")
+
+        try:
+            Path(path).mkdir(parents=True, exist_ok=True)
+            with open(cfg_path, "wb") as f:
+                pickle.dump(grad_data, f)
+
+            # Verify the file was written correctly
+            if not cfg_path.exists():
+                raise RuntimeError(f"File was not created: {cfg_path}")
+
+            file_size = cfg_path.stat().st_size
+            if file_size == 0:
+                raise RuntimeError(f"File is empty: {cfg_path}")
+
+            print(f"[{self.module_name}] Saved config to {cfg_path} "
+                  f"(grad_norm={grad_norm:.4f}, size={file_size} bytes)")
+
+        except Exception as e:
+            raise RuntimeError(
+                f"[{self.module_name}] Failed to save config to {cfg_path}: {e}"
+            ) from e
 
     def get_sdlora_mode(self):
         """Get current SD-LoRA mode."""
@@ -531,16 +771,27 @@ class GlaSdLoraParameter(nn.Module, BaseTunerLayer):
 
         During warmup: accumulate gradients on full parameter
         During train: apply sparse adapter to selected dimensions
+
+        Note on it_counter:
+            it_counter increments per forward pass, NOT per training step.
+            With gradient_accumulation_steps=N, each training step has N forward passes.
+            num_warmup_it should be set based on forward passes, and the training script
+            should adjust total_steps accordingly (see train_lat.py:_run_sdlora_two_phase_training).
         """
         if not hasattr(self, "sdlora_alpha"):
             self.sdlora_alpha = 1
 
         # Check if warmup is complete
         if self.sdlora_mode == "warmup" and self.num_warmup_it >= 0 and self.it_counter > self.num_warmup_it:
+            print(f"[{self.module_name}] Warmup complete after {self.it_counter} forward passes. "
+                  f"Switching to train mode.")
             self.set_sdlora_mode("train")
 
-        assert not (self.sdlora_mode == "warmup" and not self.training), \
-            "Cannot be in warmup mode during evaluation"
+        if self.sdlora_mode == "warmup" and not self.training:
+            raise RuntimeError(
+                f"[{self.module_name}] Cannot be in warmup mode during evaluation. "
+                "This suggests the model was not properly switched to train mode after warmup."
+            )
 
         if self.is_layer:
             weight = self.base_layer.weight

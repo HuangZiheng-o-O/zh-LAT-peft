@@ -750,10 +750,19 @@ def _run_sdlora_two_phase_training(
     its_per_epoch = int(np.ceil(len(train_data_module.dataset) / batch_size))
     logging_steps = min(50, its_per_epoch)
 
-    # Warmup phase: limit steps to num_warmup_it + buffer
+    # [FIX Issue #5] Warmup phase: account for gradient_accumulation_steps
+    # num_warmup_it counts forward passes, but total_steps counts training steps
+    # With gradient_accumulation_steps=N, each training step has N forward passes
     warmup_it = getattr(peft_cfg, "num_warmup_it", 100)
-    warmup_steps = warmup_it + 10  # Small buffer to ensure transition
-    print(f"[{log_tag}] Warmup steps: {warmup_steps}")
+
+    # Calculate training steps needed to reach warmup_it forward passes
+    # ceil(warmup_it / gradient_accumulation_steps) + buffer for safety
+    warmup_training_steps = int(np.ceil(warmup_it / gradient_accumulation_steps)) + 10
+    warmup_steps = warmup_training_steps
+
+    print(f"[{log_tag}] Warmup config: {warmup_it} forward passes")
+    print(f"[{log_tag}] With gradient_accumulation_steps={gradient_accumulation_steps}, "
+          f"running {warmup_steps} training steps")
 
     # Check if warmup already completed
     warmup_marker = Path(output_dir) / ".sdlora_warmup_done"
@@ -793,10 +802,31 @@ def _run_sdlora_two_phase_training(
             train_data_module=train_data_module,
         )
 
-        # Mark warmup as done
+        # [FIX BUG #1] Save warmup gradient information BEFORE marking done
+        # This is CRITICAL - without this, Phase 2 has no dimension importance data
         Path(output_dir).mkdir(parents=True, exist_ok=True)
+        if hasattr(model, "save_config"):
+            model.save_config(output_dir)
+            print(f"[{log_tag}] Saved warmup gradient information to {output_dir}")
+        else:
+            raise RuntimeError(
+                f"[{log_tag}] FATAL: Model does not have save_config method. "
+                "SD-LoRA requires saving warmup gradients for Phase 2."
+            )
+
+        # Verify the config was actually saved
+        sdlora_config_dir = Path(output_dir)
+        saved_files = list(sdlora_config_dir.glob("*.pkl"))
+        if not saved_files:
+            raise RuntimeError(
+                f"[{log_tag}] FATAL: No .pkl config files found in {output_dir} after save_config(). "
+                "Warmup gradient information was not saved correctly."
+            )
+        print(f"[{log_tag}] Verified {len(saved_files)} config file(s) saved: {[f.name for f in saved_files]}")
+
+        # Mark warmup as done
         warmup_marker.touch()
-        print(f"[{log_tag}] Warmup phase completed, dimension masks saved")
+        print(f"[{log_tag}] Warmup phase completed successfully")
 
     # Phase 2: Training with sparse dimensions
     print(f"\n{'=' * 60}")
@@ -812,9 +842,29 @@ def _run_sdlora_two_phase_training(
         peft_json_path=peft_json_path,
     )
 
-    # Load saved warmup config (dimension masks)
-    if hasattr(model2, "load_config"):
-        model2.load_config(output_dir)
+    # [FIX BUG #2] Load saved warmup config (dimension masks) with required=True
+    # This ensures Phase 2 fails fast if warmup data is missing
+    if not hasattr(model2, "load_config"):
+        raise RuntimeError(
+            f"[{log_tag}] FATAL: Model does not have load_config method. "
+            "Cannot load warmup gradient data for Phase 2."
+        )
+
+    model2.load_config(output_dir, required=True)
+
+    # Verify model is now in train mode (not warmup)
+    if hasattr(model2, "verify_train_mode"):
+        model2.verify_train_mode()
+        print(f"[{log_tag}] Verified: All SD-LoRA modules are in train mode")
+    else:
+        # Fallback verification
+        if hasattr(model2, "get_sdlora_mode"):
+            current_mode = model2.get_sdlora_mode()
+            if current_mode != "train":
+                raise RuntimeError(
+                    f"[{log_tag}] FATAL: Model is in '{current_mode}' mode, expected 'train'. "
+                    "load_config may have failed to transition the model."
+                )
 
     # Force left padding
     if force_left:
