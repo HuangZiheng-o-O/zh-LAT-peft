@@ -13,6 +13,7 @@ class MambaPeftType(str, enum.Enum):
     SSMPEFT = "SSMPEFT"
     PARAM_TRANSFORM = "PARAM_TRANSFORM"
     SD_LORA = "SD_LORA"
+    GLA_SD_LORA = "GLA_SD_LORA"  # SD-LoRA for GLA models
 
 
 def register_peft_tuner(name):
@@ -38,5 +39,6 @@ def _init():
     from .ssm_peft import SsmPeftModel
     from .param_transform import ParamTransformModel
     from .sd_lora import SdLoraModel
+    from .gla_sd_lora import GlaSdLoraModel  # GLA SD-LoRA
 
 _init()

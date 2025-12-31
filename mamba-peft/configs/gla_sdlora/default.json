@@ -1,0 +1,19 @@
+{
+    "peft_type": "GLA_SD_LORA",
+    "select_mode": "CHANNELS_ONLY",
+    "proj_lora_r": 8,
+    "num_zero": {
+        "channel": 0.3
+    },
+    "num_freeze": {
+        "channel": 0.3
+    },
+    "num_warmup_it": 100,
+    "target_modules": ["gk_proj.1"],
+    "lora_targets": ["q_proj", "k_proj", "v_proj", "o_proj"],
+    "finetune_parameters": null,
+    "sdlora_alpha": {
+        "global": 1.0,
+        "gk_proj.1": 1.0
+    }
+}
