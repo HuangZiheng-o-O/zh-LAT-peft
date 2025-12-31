@@ -72,20 +72,56 @@ class GlaSdLoraConfig(PeftConfig):
     def __post_init__(self):
         self.peft_type = MambaPeftType.GLA_SD_LORA
 
-        # Default target modules for GLA SDT
-        if self.target_modules is None:
-            self.target_modules = ["gk_proj.1"]  # Second layer of gate projection
+        # Validate required configuration fields
+        # These must be explicitly specified in the config file or passed at initialization
 
-        # Default LoRA targets
-        if self.lora_targets is None:
-            self.lora_targets = ["q_proj", "k_proj", "v_proj", "o_proj"]
+        # target_modules: SDT targets (e.g., ["gk_proj.1"])
+        assert self.target_modules is not None, (
+            "target_modules is required for GLA SD-LoRA. "
+            "Must be specified in config file or at initialization. "
+            "Example: target_modules=['gk_proj.1']"
+        )
+        assert isinstance(self.target_modules, list) and len(self.target_modules) > 0, (
+            "target_modules must be a non-empty list"
+        )
 
-        # Default dimension selection: Train=40%, Freeze=50%, Zero=10%
-        # Train = 1 - Zero - Freeze = 1 - 0.1 - 0.5 = 0.4
-        if self.num_zero is None:
-            self.num_zero = {"channel": 0.1}
-        if self.num_freeze is None:
-            self.num_freeze = {"channel": 0.5}
+        # lora_targets: LoRA targets for linear projections
+        assert self.lora_targets is not None, (
+            "lora_targets is required for GLA SD-LoRA. "
+            "Must be specified in config file or at initialization. "
+            "Example: lora_targets=['q_proj', 'k_proj', 'v_proj', 'g_proj', 'o_proj']"
+        )
+        assert isinstance(self.lora_targets, list) and len(self.lora_targets) > 0, (
+            "lora_targets must be a non-empty list"
+        )
+
+        # num_zero: Dimensions to zero (sparsify)
+        assert self.num_zero is not None, (
+            "num_zero is required for GLA SD-LoRA. "
+            "Must be specified in config file or at initialization. "
+            "Example: num_zero={'channel': 0.1}"
+        )
+        assert isinstance(self.num_zero, dict) and "channel" in self.num_zero, (
+            "num_zero must be a dict with 'channel' key"
+        )
+
+        # num_freeze: Dimensions to freeze
+        assert self.num_freeze is not None, (
+            "num_freeze is required for GLA SD-LoRA. "
+            "Must be specified in config file or at initialization. "
+            "Example: num_freeze={'channel': 0.5}"
+        )
+        assert isinstance(self.num_freeze, dict) and "channel" in self.num_freeze, (
+            "num_freeze must be a dict with 'channel' key"
+        )
+
+        # Validate that Train + Freeze + Zero ratios sum to <= 1.0
+        if isinstance(self.num_zero["channel"], float) and isinstance(self.num_freeze["channel"], float):
+            total_ratio = self.num_zero["channel"] + self.num_freeze["channel"]
+            assert total_ratio <= 1.0, (
+                f"num_zero + num_freeze must be <= 1.0, got {total_ratio}. "
+                f"This leaves Train ratio = {1.0 - total_ratio}"
+            )
 
 
 @register_peft_tuner(MambaPeftType.GLA_SD_LORA)
@@ -126,7 +162,8 @@ class GlaSdLoraModel(GLABaseTuner):
         """Create a new adapter module for the target."""
         module_name = next(n for n, m in self.model.named_modules() if m is target)
 
-        # Check if this is a LoRA target
+        # Check if this is a LoRA target (applies to linear projection layers)
+        # Note: g_proj may not exist if use_output_gate=False in the GLA layer
         lora_targets = peft_config.lora_targets or []
         if target_name in lora_targets and peft_config.proj_lora_r is not None:
             new_module = LoraLinear(

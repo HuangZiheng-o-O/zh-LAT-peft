@@ -1,0 +1,28 @@
+# Base config for SD-LoRA experiments
+# Training parameters are set via environment variables (HP_*, LAT_*, etc.)
+# PEFT config is passed via --peft CLI argument
+#
+# Required environment variables:
+#   LAT_MODEL: Path to GLA model
+#   LAT_PREC: Precision (bf16/fp16/fp32)
+#   HP_EPOCHS: Number of training epochs
+#   HP_BATCH_SIZE: Training batch size
+#   HP_LR: Learning rate
+#
+# Optional (with defaults):
+#   HP_SEED: Random seed (default: 42)
+#   HP_EVAL_BATCH_SIZE: Evaluation batch size
+#   HP_EVAL_STEPS: Steps between evaluations
+#   HP_SAVE_STEPS: Steps between checkpoints
+
+# Default values (can be overridden by env vars)
+num_epochs: 5
+batch_size: 8
+learning_rate: 0.0003
+eval_batch_size: 32
+eval_epochs: 1
+seed: 42
+prec: bf16
+
+# data will be injected by lat_round_sparse.sh
+# peft will be passed via --peft CLI argument

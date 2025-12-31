@@ -3,18 +3,23 @@
     "select_mode": "CHANNELS_ONLY",
     "proj_lora_r": 8,
     "num_zero": {
-        "channel": 0.1
+        "channel": 0.0
     },
     "num_freeze": {
-        "channel": 0.5
+        "channel": 0.95
     },
     "num_warmup_it": 100,
-    "target_modules": ["gk_proj.1"],
-    "lora_targets": ["q_proj", "k_proj", "v_proj", "g_proj", "o_proj"],
+    "target_modules": [
+        "gk_proj.1"
+    ],
+    "lora_targets": [
+        "k_proj",
+        "v_proj"
+    ],
     "finetune_parameters": null,
     "sdlora_alpha": {
         "global": 1.0,
         "gk_proj.1": 1.0
     },
-    "_comment": "Default GLA SD-LoRA: Train=40%, Freeze=50%, Zero=10%. All linear projections use LoRA."
+    "_comment": "GLA SD-LoRA: Train=5%, Freeze=95%, Zero=0%. LoRA on: k_proj, v_proj"
 }

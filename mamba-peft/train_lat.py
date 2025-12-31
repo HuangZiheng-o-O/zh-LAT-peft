@@ -877,6 +877,7 @@ def main():
     parser.add_argument("--lock", action="store_true")
     parser.add_argument("--model")
     parser.add_argument("--prec")
+    parser.add_argument("--peft", type=str, help="Path to PEFT config JSON file (for SD-LoRA)")
     parser.add_argument("--device")
     args = parser.parse_args()
 

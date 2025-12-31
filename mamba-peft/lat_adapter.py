@@ -365,8 +365,9 @@ def prepare_lat_model_and_tokenizer(
             if "lora_targets" not in peft_json or peft_json["lora_targets"] is None:
                 peft_json["lora_targets"] = _get_lora_targets_for_sdlora(resolved_model_type)
 
-            # Remove peft_type from dict (not a valid GlaSdLoraConfig field)
-            peft_json.pop("peft_type", None)
+            # Remove non-config fields from dict
+            peft_json.pop("peft_type", None)  # Not a valid GlaSdLoraConfig field
+            peft_json.pop("_comment", None)   # Comment field for documentation
 
             # Create config
             peft_cfg = GlaSdLoraConfig(**peft_json)
