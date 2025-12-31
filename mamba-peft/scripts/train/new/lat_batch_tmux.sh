@@ -198,9 +198,12 @@ HDR
   printf 'export HP_USE_RSLoRA=%q\n' "${HP_USE_RSLoRA:-}"
 
   # SD-LoRA specific parameters
+  # Dimension ratios: Train + Freeze + Zero = 100%
+  # Default: Train=40%, Freeze=50%, Zero=10%
   printf 'export HP_WARMUP_IT=%q\n' "${HP_WARMUP_IT:-}"
-  printf 'export HP_ZERO_RATIO=%q\n' "${HP_ZERO_RATIO:-}"
+  printf 'export HP_TRAIN_RATIO=%q\n' "${HP_TRAIN_RATIO:-}"
   printf 'export HP_FREEZE_RATIO=%q\n' "${HP_FREEZE_RATIO:-}"
+  printf 'export HP_ZERO_RATIO=%q\n' "${HP_ZERO_RATIO:-}"
 
   # LR scheduler
   printf 'export LR_SCHEDULER_TYPE=%q\n' "${LR_SCHEDULER_TYPE:-cosine}"

@@ -31,8 +31,11 @@ Environment Variables:
 
 SD-LoRA Specific Environment Variables:
 - HP_WARMUP_IT: Override warmup iterations (default: 100)
-- HP_ZERO_RATIO: Override zero dimension ratio (default: 0.3)
-- HP_FREEZE_RATIO: Override freeze dimension ratio (default: 0.3)
+- HP_TRAIN_RATIO: Override train dimension ratio (default: 0.4)
+  If set, HP_ZERO_RATIO is auto-computed as: 1 - train - freeze
+- HP_FREEZE_RATIO: Override freeze dimension ratio (default: 0.5)
+- HP_ZERO_RATIO: Override zero dimension ratio (default: 0.1)
+  Note: Train + Freeze + Zero must equal 1.0
 
 Usage:
 ======

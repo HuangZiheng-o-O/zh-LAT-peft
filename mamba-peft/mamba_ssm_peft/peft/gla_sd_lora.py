@@ -80,11 +80,12 @@ class GlaSdLoraConfig(PeftConfig):
         if self.lora_targets is None:
             self.lora_targets = ["q_proj", "k_proj", "v_proj", "o_proj"]
 
-        # Default dimension selection
+        # Default dimension selection: Train=40%, Freeze=50%, Zero=10%
+        # Train = 1 - Zero - Freeze = 1 - 0.1 - 0.5 = 0.4
         if self.num_zero is None:
-            self.num_zero = {"channel": 0.3}
+            self.num_zero = {"channel": 0.1}
         if self.num_freeze is None:
-            self.num_freeze = {"channel": 0.3}
+            self.num_freeze = {"channel": 0.5}
 
 
 @register_peft_tuner(MambaPeftType.GLA_SD_LORA)
@@ -228,9 +229,15 @@ class GlaSdLoraParameter(nn.Module, BaseTunerLayer):
     """
 
     # Large negative value for zeroing gate dimensions
-    # In GLA: gate = logsigmoid(gk) / normalizer
-    # Very negative gk → logsigmoid ≈ gk → very negative gate → state decays to 0
-    ZERO_MASK_VALUE = -20.0
+    # In GLA: gate = exp(logsigmoid(gk) / gate_logit_normalizer)
+    # where gate_logit_normalizer = 16 (default)
+    #
+    # To achieve near-zero decay (complete forgetting):
+    #   gk = -100 → logsigmoid(-100)/16 ≈ -6.25 → exp(-6.25) ≈ 0.002 (0.2% retained)
+    #
+    # Note: Previous value -20 was insufficient:
+    #   gk = -20 → logsigmoid(-20)/16 ≈ -1.25 → exp(-1.25) ≈ 0.29 (29% retained!)
+    ZERO_MASK_VALUE = -100.0
 
     def __init__(
         self,

@@ -24,10 +24,12 @@ Environment Variables:
 - HP_INIT: Override init_lora_weights
 - HP_PISSA_FAST: Fast PiSSA init
 
-SD-LoRA Specific:
-- HP_WARMUP_IT: Override warmup iterations
-- HP_ZERO_RATIO: Override zero dimension ratio
-- HP_FREEZE_RATIO: Override freeze dimension ratio
+SD-LoRA Specific (default: Train=40%, Freeze=50%, Zero=10%):
+- HP_WARMUP_IT: Override warmup iterations (default: 100)
+- HP_TRAIN_RATIO: Override train dimension ratio (default: 0.4)
+  If set, HP_ZERO_RATIO is auto-computed as: 1 - train - freeze
+- HP_FREEZE_RATIO: Override freeze dimension ratio (default: 0.5)
+- HP_ZERO_RATIO: Override zero dimension ratio (default: 0.1)
 
 Usage:
 ======
@@ -186,7 +188,13 @@ def _apply_lora_env_overrides(peft_json: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _apply_sdlora_env_overrides(peft_json: Dict[str, Any]) -> Dict[str, Any]:
-    """Apply environment variable overrides for SD-LoRA."""
+    """Apply environment variable overrides for SD-LoRA.
+
+    Dimension ratio logic (Train + Freeze + Zero = 100%):
+    - Default: Train=40%, Freeze=50%, Zero=10%
+    - If HP_TRAIN_RATIO is set, Zero is auto-computed: Zero = 1 - Train - Freeze
+    - All three ratios can be set explicitly via HP_TRAIN_RATIO, HP_FREEZE_RATIO, HP_ZERO_RATIO
+    """
     # Apply standard LoRA overrides first (for proj_lora_r, etc.)
     peft_json = _apply_lora_env_overrides(peft_json)
 
@@ -194,19 +202,59 @@ def _apply_sdlora_env_overrides(peft_json: Dict[str, Any]) -> Dict[str, Any]:
     warmup_it = _env_int("HP_WARMUP_IT", peft_json.get("num_warmup_it", 100))
     peft_json["num_warmup_it"] = warmup_it
 
-    # Zero ratio
-    num_zero = peft_json.get("num_zero", {"channel": 0.3})
-    if isinstance(num_zero, dict):
-        zero_ratio = _env_float("HP_ZERO_RATIO", num_zero.get("channel", 0.3))
-        num_zero["channel"] = zero_ratio
-    peft_json["num_zero"] = num_zero
+    # Default ratios: Train=40%, Freeze=50%, Zero=10%
+    # Train = 1 - Zero - Freeze = 1 - 0.1 - 0.5 = 0.4
+    default_train = 0.4
+    default_freeze = 0.5
+    default_zero = 0.1
 
-    # Freeze ratio
-    num_freeze = peft_json.get("num_freeze", {"channel": 0.3})
+    # Get config values or use new defaults
+    num_zero = peft_json.get("num_zero", {"channel": default_zero})
+    num_freeze = peft_json.get("num_freeze", {"channel": default_freeze})
+
+    # Check if HP_TRAIN_RATIO is explicitly set
+    train_ratio_env = os.environ.get("HP_TRAIN_RATIO")
+    freeze_ratio_env = os.environ.get("HP_FREEZE_RATIO")
+    zero_ratio_env = os.environ.get("HP_ZERO_RATIO")
+
     if isinstance(num_freeze, dict):
-        freeze_ratio = _env_float("HP_FREEZE_RATIO", num_freeze.get("channel", 0.3))
+        if freeze_ratio_env is not None:
+            try:
+                freeze_ratio = float(freeze_ratio_env)
+            except (ValueError, TypeError):
+                freeze_ratio = num_freeze.get("channel", default_freeze)
+        else:
+            freeze_ratio = num_freeze.get("channel", default_freeze)
         num_freeze["channel"] = freeze_ratio
+    else:
+        freeze_ratio = default_freeze
+
+    if isinstance(num_zero, dict):
+        if train_ratio_env is not None and zero_ratio_env is None:
+            # HP_TRAIN_RATIO is set, auto-compute HP_ZERO_RATIO
+            try:
+                train_ratio = float(train_ratio_env)
+                zero_ratio = max(0.0, 1.0 - train_ratio - freeze_ratio)
+                print(f"[SD-LoRA] HP_TRAIN_RATIO={train_ratio:.2f} set, auto-computed "
+                      f"zero_ratio={zero_ratio:.2f} (freeze={freeze_ratio:.2f})")
+            except (ValueError, TypeError):
+                zero_ratio = num_zero.get("channel", default_zero)
+        elif zero_ratio_env is not None:
+            try:
+                zero_ratio = float(zero_ratio_env)
+            except (ValueError, TypeError):
+                zero_ratio = num_zero.get("channel", default_zero)
+        else:
+            zero_ratio = num_zero.get("channel", default_zero)
+        num_zero["channel"] = zero_ratio
+
+    peft_json["num_zero"] = num_zero
     peft_json["num_freeze"] = num_freeze
+
+    # Print effective ratios
+    train_ratio_effective = 1.0 - num_zero.get("channel", 0) - num_freeze.get("channel", 0)
+    print(f"[SD-LoRA] Effective ratios: train={train_ratio_effective:.1%}, "
+          f"freeze={num_freeze.get('channel', 0):.1%}, zero={num_zero.get('channel', 0):.1%}")
 
     # proj_lora_r from HP_PEFT_R
     r_env = os.environ.get("HP_PEFT_R")
