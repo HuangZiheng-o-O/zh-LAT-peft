@@ -19,8 +19,8 @@ LORA_TARGETS_CONFIGS = {
     "vo": ["v_proj", "o_proj"],
     "qkvo": ["q_proj", "k_proj", "v_proj", "o_proj"],
     "qkvog": ["q_proj", "k_proj", "v_proj", "o_proj", "g_proj"],
-    "qkvo_plus_mlp": ["q_proj", "k_proj", "v_proj", "o_proj", "mlp_up", "mlp_down"],
-    "omlp": ["o_proj", "mlp_up", "mlp_down"],
+    "qkvo_plus_mlp": ["q_proj", "k_proj", "v_proj", "o_proj", "mlp.up_proj", "mlp.down_proj"],
+    "omlp": ["o_proj", "mlp.up_proj", "mlp.down_proj"],
 }
 
 # Train ratios configuration

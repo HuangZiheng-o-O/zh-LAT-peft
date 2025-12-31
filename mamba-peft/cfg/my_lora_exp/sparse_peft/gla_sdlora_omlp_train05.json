@@ -14,13 +14,13 @@
     ],
     "lora_targets": [
         "o_proj",
-        "mlp_up",
-        "mlp_down"
+        "mlp.up_proj",
+        "mlp.down_proj"
     ],
     "finetune_parameters": null,
     "sdlora_alpha": {
         "global": 1.0,
         "gk_proj.1": 1.0
     },
-    "_comment": "GLA SD-LoRA: Train=5%, Freeze=95%, Zero=0%. LoRA on: o_proj, mlp_up, mlp_down"
+    "_comment": "GLA SD-LoRA: Train=5%, Freeze=95%, Zero=0%. LoRA on: o_proj, mlp.up_proj, mlp.down_proj"
 }

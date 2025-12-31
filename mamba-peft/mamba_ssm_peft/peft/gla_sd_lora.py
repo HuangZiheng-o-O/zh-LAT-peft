@@ -94,6 +94,21 @@ class GlaSdLoraConfig(PeftConfig):
         assert isinstance(self.lora_targets, list) and len(self.lora_targets) > 0, (
             "lora_targets must be a non-empty list"
         )
+        # Normalize + deduplicate
+        def _dedup(seq):
+            seen = []
+            for item in seq:
+                if item not in seen:
+                    seen.append(item)
+            return seen
+
+        self.target_modules = _dedup(self.target_modules)
+        self.lora_targets = _dedup(self.lora_targets)
+
+        # BaseTuner only walks target_modules, so make sure all LoRA targets are also listed there
+        missing_lora_targets = [name for name in self.lora_targets if name not in self.target_modules]
+        if missing_lora_targets:
+            self.target_modules.extend(missing_lora_targets)
 
         # num_zero: Dimensions to zero (sparsify)
         assert self.num_zero is not None, (
@@ -144,19 +159,36 @@ class GlaSdLoraModel(GLABaseTuner):
         return peft_config
 
     def _mark_only_adapters_as_trainable(self, model: nn.Module) -> None:
-        """Mark only adapter parameters as trainable."""
+        """Mark only adapter parameters as trainable.
+
+        SD-LoRA trainable parameters:
+        - sdlora_grad: Gradient accumulator (warmup phase)
+        - sdlora_adapter: Sparse adapter weights (train phase)
+        - lora_*: LoRA weights for projection layers (if proj_lora_r is set)
+        """
         finetune_parameters = self.peft_config[self.active_adapter].finetune_parameters
 
         if finetune_parameters is None:
             finetune_parameters = []
 
+        trainable_count = 0
+        frozen_count = 0
+
         for n, p in model.named_parameters():
-            if (self.prefix in n or
-                any(n.endswith("." + fp) for fp in finetune_parameters) or
-                (self.peft_config["default"].proj_lora_r is not None and "lora_" in n)):
+            # [FIX Critical] Check for "sdlora_" substring, not just prefix "gla_sdlora_"
+            # SD-LoRA parameters are named like: model.layers.0.attn.gk_proj.1.sdlora_grad
+            is_sdlora_param = "sdlora_" in n  # Matches sdlora_grad, sdlora_adapter
+            is_finetune_param = any(n.endswith("." + fp) for fp in finetune_parameters)
+            is_lora_param = (self.peft_config["default"].proj_lora_r is not None and "lora_" in n)
+
+            if is_sdlora_param or is_finetune_param or is_lora_param:
                 p.requires_grad = True
+                trainable_count += 1
             else:
                 p.requires_grad = False
+                frozen_count += 1
+
+        print(f"[SD-LoRA] Trainable params: {trainable_count}, Frozen params: {frozen_count}")
 
     def _create_new_module(self, peft_config, adapter_name, target, target_name):
         """Create a new adapter module for the target."""
@@ -724,16 +756,27 @@ class GlaSdLoraParameter(nn.Module, BaseTunerLayer):
 
         return mask
 
-    def build_train_param(self, param, adapter):
+    def build_train_param(self, weight, bias, adapter):
         """
-        Build the training parameter with sparse adapter applied.
+        Build the training parameters with sparse adapter applied.
 
         Args:
-            param: Original parameter
+            weight: Original weight matrix (out_features, in_features)
+            bias: Original bias vector (out_features,) or None
             adapter: Sparse adapter values
 
         Returns:
-            Modified parameter with adapter applied to train dimensions
+            Tuple of (modified_weight, modified_bias)
+
+        Zero Mask Logic (Critical Fix):
+            To truly "zero" a gate channel, we must ensure the output is a large negative
+            constant regardless of input. For a Linear layer: output = W @ x + b
+
+            WRONG approach (previous): Set W row to -100, keep b unchanged
+              → If x has negative values, W @ x could be positive, gate stays open!
+
+            CORRECT approach: Set W row to 0, set b to -100
+              → output = 0 @ x + (-100) = -100, gate is guaranteed closed
         """
         if self.train_mask is None:
             print(f"[{self.module_name}] Building trainable mask")
@@ -746,20 +789,38 @@ class GlaSdLoraParameter(nn.Module, BaseTunerLayer):
             assert torch.sum(self.train_mask & self.zero_mask).item() == 0
             print(f"  Zero mask: {self.zero_mask.sum().item()} / {self.zero_mask.numel()} channels")
 
-        # Apply zero mask: set zeroed channels to large negative value
-        # This makes logsigmoid(gk) very negative → gate ≈ 0 → state decays
-        param_new = param.clone()
+        weight_new = weight.clone()
+        bias_new = bias.clone() if bias is not None else None
+
+        # [FIX Major] Apply zero mask correctly:
+        # - Set weight rows to 0 (eliminate input contribution)
+        # - Set bias to large negative value (force gate closed)
         if self.zero_mask.any():
-            param_new = torch.where(self.zero_mask, torch.full_like(param, self.ZERO_MASK_VALUE), param_new)
+            # Get indices of channels to zero (zero_mask is shape [out_features, in_features])
+            # We need to identify which output channels (rows) are zeroed
+            zero_channel_mask = self.zero_mask.any(dim=1)  # Shape: [out_features]
+
+            # Set weight rows to 0 for zeroed channels
+            weight_new[zero_channel_mask] = 0.0
+
+            # Set bias to large negative value for zeroed channels
+            if bias_new is not None:
+                bias_new[zero_channel_mask] = self.ZERO_MASK_VALUE
+
+            zero_count = zero_channel_mask.sum().item()
+            if not hasattr(self, '_zero_mask_logged'):
+                print(f"[{self.module_name}] Zero mask applied: {zero_count} channels "
+                      f"(weight=0, bias={self.ZERO_MASK_VALUE})")
+                self._zero_mask_logged = True
 
         # Apply adapter to trainable channels
         if self.train_mask.any():
             # Scatter adapter values into the trainable positions
-            bias = torch.zeros_like(param)
-            bias[self.train_mask] = adapter.flatten()[:self.train_mask.sum().item()]
-            param_new = param_new + self.sdlora_alpha * bias
+            adapter_bias = torch.zeros_like(weight)
+            adapter_bias[self.train_mask] = adapter.flatten()[:self.train_mask.sum().item()]
+            weight_new = weight_new + self.sdlora_alpha * adapter_bias
 
-        return param_new
+        return weight_new, bias_new
 
     def update_layer(self, adapter_name):
         """Update layer (required by BaseTunerLayer)."""
@@ -799,24 +860,29 @@ class GlaSdLoraParameter(nn.Module, BaseTunerLayer):
 
             if self.sdlora_mode == "warmup":
                 # During warmup: add gradient accumulator to weight
+                # Bias is unchanged during warmup
                 weight_new = weight + self.sdlora_alpha * self.sdlora_grad
+                bias_new = bias
             elif self.sdlora_mode == "train":
-                # During train: apply sparse adapter
-                weight_new = self.build_train_param(weight, self.sdlora_adapter)
+                # During train: apply sparse adapter and zero mask
+                # [FIX Major] build_train_param now returns (weight, bias) tuple
+                weight_new, bias_new = self.build_train_param(weight, bias, self.sdlora_adapter)
             else:
                 raise ValueError(f"Unknown mode: {self.sdlora_mode}")
 
             self.it_counter += 1
 
-            return F.linear(x, weight_new, bias)
+            return F.linear(x, weight_new, bias_new)
         else:
-            # For non-Linear parameters (rare case)
+            # For non-Linear parameters (rare case, e.g., raw parameter tensors)
+            # These don't have bias, so we pass None
             param = self.base_layer
 
             if self.sdlora_mode == "warmup":
                 param_new = param + self.sdlora_alpha * self.sdlora_grad
             elif self.sdlora_mode == "train":
-                param_new = self.build_train_param(param, self.sdlora_adapter)
+                # Pass None for bias since raw parameters don't have bias
+                param_new, _ = self.build_train_param(param, None, self.sdlora_adapter)
             else:
                 raise ValueError(f"Unknown mode: {self.sdlora_mode}")
 
