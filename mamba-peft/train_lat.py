@@ -16,18 +16,34 @@ Supported Models:
 - retnet: Retentive Network (https://arxiv.org/abs/2307.08621)
 - mamba2: Mamba2 State Space Model (https://arxiv.org/abs/2405.21060)
 
+PEFT Methods:
+=============
+- lora: Standard LoRA (default)
+- sdlora / gla_sd_lora: Sparse Dimension LoRA for GLA models
+  - Two-phase training: Warmup (gradient accumulation) → Training (sparse tuning)
+  - Controlled via HP_PEFT_TYPE environment variable or peft_type in config
+
 Environment Variables:
 =====================
 - MODEL_TYPE: Model type override (gla, retnet, mamba2, auto)
+- HP_PEFT_TYPE: PEFT type override ("lora", "sdlora", "gla_sd_lora")
 - LAT_* / GLA_*: Various configuration options (see documentation)
+
+SD-LoRA Specific Environment Variables:
+- HP_WARMUP_IT: Override warmup iterations (default: 100)
+- HP_ZERO_RATIO: Override zero dimension ratio (default: 0.3)
+- HP_FREEZE_RATIO: Override freeze dimension ratio (default: 0.3)
 
 Usage:
 ======
-    # With explicit model type
+    # Standard LoRA training
     python train_lat.py --cfg configs/gla.yaml --model-type gla
 
-    # With auto-detection
-    python train_lat.py --cfg configs/model.yaml --model-type auto
+    # SD-LoRA training (via environment variable)
+    HP_PEFT_TYPE=sdlora python train_lat.py --cfg configs/gla.yaml
+
+    # SD-LoRA training (via config file with peft_type: GLA_SD_LORA)
+    python train_lat.py --cfg configs/gla.yaml --peft configs/gla_sdlora/default.json
 
     # GLA backward compatibility (same as train_gla_only.py)
     python train_lat.py --cfg configs/gla.yaml
@@ -468,13 +484,54 @@ def run_train(
     # Load model using unified adapter
     print(f"Loading {log_tag} model: {model}")
     model_id = model
-    model, tokenizer_obj, _ = prepare_lat_model_and_tokenizer(
+    model, tokenizer_obj, peft_cfg, is_sdlora = prepare_lat_model_and_tokenizer(
         model_type=model_type,
         model_id=model_id,
         prec=prec,
         debug=debug,
         peft_json_path=peft,
     )
+
+    # SD-LoRA two-phase training
+    if is_sdlora:
+        print(f"[{log_tag}] SD-LoRA mode detected - using two-phase training")
+        try:
+            _run_sdlora_two_phase_training(
+                model_type=model_type,
+                model_id=model_id,
+                prec=prec,
+                debug=debug,
+                peft_json_path=peft,
+                output_dir=str(output_dir),
+                cfg=cfg,
+                cfg_path=cfg_path,
+                learning_rate=learning_rate,
+                gradient_accumulation_steps=gradient_accumulation_steps,
+                num_data_workers=num_data_workers,
+                batch_size=batch_size,
+                eval_batch_size=eval_batch_size,
+                eval_epochs=eval_epochs,
+                skip_eval=skip_eval,
+                no_save=no_save,
+                eval_gen=eval_gen,
+                seed=seed,
+                data=data,
+                val_data=val_data,
+                val_data_split=val_data_split,
+                num_epochs=num_epochs,
+                gradient_checkpointing=gradient_checkpointing,
+                logits_to_keep=logits_to_keep,
+                log_tag=log_tag,
+            )
+        finally:
+            if created_lock:
+                try:
+                    lock_path = Path("share/lock") / str(output_dir)
+                    lock_path.unlink(missing_ok=True)
+                    print(f"[{log_tag}][lock] released {lock_path}")
+                except Exception as e:
+                    print(f"[{log_tag}][lock][warn] failed to remove lock: {e}")
+        return  # SD-LoRA training complete, exit early
 
     # Force left padding
     force_left = get_lat_env_bool("FORCE_LEFT_PAD", "1")
@@ -617,6 +674,193 @@ def _find_last_checkpoint(root: Path) -> Optional[Path]:
         return candidates[-1] if candidates else None
     except Exception:
         return None
+
+
+def _run_sdlora_two_phase_training(
+    *,
+    model_type: str,
+    model_id: str,
+    prec: str,
+    debug: bool,
+    peft_json_path: str,
+    output_dir: str,
+    cfg: Dict,
+    cfg_path: str,
+    learning_rate: float,
+    gradient_accumulation_steps: int,
+    num_data_workers: int,
+    batch_size: int,
+    eval_batch_size: int,
+    eval_epochs: int,
+    skip_eval: bool,
+    no_save: bool,
+    eval_gen: Optional[Dict],
+    seed: int,
+    data: str,
+    val_data: Optional[str],
+    val_data_split: str,
+    num_epochs: int,
+    gradient_checkpointing: bool,
+    logits_to_keep: Optional[int],
+    log_tag: str,
+):
+    """
+    SD-LoRA two-phase training: Warmup → Training.
+
+    Phase 1 (Warmup):
+        - Train with full gradients to collect importance information
+        - Stops when model.should_training_stop is triggered
+        - Saves dimension importance data via model.save_config()
+
+    Phase 2 (Training):
+        - Loads saved dimension masks
+        - Trains only selected dimensions (zero/freeze/train)
+    """
+    from mamba_ssm_peft.peft.gla_sd_lora import GlaSdLoraConfig
+
+    print(f"\n{'=' * 60}")
+    print(f"[{log_tag}] SD-LoRA Phase 1: Warmup (gradient accumulation)")
+    print(f"{'=' * 60}\n")
+
+    # Phase 1: Load model and run warmup
+    model, tokenizer_obj, peft_cfg, _ = prepare_lat_model_and_tokenizer(
+        model_type=model_type,
+        model_id=model_id,
+        prec=prec,
+        debug=debug,
+        peft_json_path=peft_json_path,
+    )
+
+    # Load any existing config (for resume)
+    if hasattr(model, "load_config"):
+        model.load_config(output_dir)
+
+    # Force left padding
+    force_left = get_lat_env_bool("FORCE_LEFT_PAD", "1")
+    if force_left:
+        tokenizer_obj.padding_side = "left"
+        if getattr(tokenizer_obj, "pad_token_id", None) is None:
+            tokenizer_obj.pad_token = tokenizer_obj.eos_token
+
+    # Load train data
+    train_data_module = load_dataset(data, tokenizer_obj, "train", return_module=True)
+    its_per_epoch = int(np.ceil(len(train_data_module.dataset) / batch_size))
+    logging_steps = min(50, its_per_epoch)
+
+    # Warmup phase: limit steps to num_warmup_it + buffer
+    warmup_it = getattr(peft_cfg, "num_warmup_it", 100)
+    warmup_steps = warmup_it + 10  # Small buffer to ensure transition
+    print(f"[{log_tag}] Warmup steps: {warmup_steps}")
+
+    # Check if warmup already completed
+    warmup_marker = Path(output_dir) / ".sdlora_warmup_done"
+    if warmup_marker.exists():
+        print(f"[{log_tag}] Warmup already completed, skipping to Phase 2")
+    else:
+        # Run warmup phase
+        build_and_run_trainer_lat(
+            model=model,
+            tokenizer=tokenizer_obj,
+            model_type=model_type,
+            output_dir=str(output_dir),
+            cfg=cfg,
+            cfg_path=cfg_path,
+            learning_rate=learning_rate,
+            total_steps=warmup_steps,
+            logging_steps=logging_steps,
+            gradient_accumulation_steps=gradient_accumulation_steps,
+            num_data_workers=num_data_workers,
+            batch_size=batch_size,
+            eval_batch_size=eval_batch_size,
+            eval_epochs=eval_epochs,
+            skip_eval=True,  # Skip eval during warmup
+            no_save=True,  # Don't save checkpoints during warmup
+            eval_steps_override=None,
+            save_steps_override=None,
+            eval_gen=None,
+            resume_from_checkpoint=None,
+            min_eval_metric_after_epoch=None,
+            seed=seed,
+            data=data,
+            val_data=val_data,
+            val_data_split=val_data_split,
+            debug=debug,
+            gradient_checkpointing=gradient_checkpointing,
+            logits_to_keep=logits_to_keep,
+            train_data_module=train_data_module,
+        )
+
+        # Mark warmup as done
+        Path(output_dir).mkdir(parents=True, exist_ok=True)
+        warmup_marker.touch()
+        print(f"[{log_tag}] Warmup phase completed, dimension masks saved")
+
+    # Phase 2: Training with sparse dimensions
+    print(f"\n{'=' * 60}")
+    print(f"[{log_tag}] SD-LoRA Phase 2: Training (sparse dimension tuning)")
+    print(f"{'=' * 60}\n")
+
+    # Reload model for training phase
+    model2, tokenizer_obj2, peft_cfg2, _ = prepare_lat_model_and_tokenizer(
+        model_type=model_type,
+        model_id=model_id,
+        prec=prec,
+        debug=debug,
+        peft_json_path=peft_json_path,
+    )
+
+    # Load saved warmup config (dimension masks)
+    if hasattr(model2, "load_config"):
+        model2.load_config(output_dir)
+
+    # Force left padding
+    if force_left:
+        tokenizer_obj2.padding_side = "left"
+        if getattr(tokenizer_obj2, "pad_token_id", None) is None:
+            tokenizer_obj2.pad_token = tokenizer_obj2.eos_token
+
+    # Reload train data for training phase
+    train_data_module2 = load_dataset(data, tokenizer_obj2, "train", return_module=True)
+    its_per_epoch2 = int(np.ceil(len(train_data_module2.dataset) / batch_size))
+    total_steps = int(num_epochs * its_per_epoch2)
+    logging_steps2 = min(50, its_per_epoch2)
+
+    print(f"[{log_tag}] Training steps: {total_steps}")
+
+    # Run training phase
+    build_and_run_trainer_lat(
+        model=model2,
+        tokenizer=tokenizer_obj2,
+        model_type=model_type,
+        output_dir=str(output_dir),
+        cfg=cfg,
+        cfg_path=cfg_path,
+        learning_rate=learning_rate,
+        total_steps=total_steps,
+        logging_steps=logging_steps2,
+        gradient_accumulation_steps=gradient_accumulation_steps,
+        num_data_workers=num_data_workers,
+        batch_size=batch_size,
+        eval_batch_size=eval_batch_size,
+        eval_epochs=eval_epochs,
+        skip_eval=skip_eval,
+        no_save=no_save,
+        eval_steps_override=None,
+        save_steps_override=None,
+        eval_gen=eval_gen,
+        resume_from_checkpoint=None,
+        min_eval_metric_after_epoch=None,
+        seed=seed,
+        data=data,
+        val_data=val_data,
+        val_data_split=val_data_split,
+        debug=debug,
+        gradient_checkpointing=gradient_checkpointing,
+        logits_to_keep=logits_to_keep,
+        train_data_module=train_data_module2,
+    )
+
+    print(f"\n[{log_tag}] SD-LoRA two-phase training completed!")
 
 
 def main():
