@@ -60,14 +60,24 @@ from mamba_ssm_peft.utils.lat_model_loader import (
 
 def _dtype_from_prec(prec: str) -> torch.dtype:
     """Convert precision string to torch dtype."""
+    prec_norm = prec.lower()
     mapping = {
         "bf16": torch.bfloat16,
-        "fp16": torch.bfloat16,  # Legacy behavior: fp16 -> bfloat16
+        "fp16": torch.float16,
         "fp32": torch.float32,
     }
-    if prec not in mapping:
+    if prec_norm not in mapping:
         raise ValueError(f"Unknown precision '{prec}'. Supported: {list(mapping.keys())}")
-    return mapping[prec]
+
+    if prec_norm == "bf16":
+        # Be graceful on GPUs without native BF16 support.
+        supports_bf16 = torch.cuda.is_available() and torch.cuda.is_bf16_supported()
+        if not supports_bf16:
+            print("[LAT][warn] Requested bf16 but the current GPU lacks native bf16 support. "
+                  "Falling back to fp16 for compatibility.")
+            return torch.float16
+
+    return mapping[prec_norm]
 
 
 def _truthy(value: Optional[str]) -> Optional[bool]:

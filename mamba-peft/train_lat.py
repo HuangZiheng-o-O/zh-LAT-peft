@@ -867,6 +867,11 @@ def _run_sdlora_two_phase_training(
         warmup_marker.touch()
         print(f"[{log_tag}] Warmup phase completed successfully")
 
+    # Release warmup model resources before loading the train-phase model.
+    del model
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
     # Phase 2: Training with sparse dimensions
     print(f"\n{'=' * 60}")
     print(f"[{log_tag}] SD-LoRA Phase 2: Training (sparse dimension tuning)")

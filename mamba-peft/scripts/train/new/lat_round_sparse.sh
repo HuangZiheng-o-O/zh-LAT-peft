@@ -274,7 +274,7 @@ make_tmp_cfg_with_data() {
   local name ext
   name="${base%.*}"; ext="${base##*.}"
   local out
-  out="$outdir/${name}.${ext}"
+  out="$(mktemp "$outdir/${name}.XXXXXX.${ext}")"
   cp "$src" "$out"
   printf '\n# injected by lat_round_sparse.sh\ndata: %s\n' "$DATA" >>"$out"
   local ndw
