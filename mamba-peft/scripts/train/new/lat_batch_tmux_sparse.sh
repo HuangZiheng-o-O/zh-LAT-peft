@@ -135,6 +135,8 @@ HDR
 
   printf 'export SCRIPT_DIR=%q\n' "$SCRIPT_DIR"
   printf 'export LAUNCHER=%q\n' "$LAUNCHER"
+  # Export PEFT_ROOT so the temp script doesn't rely on BASH_SOURCE[0] for path resolution
+  printf 'export PEFT_ROOT=%q\n' "$(cd "${SCRIPT_DIR}/../../.." && pwd)"
   printf 'export ROUND=%q\n' "$ROUND"
   printf 'export LOG_DIR=%q\n' "$LOG_DIR"
   printf 'export MODEL_TYPE=%q\n' "$MODEL_TYPE"
