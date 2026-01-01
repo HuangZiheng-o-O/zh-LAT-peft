@@ -526,6 +526,10 @@ def run_train(
                 gradient_checkpointing=gradient_checkpointing,
                 logits_to_keep=logits_to_keep,
                 log_tag=log_tag,
+                base_total_steps=total_steps,
+                base_logging_steps=logging_steps,
+                base_eval_steps_override=eval_steps_override,
+                base_save_steps_override=save_steps_override,
             )
         finally:
             if created_lock:
@@ -728,6 +732,10 @@ def _run_sdlora_two_phase_training(
     gradient_checkpointing: bool,
     logits_to_keep: Optional[int],
     log_tag: str,
+    base_total_steps: Optional[int],
+    base_logging_steps: Optional[int],
+    base_eval_steps_override: Optional[int],
+    base_save_steps_override: Optional[int],
 ):
     """
     SD-LoRA two-phase training: Warmup → Training.
@@ -789,7 +797,9 @@ def _run_sdlora_two_phase_training(
     # Load train data
     train_data_module = load_dataset(data, tokenizer_obj, "train", return_module=True)
     its_per_epoch = int(np.ceil(len(train_data_module.dataset) / batch_size))
-    logging_steps = min(50, its_per_epoch)
+    warmup_logging_steps = min(50, its_per_epoch)
+    if base_logging_steps is not None:
+        warmup_logging_steps = base_logging_steps
 
     # [FIX Issue #5] Warmup phase: account for gradient_accumulation_steps
     # num_warmup_it counts forward passes, but total_steps counts training steps
@@ -820,7 +830,7 @@ def _run_sdlora_two_phase_training(
             cfg_path=cfg_path,
             learning_rate=learning_rate,
             total_steps=warmup_steps,
-            logging_steps=logging_steps,
+            logging_steps=warmup_logging_steps,
             gradient_accumulation_steps=gradient_accumulation_steps,
             num_data_workers=num_data_workers,
             batch_size=batch_size,
@@ -923,8 +933,14 @@ def _run_sdlora_two_phase_training(
     optimizer_steps_per_epoch2 = max(
         1, math.ceil(its_per_epoch2 / max(1, gradient_accumulation_steps))
     )
-    total_steps = int(num_epochs * optimizer_steps_per_epoch2)
-    logging_steps2 = min(50, its_per_epoch2)
+    if base_total_steps is not None:
+        total_steps = base_total_steps
+    else:
+        total_steps = int(num_epochs * optimizer_steps_per_epoch2)
+    if base_logging_steps is not None:
+        logging_steps2 = base_logging_steps
+    else:
+        logging_steps2 = min(50, its_per_epoch2)
 
     print(f"[{log_tag}] Training steps: {total_steps}")
 
@@ -946,8 +962,8 @@ def _run_sdlora_two_phase_training(
         eval_epochs=eval_epochs,
         skip_eval=skip_eval,
         no_save=no_save,
-        eval_steps_override=None,
-        save_steps_override=None,
+        eval_steps_override=base_eval_steps_override,
+        save_steps_override=base_save_steps_override,
         eval_gen=eval_gen,
         resume_from_checkpoint=None,
         min_eval_metric_after_epoch=None,

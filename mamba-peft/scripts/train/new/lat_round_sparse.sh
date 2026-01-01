@@ -14,6 +14,11 @@ MODEL_TYPE="${MODEL_TYPE:-gla}"
 LAT_MODEL="${LAT_MODEL:-${GLA_MODEL:-}}"
 LAT_PREC="${LAT_PREC:-${HP_PREC:-}}"
 
+# Resolve repo root relative to this script unless explicitly provided.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEFAULT_PEFT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+PEFT_ROOT="${PEFT_ROOT:-${LAT_PEFT_ROOT:-$DEFAULT_PEFT_ROOT}}"
+
 # Launcher Python script
 LAUNCHER_PY="train_lat.py"
 
@@ -109,8 +114,6 @@ ROUND="${1:-1}"
 FORCE_SEED=87
 DATA="${DATA:-glue-tvt_cola}"
 
-# Remote workspace
-PEFT_ROOT="/home/user/mzs_h/code/zh-LAT-peft/mamba-peft"
 cd "$PEFT_ROOT"
 
 # Environment setup
