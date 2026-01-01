@@ -115,3 +115,27 @@ class GLABaseTuner(BaseTuner):
 
     def generate(self, *args, **kwargs):
         return self.model.generate(*args, **kwargs)
+
+    def gradient_checkpointing_enable(self, gradient_checkpointing_kwargs=None):
+        """Enable gradient checkpointing on the underlying model."""
+        if hasattr(self.model, "gradient_checkpointing_enable"):
+            self.model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
+        elif hasattr(self.model, "model") and hasattr(self.model.model, "gradient_checkpointing_enable"):
+            # Some models wrap the actual model inside .model attribute
+            self.model.model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
+        else:
+            # Try to enable on all submodules that support it
+            for module in self.model.modules():
+                if hasattr(module, "gradient_checkpointing") and not hasattr(module, "gradient_checkpointing_enable"):
+                    module.gradient_checkpointing = True
+
+    def gradient_checkpointing_disable(self):
+        """Disable gradient checkpointing on the underlying model."""
+        if hasattr(self.model, "gradient_checkpointing_disable"):
+            self.model.gradient_checkpointing_disable()
+        elif hasattr(self.model, "model") and hasattr(self.model.model, "gradient_checkpointing_disable"):
+            self.model.model.gradient_checkpointing_disable()
+        else:
+            for module in self.model.modules():
+                if hasattr(module, "gradient_checkpointing"):
+                    module.gradient_checkpointing = False
