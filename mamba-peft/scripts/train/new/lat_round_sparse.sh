@@ -16,7 +16,7 @@ LAT_PREC="${LAT_PREC:-${HP_PREC:-}}"
 
 # Resolve repo root relative to this script unless explicitly provided.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DEFAULT_PEFT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+DEFAULT_PEFT_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 PEFT_ROOT="${PEFT_ROOT:-${LAT_PEFT_ROOT:-$DEFAULT_PEFT_ROOT}}"
 
 # Launcher Python script
