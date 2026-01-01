@@ -252,6 +252,18 @@ def _apply_sdlora_env_overrides(peft_json: Dict[str, Any]) -> Dict[str, Any]:
     peft_json["num_zero"] = num_zero
     peft_json["num_freeze"] = num_freeze
 
+    # Map LoRA-specific overrides (applied earlier) onto SD-LoRA projection knobs
+    if "lora_alpha" in peft_json:
+        try:
+            peft_json["proj_lora_alpha"] = float(peft_json.pop("lora_alpha"))
+        except (TypeError, ValueError):
+            peft_json.pop("lora_alpha", None)
+    if "lora_dropout" in peft_json:
+        try:
+            peft_json["proj_lora_dropout"] = float(peft_json.pop("lora_dropout"))
+        except (TypeError, ValueError):
+            peft_json.pop("lora_dropout", None)
+
     # Print effective ratios
     train_ratio_effective = 1.0 - num_zero.get("channel", 0) - num_freeze.get("channel", 0)
     print(f"[SD-LoRA] Effective ratios: train={train_ratio_effective:.1%}, "

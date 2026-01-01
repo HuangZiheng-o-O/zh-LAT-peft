@@ -58,6 +58,8 @@ class GlaSdLoraConfig(PeftConfig):
         lora_targets: List of target module names for LoRA
         finetune_parameters: Additional parameters to fine-tune
         sdlora_alpha: Scaling factor for SDT adaptation
+        proj_lora_alpha: Override LoRA alpha for projection adapters (defaults to rank)
+        proj_lora_dropout: Override LoRA dropout for projection adapters
     """
     select_mode: GLASelectMode = field(default=GLASelectMode.CHANNELS_ONLY)
     proj_lora_r: int = field(default=None)
@@ -68,6 +70,8 @@ class GlaSdLoraConfig(PeftConfig):
     lora_targets: List[str] = field(default=None)
     finetune_parameters: List[str] = field(default=None)
     sdlora_alpha: Dict = field(default=None)
+    proj_lora_alpha: Optional[float] = field(default=None)
+    proj_lora_dropout: float = field(default=0.1)
 
     def __post_init__(self):
         self.peft_type = MambaPeftType.GLA_SD_LORA
@@ -248,11 +252,17 @@ class GlaSdLoraModel(GLABaseTuner):
         # Note: g_proj may not exist if use_output_gate=False in the GLA layer
         lora_targets = peft_config.lora_targets or []
         if target_name in lora_targets and peft_config.proj_lora_r is not None:
+            lora_alpha = (
+                peft_config.proj_lora_alpha
+                if peft_config.proj_lora_alpha is not None
+                else peft_config.proj_lora_r
+            )
+            lora_dropout = peft_config.proj_lora_dropout
             new_module = LoraLinear(
                 target, adapter_name,
                 r=peft_config.proj_lora_r,
-                lora_alpha=peft_config.proj_lora_r,
-                lora_dropout=0.1
+                lora_alpha=lora_alpha,
+                lora_dropout=lora_dropout
             )
         else:
             # SDT target - find the parent GLA attention block
