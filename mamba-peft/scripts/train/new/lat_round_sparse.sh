@@ -116,15 +116,18 @@ DATA="${DATA:-glue-tvt_cola}"
 
 cd "$PEFT_ROOT"
 
-# Environment setup
-export HF_ENDPOINT="https://hf-mirror.com"
-export HF_HOME="/home/user/mzs_h/data/hf_cache"
-export HF_HUB_CACHE="$HF_HOME"
-export HF_DATASETS_CACHE="$HF_HOME"
-export HF_EVALUATE_CACHE="$HF_HOME"
-export TRANSFORMERS_CACHE="$HF_HOME"
-export GLUE_METRIC_DIR="/home/user/mzs_h/data/hf_cache/eval_metrics/glue"
-export HF_HUB_ENABLE_HF_TRANSFER=1
+# Environment setup - use env vars if set, otherwise use defaults
+export HF_ENDPOINT="${HF_ENDPOINT:-https://hf-mirror.com}"
+export HF_HOME="${HF_HOME:-/home/user/mzs_h/data/hf_cache}"
+export HF_HUB_CACHE="${HF_HUB_CACHE:-$HF_HOME}"
+export HF_DATASETS_CACHE="${HF_DATASETS_CACHE:-$HF_HOME}"
+export HF_EVALUATE_CACHE="${HF_EVALUATE_CACHE:-$HF_HOME}"
+export TRANSFORMERS_CACHE="${TRANSFORMERS_CACHE:-$HF_HOME}"
+export GLUE_METRIC_DIR="${GLUE_METRIC_DIR:-$HF_HOME/eval_metrics/glue}"
+export HF_HUB_ENABLE_HF_TRANSFER="${HF_HUB_ENABLE_HF_TRANSFER:-1}"
+# Respect HF_HUB_OFFLINE and TRANSFORMERS_OFFLINE if set by user
+[[ -n "${HF_HUB_OFFLINE:-}" ]] && export HF_HUB_OFFLINE
+[[ -n "${TRANSFORMERS_OFFLINE:-}" ]] && export TRANSFORMERS_OFFLINE
 export NCCL_P2P_DISABLE=1
 export NCCL_IB_DISABLE=1
 export WANDB_MODE=disabled

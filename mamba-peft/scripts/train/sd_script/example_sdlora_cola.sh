@@ -88,7 +88,7 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 # 10. 启动交错间隔 (可选)
 ############################
 # 避免同时加载模型导致显存峰值
-export LAT_LAUNCH_STAGGER_MINUTES=2
+export LAT_LAUNCH_STAGGER_MINUTES=0
 
 ############################
 # 11. 启动 SD-LoRA 批量训练
@@ -98,6 +98,6 @@ export LAT_LAUNCH_STAGGER_MINUTES=2
 ./lat_batch_tmux_sparse.sh \
   --round all \
   --pairs "87:glue-tvt_cola" \
-  --gpus "0 1 2 3 4 5 6" \
-  --gpu-plan "1,1,1,1,1,1,1" \
+  --gpus "0 1 2 3 4 5 6 7" \
+  --gpu-plan "1,1,1,1,1,1,1,1" \
   --model-type gla

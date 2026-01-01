@@ -170,6 +170,7 @@ HDR
   printf 'export HP_BATCH_SIZE=%q\n' "${HP_BATCH_SIZE:-}"
   printf 'export HP_EPOCHS=%q\n' "${HP_EPOCHS:-}"
   printf 'export HP_EVAL_BATCH_SIZE=%q\n' "${HP_EVAL_BATCH_SIZE:-}"
+  printf 'export HP_MAX_STEPS=%q\n' "${HP_MAX_STEPS:-}"
   printf 'export HP_NO_SAVE=%q\n' "${HP_NO_SAVE:-}"
 
   # LR scheduler
@@ -193,6 +194,22 @@ HDR
   printf 'export TOKENIZERS_PARALLELISM=%q\n' "${TOKENIZERS_PARALLELISM:-}"
   printf 'export OMP_NUM_THREADS=%q\n' "${OMP_NUM_THREADS:-}"
   printf 'export MKL_NUM_THREADS=%q\n' "${MKL_NUM_THREADS:-}"
+
+  # HuggingFace cache / offline mode
+  printf 'export HF_HUB_OFFLINE=%q\n' "${HF_HUB_OFFLINE:-}"
+  printf 'export TRANSFORMERS_OFFLINE=%q\n' "${TRANSFORMERS_OFFLINE:-}"
+  printf 'export HF_HOME=%q\n' "${HF_HOME:-}"
+  printf 'export HF_DATASETS_CACHE=%q\n' "${HF_DATASETS_CACHE:-}"
+  printf 'export HF_EVALUATE_CACHE=%q\n' "${HF_EVALUATE_CACHE:-}"
+  printf 'export TRANSFORMERS_VERBOSITY=%q\n' "${TRANSFORMERS_VERBOSITY:-}"
+
+  # Missing SwanLab var
+  printf 'export SWANLAB_EMAIL_ON_INTERRUPT=%q\n' "${SWANLAB_EMAIL_ON_INTERRUPT:-}"
+
+  # DataLoader settings (read directly by train_lat.py)
+  printf 'export DATALOADER_PREFETCH_FACTOR=%q\n' "${DATALOADER_PREFETCH_FACTOR:-}"
+  printf 'export DATALOADER_PIN_MEMORY=%q\n' "${DATALOADER_PIN_MEMORY:-}"
+  printf 'export DATALOADER_PERSISTENT_WORKERS=%q\n' "${DATALOADER_PERSISTENT_WORKERS:-}"
 
   echo 'mkdir -p "$LOG_DIR"'
 

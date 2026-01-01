@@ -526,10 +526,10 @@ def run_train(
                 gradient_checkpointing=gradient_checkpointing,
                 logits_to_keep=logits_to_keep,
                 log_tag=log_tag,
-                base_total_steps=total_steps,
-                base_logging_steps=logging_steps,
-                base_eval_steps_override=eval_steps_override,
-                base_save_steps_override=save_steps_override,
+                base_total_steps=None,  # Computed inside SD-LoRA function
+                base_logging_steps=None,  # Computed inside SD-LoRA function
+                base_eval_steps_override=None,  # Will use HP_EVAL_STEPS if set
+                base_save_steps_override=None,  # Will use HP_SAVE_STEPS if set
             )
         finally:
             if created_lock:
@@ -933,14 +933,39 @@ def _run_sdlora_two_phase_training(
     optimizer_steps_per_epoch2 = max(
         1, math.ceil(its_per_epoch2 / max(1, gradient_accumulation_steps))
     )
-    if base_total_steps is not None:
-        total_steps = base_total_steps
-    else:
-        total_steps = int(num_epochs * optimizer_steps_per_epoch2)
+
+    # Read env overrides for step configuration (same logic as main run_train)
+    env = os.environ
+    logging_steps2 = min(50, its_per_epoch2)
+    try:
+        if env.get("HP_LOGGING_STEPS"):
+            logging_steps2 = int(env.get("HP_LOGGING_STEPS"))
+    except Exception:
+        pass
     if base_logging_steps is not None:
         logging_steps2 = base_logging_steps
-    else:
-        logging_steps2 = min(50, its_per_epoch2)
+
+    total_steps = int(num_epochs * optimizer_steps_per_epoch2)
+    try:
+        if env.get("HP_MAX_STEPS"):
+            total_steps = int(env.get("HP_MAX_STEPS"))
+    except Exception:
+        pass
+    if base_total_steps is not None:
+        total_steps = base_total_steps
+
+    eval_steps_override = base_eval_steps_override
+    save_steps_override = base_save_steps_override
+    try:
+        if env.get("HP_EVAL_STEPS"):
+            eval_steps_override = int(env.get("HP_EVAL_STEPS"))
+    except Exception:
+        pass
+    try:
+        if env.get("HP_SAVE_STEPS"):
+            save_steps_override = int(env.get("HP_SAVE_STEPS"))
+    except Exception:
+        pass
 
     print(f"[{log_tag}] Training steps: {total_steps}")
 
@@ -962,8 +987,8 @@ def _run_sdlora_two_phase_training(
         eval_epochs=eval_epochs,
         skip_eval=skip_eval,
         no_save=no_save,
-        eval_steps_override=base_eval_steps_override,
-        save_steps_override=base_save_steps_override,
+        eval_steps_override=eval_steps_override,
+        save_steps_override=save_steps_override,
         eval_gen=eval_gen,
         resume_from_checkpoint=None,
         min_eval_metric_after_epoch=None,
