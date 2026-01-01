@@ -167,6 +167,7 @@ class GlaSdLoraModel(GLABaseTuner):
 
     def __init__(self, model, peft_config: PeftConfig | dict[str, PeftConfig], adapter_name: str) -> None:
         self.last_mode = None
+        self._sdlora_config_dir: Optional[Path] = None
         super().__init__(model, peft_config, adapter_name)
 
     @staticmethod
@@ -205,6 +206,18 @@ class GlaSdLoraModel(GLABaseTuner):
                 frozen_count += 1
 
         print(f"[SD-LoRA] Trainable params: {trainable_count}, Frozen params: {frozen_count}")
+
+    def set_sdlora_config_dir(self, path: Optional[Path | str]) -> None:
+        """Override the directory used for save/load config calls."""
+        if path is None:
+            self._sdlora_config_dir = None
+        else:
+            self._sdlora_config_dir = Path(path)
+
+    def _resolve_config_dir(self, fallback: Path | str) -> Path:
+        target = self._sdlora_config_dir or Path(fallback)
+        target.mkdir(parents=True, exist_ok=True)
+        return target
 
     def _create_new_module(self, peft_config, adapter_name, target, target_name):
         """Create a new adapter module for the target."""
@@ -358,10 +371,11 @@ class GlaSdLoraModel(GLABaseTuner):
                 "No GlaSdLoraParameter modules found. Cannot load config."
             )
 
+        target_dir = self._resolve_config_dir(path)
         loaded_count = 0
         missing_files = []
         for m in params:
-            success = m.load_config(path, required=required)
+            success = m.load_config(target_dir, required=required)
             if success:
                 loaded_count += 1
             else:
@@ -380,7 +394,7 @@ class GlaSdLoraModel(GLABaseTuner):
                 f"Only {loaded_count}/{len(params)} modules loaded."
             )
 
-        print(f"[SD-LoRA] Loaded {loaded_count}/{len(params)} config files from {path}")
+        print(f"[SD-LoRA] Loaded {loaded_count}/{len(params)} config files from {target_dir}")
         return loaded_count
 
     def save_config(self, path):
@@ -398,12 +412,13 @@ class GlaSdLoraModel(GLABaseTuner):
                 "No GlaSdLoraParameter modules found. Cannot save config."
             )
 
+        target_dir = self._resolve_config_dir(path)
         saved_count = 0
         for m in params:
-            m.save_config(path)
+            m.save_config(target_dir)
             saved_count += 1
 
-        print(f"[SD-LoRA] Saved {saved_count} config files to {path}")
+        print(f"[SD-LoRA] Saved {saved_count} config files to {target_dir}")
         return saved_count
 
     def verify_train_mode(self):

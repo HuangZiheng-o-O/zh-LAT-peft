@@ -94,7 +94,7 @@ from mamba_ssm_peft.utils.lat_decoder import create_lat_decoder
 from mamba_ssm_peft.utils.lat_model_loader import get_lat_env, get_lat_env_bool
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_NOW_OUTPUT_ROOT = REPO_ROOT / "output" / "benchmark" / "glue"
+DEFAULT_NOW_OUTPUT_ROOT = REPO_ROOT / "runs"
 NOW_OUTPUT_ROOT = Path(os.environ.get("LAT_OUTPUT_ROOT", DEFAULT_NOW_OUTPUT_ROOT)).expanduser()
 
 
@@ -645,21 +645,39 @@ def run_train(
                 print(f"[{log_tag}][lock][warn] failed to remove lock: {e}")
 
 
-def get_output_path_for_cfg(cfg_path, cfg):
-    """
-    Target path:
-      <NOW_OUTPUT_ROOT>/<data>_seed<seed>/<yaml_stem>
-    Fallback (missing data/seed):
-      <NOW_OUTPUT_ROOT>/cola_gla/<yaml_stem>
-    """
-    yaml_stem = Path(cfg_path).stem
-    data = cfg.get("data")
-    seed = cfg.get("seed")
+def _sanitize_dir_name(name: str) -> str:
+    allowed = []
+    for ch in str(name):
+        if ch.isalnum() or ch in ("-", "_"):
+            allowed.append(ch)
+        else:
+            allowed.append("-")
+    sanitized = "".join(allowed).strip("-")
+    return sanitized or "run"
 
-    if data and seed is not None:
-        folder = f"{data}_seed{seed}"
-        return NOW_OUTPUT_ROOT / folder / yaml_stem
-    return NOW_OUTPUT_ROOT / "cola_gla" / yaml_stem
+
+def get_output_path_for_cfg(cfg_path, cfg, peft_json_path=None):
+    """
+    Target path (shallow but unique):
+      <NOW_OUTPUT_ROOT>/<data>__seed<seed>__<yaml-or-peft-stem>
+    Fallback (missing data/seed):
+      <NOW_OUTPUT_ROOT>/cola_gla__<yaml-or-peft-stem>
+    """
+    yaml_stem = _sanitize_dir_name(Path(cfg_path).stem)
+    peft_stem = None
+    if peft_json_path:
+        peft_stem = _sanitize_dir_name(Path(peft_json_path).stem)
+
+    run_suffix = peft_stem or yaml_stem
+    data = _sanitize_dir_name(cfg.get("data") or "cola_gla")
+    seed = cfg.get("seed")
+    if seed is not None:
+        seed_part = f"seed{seed}"
+    else:
+        seed_part = "seedNA"
+
+    folder = f"{data}__{seed_part}__{run_suffix}"
+    return NOW_OUTPUT_ROOT / folder
 
 
 def _find_last_checkpoint(root: Path) -> Optional[Path]:
@@ -729,6 +747,28 @@ def _run_sdlora_two_phase_training(
     print(f"[{log_tag}] SD-LoRA Phase 1: Warmup (gradient accumulation)")
     print(f"{'=' * 60}\n")
 
+    run_root = Path(output_dir)
+    sdlora_cfg_dir = run_root / "sdlora_cfg"
+    warmup_marker = sdlora_cfg_dir / "warmup_complete.marker"
+
+    def _attach_config_dir(peft_model):
+        if hasattr(peft_model, "set_sdlora_config_dir"):
+            peft_model.set_sdlora_config_dir(sdlora_cfg_dir)
+
+    def _truthy_env(name: str) -> bool:
+        return str(os.environ.get(name, "0")).lower() in ("1", "true", "yes", "on")
+
+    reset_requested = _truthy_env("SDLORA_RESET")
+    stale_cache = sdlora_cfg_dir.exists() and not warmup_marker.exists()
+    if reset_requested or stale_cache:
+        if sdlora_cfg_dir.exists():
+            shutil.rmtree(sdlora_cfg_dir, ignore_errors=True)
+        if reset_requested:
+            print(f"[{log_tag}] SDLORA_RESET=1 → clearing previous SD-LoRA cache in {sdlora_cfg_dir}")
+        elif stale_cache:
+            print(f"[{log_tag}] Detected incomplete SD-LoRA cache. Re-initializing {sdlora_cfg_dir}")
+    sdlora_cfg_dir.mkdir(parents=True, exist_ok=True)
+
     # Phase 1: Load model and run warmup
     model, tokenizer_obj, peft_cfg, _ = prepare_lat_model_and_tokenizer(
         model_type=model_type,
@@ -737,10 +777,7 @@ def _run_sdlora_two_phase_training(
         debug=debug,
         peft_json_path=peft_json_path,
     )
-
-    # Load any existing config (for resume)
-    if hasattr(model, "load_config"):
-        model.load_config(output_dir)
+    _attach_config_dir(model)
 
     # Force left padding
     force_left = get_lat_env_bool("FORCE_LEFT_PAD", "1")
@@ -769,8 +806,8 @@ def _run_sdlora_two_phase_training(
           f"running {warmup_steps} training steps")
 
     # Check if warmup already completed
-    warmup_marker = Path(output_dir) / ".sdlora_warmup_done"
-    if warmup_marker.exists():
+    warmup_complete = warmup_marker.exists()
+    if warmup_complete:
         print(f"[{log_tag}] Warmup already completed, skipping to Phase 2")
     else:
         # Run warmup phase
@@ -808,10 +845,9 @@ def _run_sdlora_two_phase_training(
 
         # [FIX BUG #1] Save warmup gradient information BEFORE marking done
         # This is CRITICAL - without this, Phase 2 has no dimension importance data
-        Path(output_dir).mkdir(parents=True, exist_ok=True)
         if hasattr(model, "save_config"):
-            model.save_config(output_dir)
-            print(f"[{log_tag}] Saved warmup gradient information to {output_dir}")
+            model.save_config(sdlora_cfg_dir)
+            print(f"[{log_tag}] Saved warmup gradient information to {sdlora_cfg_dir}")
         else:
             raise RuntimeError(
                 f"[{log_tag}] FATAL: Model does not have save_config method. "
@@ -819,11 +855,10 @@ def _run_sdlora_two_phase_training(
             )
 
         # Verify the config was actually saved
-        sdlora_config_dir = Path(output_dir)
-        saved_files = list(sdlora_config_dir.glob("*.pkl"))
+        saved_files = list(sdlora_cfg_dir.glob("*.pkl"))
         if not saved_files:
             raise RuntimeError(
-                f"[{log_tag}] FATAL: No .pkl config files found in {output_dir} after save_config(). "
+                f"[{log_tag}] FATAL: No .pkl config files found in {sdlora_cfg_dir} after save_config(). "
                 "Warmup gradient information was not saved correctly."
             )
         print(f"[{log_tag}] Verified {len(saved_files)} config file(s) saved: {[f.name for f in saved_files]}")
@@ -845,6 +880,7 @@ def _run_sdlora_two_phase_training(
         debug=debug,
         peft_json_path=peft_json_path,
     )
+    _attach_config_dir(model2)
 
     # [FIX BUG #2] Load saved warmup config (dimension masks) with required=True
     # This ensures Phase 2 fails fast if warmup data is missing
@@ -854,7 +890,7 @@ def _run_sdlora_two_phase_training(
             "Cannot load warmup gradient data for Phase 2."
         )
 
-    model2.load_config(output_dir, required=True)
+    model2.load_config(sdlora_cfg_dir, required=True)
 
     # Verify model is now in train mode (not warmup)
     if hasattr(model2, "verify_train_mode"):
@@ -1040,7 +1076,7 @@ def main():
         }
 
     # Output directory
-    output_dir = get_output_path_for_cfg(args.cfg, cfg)
+    output_dir = get_output_path_for_cfg(args.cfg, cfg, peft_json_path=args.peft)
 
     # Merge cfg + CLI args into run_train parameters
     train_args = {

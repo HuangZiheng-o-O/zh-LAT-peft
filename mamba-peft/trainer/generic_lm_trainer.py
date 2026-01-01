@@ -167,12 +167,12 @@ class GenericLMTrainer(Trainer):
         input_ids, label_ids, lm_logits = self._forward(model, inputs)
         lm_loss = self.train_crit(lm_logits, label_ids)
         if getattr(model, "should_training_stop", False):
-            if hasattr(model, "save_config"):
+            if hasattr(model, "save_config") and self.is_world_process_zero() and getattr(self.args, "should_save", True):
                 try:
                     model.save_config(self.args.output_dir)
                 except Exception:
                     pass
-                self.control.should_training_stop = True
+            self.control.should_training_stop = True
         self.train_loss_early_stop(self.control, lm_loss)
         return lm_loss
 
@@ -331,5 +331,3 @@ class GenericLMTrainer(Trainer):
             return metrics
         else:
             return None
-
-
