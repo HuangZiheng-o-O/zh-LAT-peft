@@ -81,7 +81,7 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 ############################
 # 启动交错间隔 (可选)
 ############################
-export LAT_LAUNCH_STAGGER_MINUTES=2
+export LAT_LAUNCH_STAGGER_MINUTES=0
 
 ############################
 # 启动 SD-LoRA 训练

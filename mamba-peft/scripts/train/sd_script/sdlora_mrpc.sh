@@ -72,7 +72,7 @@ export TRANSFORMERS_VERBOSITY=error
 ############################
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="gla-sdlora-mrpc-Jan01"
+export SWANLAB_PROJECT="gla-sdlora-mrpc-Jan01-2-4090"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -80,7 +80,7 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 ############################
 # 启动交错间隔 (可选)
 ############################
-export LAT_LAUNCH_STAGGER_MINUTES=2
+export LAT_LAUNCH_STAGGER_MINUTES=0
 
 ############################
 # 启动 SD-LoRA 训练
