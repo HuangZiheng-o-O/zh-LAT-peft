@@ -72,6 +72,22 @@ class GlaSdLoraConfig(PeftConfig):
     def __post_init__(self):
         self.peft_type = MambaPeftType.GLA_SD_LORA
 
+        # ------------------------------------------------------------------
+        # Gate shape reminder:
+        #   GLA uses a single gk_proj per KV group, so gate channels are
+        #   shared across heads. Per-head sparsification would require a
+        #   different projection (one gk_proj per head). Until such models
+        #   exist, CHANNELS_ONLY is the only meaningful mode.
+        # ------------------------------------------------------------------
+        if self.select_mode != GLASelectMode.CHANNELS_ONLY:
+            raise ValueError(
+                "GLA SD-LoRA currently supports only select_mode='CHANNELS_ONLY'. "
+                "GLA's gk_proj outputs key_dim_per_group channels shared by every "
+                "head within the KV group, so there is no per-head axis to mask "
+                "individually. If you are working on a variant with independent "
+                "gate heads, extend GlaSdLoraParameter.get_mask() accordingly."
+            )
+
         # Validate required configuration fields
         # These must be explicitly specified in the config file or passed at initialization
 
@@ -230,10 +246,9 @@ class GlaSdLoraModel(GLABaseTuner):
             # Navigate up to find GatedLinearAttention block
             block = self._find_gla_block_for_module(module_name)
 
-            sdlora_alpha = 1
-            if peft_config.sdlora_alpha is not None:
-                sdlora_alpha = peft_config.sdlora_alpha.get(target_name, 1)
-                sdlora_alpha *= peft_config.sdlora_alpha.get("global", 1)
+            sdlora_alpha = self._resolve_sdlora_alpha(
+                peft_config.sdlora_alpha, module_name, target_name
+            )
 
             new_module = GlaSdLoraParameter(
                 target, adapter_name, module_name, block, peft_config.select_mode,
@@ -269,6 +284,37 @@ class GlaSdLoraModel(GLABaseTuner):
     def _get_sdlora_params(self):
         """Get all SD-LoRA parameter modules."""
         return [m for m in self.model.modules() if isinstance(m, GlaSdLoraParameter)]
+
+    @staticmethod
+    def _match_alpha_key(alpha_cfg, module_name, target_name):
+        """Resolve alpha scale by matching suffixes of module_name or target name."""
+        if not alpha_cfg:
+            return 1
+
+        def _fetch(key):
+            if key and key != "global" and key in alpha_cfg:
+                return alpha_cfg[key]
+            return None
+
+        if module_name:
+            parts = module_name.split(".")
+            for idx in range(len(parts)):
+                suffix = ".".join(parts[idx:])
+                val = _fetch(suffix)
+                if val is not None:
+                    return val
+
+        val = _fetch(target_name)
+        if val is not None:
+            return val
+        return 1
+
+    def _resolve_sdlora_alpha(self, alpha_cfg, module_name, target_name):
+        if not alpha_cfg:
+            return 1
+        local = self._match_alpha_key(alpha_cfg, module_name, target_name)
+        global_scale = alpha_cfg.get("global", 1)
+        return global_scale * local
 
     def get_sdlora_mode(self):
         """Get the current SD-LoRA mode (warmup or train).
@@ -452,6 +498,8 @@ class GlaSdLoraParameter(nn.Module, BaseTunerLayer):
 
         self.base_layer = base_layer
         self.module_name = module_name.replace(".", "_")
+        # NOTE: select_mode is kept for future models that expose per-head
+        # gate channels. Current GLA kernels only expose per-channel control.
         self.select_mode = select_mode
         self.num_zero = self._parse_dims(num_zero)
         self.num_freeze = self._parse_dims(num_freeze)

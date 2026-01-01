@@ -46,6 +46,7 @@ Usage:
 
 import json
 import os
+from dataclasses import fields
 from typing import Any, Dict, Optional, Tuple, Union
 
 import torch
@@ -377,8 +378,16 @@ def prepare_lat_model_and_tokenizer(
             peft_json.pop("peft_type", None)  # Not a valid GlaSdLoraConfig field
             peft_json.pop("_comment", None)   # Comment field for documentation
 
+            # Filter unsupported keys inherited from standard LoRA overrides to
+            # avoid TypeError when instantiating the SD-LoRA dataclass.
+            valid_fields = {f.name for f in fields(GlaSdLoraConfig)}
+            filtered_cfg = {k: v for k, v in peft_json.items() if k in valid_fields}
+            dropped_keys = sorted(set(peft_json.keys()) - valid_fields)
+            if dropped_keys:
+                print(f"[LAT] Dropping unsupported SD-LoRA config keys: {dropped_keys}")
+
             # Create config
-            peft_cfg = GlaSdLoraConfig(**peft_json)
+            peft_cfg = GlaSdLoraConfig(**filtered_cfg)
             model = get_peft_model(model, peft_cfg)
 
             print(f"[LAT] SD-LoRA config: warmup_it={peft_cfg.num_warmup_it}, "

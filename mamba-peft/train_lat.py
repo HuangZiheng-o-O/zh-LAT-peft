@@ -71,6 +71,7 @@ except Exception:
 import json
 import os
 import shutil
+import math
 from typing import Optional, Dict
 
 import torch
@@ -556,6 +557,9 @@ def run_train(
     its_per_epoch = int(
         np.ceil(len(train_data_module.dataset) / batch_size)
     )
+    optimizer_steps_per_epoch = max(
+        1, math.ceil(its_per_epoch / max(1, gradient_accumulation_steps))
+    )
 
     # Logging and steps configuration with env overrides
     env = os.environ
@@ -566,7 +570,7 @@ def run_train(
     except Exception:
         pass
 
-    total_steps = int(num_epochs * its_per_epoch)
+    total_steps = int(num_epochs * optimizer_steps_per_epoch)
     try:
         if env.get("HP_MAX_STEPS"):
             total_steps = int(env.get("HP_MAX_STEPS"))
@@ -875,7 +879,10 @@ def _run_sdlora_two_phase_training(
     # Reload train data for training phase
     train_data_module2 = load_dataset(data, tokenizer_obj2, "train", return_module=True)
     its_per_epoch2 = int(np.ceil(len(train_data_module2.dataset) / batch_size))
-    total_steps = int(num_epochs * its_per_epoch2)
+    optimizer_steps_per_epoch2 = max(
+        1, math.ceil(its_per_epoch2 / max(1, gradient_accumulation_steps))
+    )
+    total_steps = int(num_epochs * optimizer_steps_per_epoch2)
     logging_steps2 = min(50, its_per_epoch2)
 
     print(f"[{log_tag}] Training steps: {total_steps}")
