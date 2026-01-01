@@ -475,12 +475,11 @@ run_round () {
     local CFG_INJ
     CFG_INJ="$(make_tmp_cfg_with_data "$CFG" "$TMP_CFG_DIR")"
     echo "[GPU ${GPU}] ${CFG_INJ}  (MODEL_TYPE=${MODEL_TYPE}; HP_SEED=${FORCE_SEED}; data=${DATA})"
-    if (( _stagger_min > 0 )); then
-      local _delay_sec=$(( _stagger_min * 60 * i ))
-      if (( _delay_sec > 0 )); then
-        echo "[GPU ${GPU}] delaying launch by ${_delay_sec}s"
-        sleep "${_delay_sec}"
-      fi
+    # Stagger: fixed delay between consecutive launches (not cumulative)
+    if (( _stagger_min > 0 && i > 0 )); then
+      local _delay_sec=$(( _stagger_min * 60 ))
+      echo "[GPU ${GPU}] delaying launch by ${_delay_sec}s (stagger=${_stagger_min}min)"
+      sleep "${_delay_sec}"
     fi
     # Pass MODEL_TYPE and optional model/precision overrides to the unified launcher
     local -a _cmd=(python "$LAUNCHER_PY" --cfg "$CFG_INJ" --model-type "${MODEL_TYPE}" --overwrite)
