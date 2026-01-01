@@ -941,7 +941,7 @@ export TRANSFORMERS_VERBOSITY=error
 ############
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="gla-glue-tvt_qqp-2-4090-Dec27"
+export SWANLAB_PROJECT="gla-glue-tvt_qqp-1-4090-Jan1-v2"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -953,7 +953,7 @@ export GLA_LAUNCH_STAGGER_MINUTES=15
 # 启动 QQP 训练
 ##############################
 ./lat_batch_tmux.sh \
-  --suite E15 \
+  --suite E251 \
   --round all \
   --pairs "87:glue-tvt_qqp" \
   --gpus "0 1 2 3 4 5 6" \

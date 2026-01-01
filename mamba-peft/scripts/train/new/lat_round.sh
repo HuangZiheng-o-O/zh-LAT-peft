@@ -73,6 +73,23 @@ ROUND_E15=(# 26 个 分组更清晰：FULL → 主轴 → Attn细粒度 → Head
   "E2_OMLP_plus_G_plus_GK_r8_alpha16.yaml"
 )
 
+ROUND_E251=(  # 缺少的 14 个（不含已注释项）
+
+  "E11_OONLY_r8_alpha16.yaml"
+  "E6_QOONLY_r8_alpha16.yaml"
+
+  # Gating 细粒度
+  "E3_GPROJONLY_r8_alpha16.yaml"
+  "E3_GKONLY_r8_alpha16.yaml"
+
+  # MLP 细粒度
+  "E4_MLPGATEONLY_r8_alpha16.yaml"
+  "E4_MLPUPDOWN_r8_alpha16.yaml"
+
+  # 结构增量
+  "E1_QKVO_plus_G_r8_alpha16.yaml"
+
+)
 #####################################################################
 #                           Core Logic                               #
 #####################################################################
@@ -442,7 +459,11 @@ run_round () {
   TMP_CFG_DIR="$(mktemp -d /tmp/lat_data_XXXXXX)"
 
   # Support both LAT_* and GLA_* for stagger
-  local _stagger_min="${LAT_LAUNCH_STAGGER_MINUTES:-${GLA_LAUNCH_STAGGER_MINUTES:-0}}"
+  # Priority: LAT_* > GLA_*, but if LAT_* is 0/empty, use GLA_*
+  local _stagger_min="${LAT_LAUNCH_STAGGER_MINUTES:-0}"
+  if [[ "$_stagger_min" == "0" || -z "$_stagger_min" ]]; then
+    _stagger_min="${GLA_LAUNCH_STAGGER_MINUTES:-0}"
+  fi
   if ! [[ "${_stagger_min}" =~ ^[0-9]+$ ]]; then
     _stagger_min=0
   fi
