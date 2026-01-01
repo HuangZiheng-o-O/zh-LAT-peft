@@ -200,6 +200,25 @@ class GenericLMTrainer(Trainer):
             label_ids_valid.append(label_ids_sample_valid)
         return (lm_loss, logits_valid, label_ids_valid)
 
+    def get_eval_dataloader(self, eval_dataset=None):
+        """
+        Override to ensure evaluation keeps the final partial batch for accurate metrics.
+        """
+        prev = self.args.dataloader_drop_last
+        try:
+            self.args.dataloader_drop_last = False
+            return super().get_eval_dataloader(eval_dataset)
+        finally:
+            self.args.dataloader_drop_last = prev
+
+    def get_test_dataloader(self, test_dataset):
+        prev = self.args.dataloader_drop_last
+        try:
+            self.args.dataloader_drop_last = False
+            return super().get_test_dataloader(test_dataset)
+        finally:
+            self.args.dataloader_drop_last = prev
+
     def generation_step(self, generator, model, inputs):
         """
         Run generation for a single batch.
