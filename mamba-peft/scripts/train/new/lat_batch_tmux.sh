@@ -18,9 +18,6 @@ set -euo pipefail
 #   # Mamba2
 #   ./lat_batch_tmux.sh --suite E15 --round all --pairs "87:glue-tvt_qnli" --model-type mamba2
 #
-#   # SD-LoRA training (two-phase sparse dimension tuning)
-#   HP_PEFT_TYPE=sdlora ./lat_batch_tmux.sh --suite E15 --round all --pairs "87:glue-tvt_cola"
-#
 # Requirements: tmux, awk, nohup. Place this script next to lat_round.sh.
 #
 
@@ -187,23 +184,6 @@ HDR
   printf 'export HP_EPOCHS=%q\n' "${HP_EPOCHS:-}"
   printf 'export HP_EVAL_BATCH_SIZE=%q\n' "${HP_EVAL_BATCH_SIZE:-}"
   printf 'export HP_NO_SAVE=%q\n' "${HP_NO_SAVE:-}"
-
-  # PEFT configuration (LoRA / SD-LoRA)
-  printf 'export HP_PEFT_TYPE=%q\n' "${HP_PEFT_TYPE:-}"
-  printf 'export HP_PEFT_R=%q\n' "${HP_PEFT_R:-}"
-  printf 'export HP_PEFT_ALPHA=%q\n' "${HP_PEFT_ALPHA:-}"
-  printf 'export HP_PEFT_DROPOUT=%q\n' "${HP_PEFT_DROPOUT:-}"
-  printf 'export HP_INIT=%q\n' "${HP_INIT:-}"
-  printf 'export HP_USE_DORA=%q\n' "${HP_USE_DORA:-}"
-  printf 'export HP_USE_RSLoRA=%q\n' "${HP_USE_RSLoRA:-}"
-
-  # SD-LoRA specific parameters
-  # Dimension ratios: Train + Freeze + Zero = 100%
-  # Default: Train=40%, Freeze=50%, Zero=10%
-  printf 'export HP_WARMUP_IT=%q\n' "${HP_WARMUP_IT:-}"
-  printf 'export HP_TRAIN_RATIO=%q\n' "${HP_TRAIN_RATIO:-}"
-  printf 'export HP_FREEZE_RATIO=%q\n' "${HP_FREEZE_RATIO:-}"
-  printf 'export HP_ZERO_RATIO=%q\n' "${HP_ZERO_RATIO:-}"
 
   # LR scheduler
   printf 'export LR_SCHEDULER_TYPE=%q\n' "${LR_SCHEDULER_TYPE:-cosine}"

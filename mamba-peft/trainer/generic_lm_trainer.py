@@ -167,12 +167,12 @@ class GenericLMTrainer(Trainer):
         input_ids, label_ids, lm_logits = self._forward(model, inputs)
         lm_loss = self.train_crit(lm_logits, label_ids)
         if getattr(model, "should_training_stop", False):
-            if hasattr(model, "save_config") and self.is_world_process_zero() and getattr(self.args, "should_save", True):
+            if hasattr(model, "save_config"):
                 try:
                     model.save_config(self.args.output_dir)
                 except Exception:
                     pass
-            self.control.should_training_stop = True
+                self.control.should_training_stop = True
         self.train_loss_early_stop(self.control, lm_loss)
         return lm_loss
 
@@ -199,25 +199,6 @@ class GenericLMTrainer(Trainer):
             logits_valid.append(logits_sample_valid)
             label_ids_valid.append(label_ids_sample_valid)
         return (lm_loss, logits_valid, label_ids_valid)
-
-    def get_eval_dataloader(self, eval_dataset=None):
-        """
-        Override to ensure evaluation keeps the final partial batch for accurate metrics.
-        """
-        prev = self.args.dataloader_drop_last
-        try:
-            self.args.dataloader_drop_last = False
-            return super().get_eval_dataloader(eval_dataset)
-        finally:
-            self.args.dataloader_drop_last = prev
-
-    def get_test_dataloader(self, test_dataset):
-        prev = self.args.dataloader_drop_last
-        try:
-            self.args.dataloader_drop_last = False
-            return super().get_test_dataloader(test_dataset)
-        finally:
-            self.args.dataloader_drop_last = prev
 
     def generation_step(self, generator, model, inputs):
         """
@@ -350,3 +331,5 @@ class GenericLMTrainer(Trainer):
             return metrics
         else:
             return None
+
+

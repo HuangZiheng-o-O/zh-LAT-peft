@@ -16,37 +16,18 @@ Supported Models:
 - retnet: Retentive Network (https://arxiv.org/abs/2307.08621)
 - mamba2: Mamba2 State Space Model (https://arxiv.org/abs/2405.21060)
 
-PEFT Methods:
-=============
-- lora: Standard LoRA (default)
-- sdlora / gla_sd_lora: Sparse Dimension LoRA for GLA models
-  - Two-phase training: Warmup (gradient accumulation) → Training (sparse tuning)
-  - Controlled via HP_PEFT_TYPE environment variable or peft_type in config
-
 Environment Variables:
 =====================
 - MODEL_TYPE: Model type override (gla, retnet, mamba2, auto)
-- HP_PEFT_TYPE: PEFT type override ("lora", "sdlora", "gla_sd_lora")
 - LAT_* / GLA_*: Various configuration options (see documentation)
-
-SD-LoRA Specific Environment Variables:
-- HP_WARMUP_IT: Override warmup iterations (default: 100)
-- HP_TRAIN_RATIO: Override train dimension ratio (default: 0.4)
-  If set, HP_ZERO_RATIO is auto-computed as: 1 - train - freeze
-- HP_FREEZE_RATIO: Override freeze dimension ratio (default: 0.5)
-- HP_ZERO_RATIO: Override zero dimension ratio (default: 0.1)
-  Note: Train + Freeze + Zero must equal 1.0
 
 Usage:
 ======
-    # Standard LoRA training
+    # With explicit model type
     python train_lat.py --cfg configs/gla.yaml --model-type gla
 
-    # SD-LoRA training (via environment variable)
-    HP_PEFT_TYPE=sdlora python train_lat.py --cfg configs/gla.yaml
-
-    # SD-LoRA training (via config file with peft_type: GLA_SD_LORA)
-    python train_lat.py --cfg configs/gla.yaml --peft configs/gla_sdlora/default.json
+    # With auto-detection
+    python train_lat.py --cfg configs/model.yaml --model-type auto
 
     # GLA backward compatibility (same as train_gla_only.py)
     python train_lat.py --cfg configs/gla.yaml
@@ -71,7 +52,6 @@ except Exception:
 import json
 import os
 import shutil
-import math
 from typing import Optional, Dict
 
 import torch
@@ -94,7 +74,7 @@ from mamba_ssm_peft.utils.lat_decoder import create_lat_decoder
 from mamba_ssm_peft.utils.lat_model_loader import get_lat_env, get_lat_env_bool
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_NOW_OUTPUT_ROOT = REPO_ROOT / "runs"
+DEFAULT_NOW_OUTPUT_ROOT = REPO_ROOT / "output" / "benchmark" / "glue"
 NOW_OUTPUT_ROOT = Path(os.environ.get("LAT_OUTPUT_ROOT", DEFAULT_NOW_OUTPUT_ROOT)).expanduser()
 
 
@@ -488,58 +468,13 @@ def run_train(
     # Load model using unified adapter
     print(f"Loading {log_tag} model: {model}")
     model_id = model
-    model, tokenizer_obj, peft_cfg, is_sdlora = prepare_lat_model_and_tokenizer(
+    model, tokenizer_obj, _ = prepare_lat_model_and_tokenizer(
         model_type=model_type,
         model_id=model_id,
         prec=prec,
         debug=debug,
         peft_json_path=peft,
     )
-
-    # SD-LoRA two-phase training
-    if is_sdlora:
-        print(f"[{log_tag}] SD-LoRA mode detected - using two-phase training")
-        try:
-            _run_sdlora_two_phase_training(
-                model_type=model_type,
-                model_id=model_id,
-                prec=prec,
-                debug=debug,
-                peft_json_path=peft,
-                output_dir=str(output_dir),
-                cfg=cfg,
-                cfg_path=cfg_path,
-                learning_rate=learning_rate,
-                gradient_accumulation_steps=gradient_accumulation_steps,
-                num_data_workers=num_data_workers,
-                batch_size=batch_size,
-                eval_batch_size=eval_batch_size,
-                eval_epochs=eval_epochs,
-                skip_eval=skip_eval,
-                no_save=no_save,
-                eval_gen=eval_gen,
-                seed=seed,
-                data=data,
-                val_data=val_data,
-                val_data_split=val_data_split,
-                num_epochs=num_epochs,
-                gradient_checkpointing=gradient_checkpointing,
-                logits_to_keep=logits_to_keep,
-                log_tag=log_tag,
-                base_total_steps=None,  # Computed inside SD-LoRA function
-                base_logging_steps=None,  # Computed inside SD-LoRA function
-                base_eval_steps_override=None,  # Will use HP_EVAL_STEPS if set
-                base_save_steps_override=None,  # Will use HP_SAVE_STEPS if set
-            )
-        finally:
-            if created_lock:
-                try:
-                    lock_path = Path("share/lock") / str(output_dir)
-                    lock_path.unlink(missing_ok=True)
-                    print(f"[{log_tag}][lock] released {lock_path}")
-                except Exception as e:
-                    print(f"[{log_tag}][lock][warn] failed to remove lock: {e}")
-        return  # SD-LoRA training complete, exit early
 
     # Force left padding
     force_left = get_lat_env_bool("FORCE_LEFT_PAD", "1")
@@ -561,9 +496,6 @@ def run_train(
     its_per_epoch = int(
         np.ceil(len(train_data_module.dataset) / batch_size)
     )
-    optimizer_steps_per_epoch = max(
-        1, math.ceil(its_per_epoch / max(1, gradient_accumulation_steps))
-    )
 
     # Logging and steps configuration with env overrides
     env = os.environ
@@ -574,7 +506,7 @@ def run_train(
     except Exception:
         pass
 
-    total_steps = int(num_epochs * optimizer_steps_per_epoch)
+    total_steps = int(num_epochs * its_per_epoch)
     try:
         if env.get("HP_MAX_STEPS"):
             total_steps = int(env.get("HP_MAX_STEPS"))
@@ -649,39 +581,21 @@ def run_train(
                 print(f"[{log_tag}][lock][warn] failed to remove lock: {e}")
 
 
-def _sanitize_dir_name(name: str) -> str:
-    allowed = []
-    for ch in str(name):
-        if ch.isalnum() or ch in ("-", "_"):
-            allowed.append(ch)
-        else:
-            allowed.append("-")
-    sanitized = "".join(allowed).strip("-")
-    return sanitized or "run"
-
-
-def get_output_path_for_cfg(cfg_path, cfg, peft_json_path=None):
+def get_output_path_for_cfg(cfg_path, cfg):
     """
-    Target path (shallow but unique):
-      <NOW_OUTPUT_ROOT>/<data>__seed<seed>__<yaml-or-peft-stem>
+    Target path:
+      <NOW_OUTPUT_ROOT>/<data>_seed<seed>/<yaml_stem>
     Fallback (missing data/seed):
-      <NOW_OUTPUT_ROOT>/cola_gla__<yaml-or-peft-stem>
+      <NOW_OUTPUT_ROOT>/cola_gla/<yaml_stem>
     """
-    yaml_stem = _sanitize_dir_name(Path(cfg_path).stem)
-    peft_stem = None
-    if peft_json_path:
-        peft_stem = _sanitize_dir_name(Path(peft_json_path).stem)
-
-    run_suffix = peft_stem or yaml_stem
-    data = _sanitize_dir_name(cfg.get("data") or "cola_gla")
+    yaml_stem = Path(cfg_path).stem
+    data = cfg.get("data")
     seed = cfg.get("seed")
-    if seed is not None:
-        seed_part = f"seed{seed}"
-    else:
-        seed_part = "seedNA"
 
-    folder = f"{data}__{seed_part}__{run_suffix}"
-    return NOW_OUTPUT_ROOT / folder
+    if data and seed is not None:
+        folder = f"{data}_seed{seed}"
+        return NOW_OUTPUT_ROOT / folder / yaml_stem
+    return NOW_OUTPUT_ROOT / "cola_gla" / yaml_stem
 
 
 def _find_last_checkpoint(root: Path) -> Optional[Path]:
@@ -705,310 +619,6 @@ def _find_last_checkpoint(root: Path) -> Optional[Path]:
         return None
 
 
-def _run_sdlora_two_phase_training(
-    *,
-    model_type: str,
-    model_id: str,
-    prec: str,
-    debug: bool,
-    peft_json_path: str,
-    output_dir: str,
-    cfg: Dict,
-    cfg_path: str,
-    learning_rate: float,
-    gradient_accumulation_steps: int,
-    num_data_workers: int,
-    batch_size: int,
-    eval_batch_size: int,
-    eval_epochs: int,
-    skip_eval: bool,
-    no_save: bool,
-    eval_gen: Optional[Dict],
-    seed: int,
-    data: str,
-    val_data: Optional[str],
-    val_data_split: str,
-    num_epochs: int,
-    gradient_checkpointing: bool,
-    logits_to_keep: Optional[int],
-    log_tag: str,
-    base_total_steps: Optional[int],
-    base_logging_steps: Optional[int],
-    base_eval_steps_override: Optional[int],
-    base_save_steps_override: Optional[int],
-):
-    """
-    SD-LoRA two-phase training: Warmup → Training.
-
-    Phase 1 (Warmup):
-        - Train with full gradients to collect importance information
-        - Stops when model.should_training_stop is triggered
-        - Saves dimension importance data via model.save_config()
-
-    Phase 2 (Training):
-        - Loads saved dimension masks
-        - Trains only selected dimensions (zero/freeze/train)
-    """
-    from mamba_ssm_peft.peft.gla_sd_lora import GlaSdLoraConfig
-
-    print(f"\n{'=' * 60}")
-    print(f"[{log_tag}] SD-LoRA Phase 1: Warmup (gradient accumulation)")
-    print(f"{'=' * 60}\n")
-
-    run_root = Path(output_dir)
-    sdlora_cfg_dir = run_root / "sdlora_cfg"
-    warmup_marker = sdlora_cfg_dir / "warmup_complete.marker"
-
-    def _attach_config_dir(peft_model):
-        if hasattr(peft_model, "set_sdlora_config_dir"):
-            peft_model.set_sdlora_config_dir(sdlora_cfg_dir)
-
-    def _truthy_env(name: str) -> bool:
-        return str(os.environ.get(name, "0")).lower() in ("1", "true", "yes", "on")
-
-    reset_requested = _truthy_env("SDLORA_RESET")
-    stale_cache = sdlora_cfg_dir.exists() and not warmup_marker.exists()
-    if reset_requested or stale_cache:
-        if sdlora_cfg_dir.exists():
-            shutil.rmtree(sdlora_cfg_dir, ignore_errors=True)
-        if reset_requested:
-            print(f"[{log_tag}] SDLORA_RESET=1 → clearing previous SD-LoRA cache in {sdlora_cfg_dir}")
-        elif stale_cache:
-            print(f"[{log_tag}] Detected incomplete SD-LoRA cache. Re-initializing {sdlora_cfg_dir}")
-    sdlora_cfg_dir.mkdir(parents=True, exist_ok=True)
-
-    # Phase 1: Load model and run warmup
-    model, tokenizer_obj, peft_cfg, _ = prepare_lat_model_and_tokenizer(
-        model_type=model_type,
-        model_id=model_id,
-        prec=prec,
-        debug=debug,
-        peft_json_path=peft_json_path,
-    )
-    _attach_config_dir(model)
-
-    # Force left padding
-    force_left = get_lat_env_bool("FORCE_LEFT_PAD", "1")
-    if force_left:
-        tokenizer_obj.padding_side = "left"
-        if getattr(tokenizer_obj, "pad_token_id", None) is None:
-            tokenizer_obj.pad_token = tokenizer_obj.eos_token
-
-    # Load train data
-    train_data_module = load_dataset(data, tokenizer_obj, "train", return_module=True)
-    its_per_epoch = int(np.ceil(len(train_data_module.dataset) / batch_size))
-    warmup_logging_steps = min(50, its_per_epoch)
-    if base_logging_steps is not None:
-        warmup_logging_steps = base_logging_steps
-
-    # [FIX Issue #5] Warmup phase: account for gradient_accumulation_steps
-    # num_warmup_it counts forward passes, but total_steps counts training steps
-    # With gradient_accumulation_steps=N, each training step has N forward passes
-    warmup_it = getattr(peft_cfg, "num_warmup_it", 100)
-
-    # Calculate training steps needed to reach warmup_it forward passes
-    # ceil(warmup_it / gradient_accumulation_steps) + buffer for safety
-    warmup_training_steps = int(np.ceil(warmup_it / gradient_accumulation_steps)) + 10
-    warmup_steps = warmup_training_steps
-
-    print(f"[{log_tag}] Warmup config: {warmup_it} forward passes")
-    print(f"[{log_tag}] With gradient_accumulation_steps={gradient_accumulation_steps}, "
-          f"running {warmup_steps} training steps")
-
-    # Check if warmup already completed
-    warmup_complete = warmup_marker.exists()
-    if warmup_complete:
-        print(f"[{log_tag}] Warmup already completed, skipping to Phase 2")
-    else:
-        # Run warmup phase
-        # [FIX] Disable gradient_checkpointing for warmup phase.
-        # SD-LoRA switches from warmup→train mode mid-forward, causing tensor metadata
-        # mismatch when gradient checkpointing recomputes the forward pass.
-        # Warmup is only ~100 iterations, so memory impact is minimal.
-        build_and_run_trainer_lat(
-            model=model,
-            tokenizer=tokenizer_obj,
-            model_type=model_type,
-            output_dir=str(output_dir),
-            cfg=cfg,
-            cfg_path=cfg_path,
-            learning_rate=learning_rate,
-            total_steps=warmup_steps,
-            logging_steps=warmup_logging_steps,
-            gradient_accumulation_steps=gradient_accumulation_steps,
-            num_data_workers=num_data_workers,
-            batch_size=batch_size,
-            eval_batch_size=eval_batch_size,
-            eval_epochs=eval_epochs,
-            skip_eval=True,  # Skip eval during warmup
-            no_save=True,  # Don't save checkpoints during warmup
-            eval_steps_override=None,
-            save_steps_override=None,
-            eval_gen=None,
-            resume_from_checkpoint=None,
-            min_eval_metric_after_epoch=None,
-            seed=seed,
-            data=data,
-            val_data=val_data,
-            val_data_split=val_data_split,
-            debug=debug,
-            gradient_checkpointing=False,  # Disabled for warmup - mode switch breaks checkpointing
-            logits_to_keep=logits_to_keep,
-            train_data_module=train_data_module,
-        )
-
-        # [FIX BUG #1] Save warmup gradient information BEFORE marking done
-        # This is CRITICAL - without this, Phase 2 has no dimension importance data
-        if hasattr(model, "save_config"):
-            model.save_config(sdlora_cfg_dir)
-            print(f"[{log_tag}] Saved warmup gradient information to {sdlora_cfg_dir}")
-        else:
-            raise RuntimeError(
-                f"[{log_tag}] FATAL: Model does not have save_config method. "
-                "SD-LoRA requires saving warmup gradients for Phase 2."
-            )
-
-        # Verify the config was actually saved
-        saved_files = list(sdlora_cfg_dir.glob("*.pkl"))
-        if not saved_files:
-            raise RuntimeError(
-                f"[{log_tag}] FATAL: No .pkl config files found in {sdlora_cfg_dir} after save_config(). "
-                "Warmup gradient information was not saved correctly."
-            )
-        print(f"[{log_tag}] Verified {len(saved_files)} config file(s) saved: {[f.name for f in saved_files]}")
-
-        # Mark warmup as done
-        warmup_marker.touch()
-        print(f"[{log_tag}] Warmup phase completed successfully")
-
-    # Release warmup model resources before loading the train-phase model.
-    del model
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-
-    # Phase 2: Training with sparse dimensions
-    print(f"\n{'=' * 60}")
-    print(f"[{log_tag}] SD-LoRA Phase 2: Training (sparse dimension tuning)")
-    print(f"{'=' * 60}\n")
-
-    # Reload model for training phase
-    model2, tokenizer_obj2, peft_cfg2, _ = prepare_lat_model_and_tokenizer(
-        model_type=model_type,
-        model_id=model_id,
-        prec=prec,
-        debug=debug,
-        peft_json_path=peft_json_path,
-    )
-    _attach_config_dir(model2)
-
-    # [FIX BUG #2] Load saved warmup config (dimension masks) with required=True
-    # This ensures Phase 2 fails fast if warmup data is missing
-    if not hasattr(model2, "load_config"):
-        raise RuntimeError(
-            f"[{log_tag}] FATAL: Model does not have load_config method. "
-            "Cannot load warmup gradient data for Phase 2."
-        )
-
-    model2.load_config(sdlora_cfg_dir, required=True)
-
-    # Verify model is now in train mode (not warmup)
-    if hasattr(model2, "verify_train_mode"):
-        model2.verify_train_mode()
-        print(f"[{log_tag}] Verified: All SD-LoRA modules are in train mode")
-    else:
-        # Fallback verification
-        if hasattr(model2, "get_sdlora_mode"):
-            current_mode = model2.get_sdlora_mode()
-            if current_mode != "train":
-                raise RuntimeError(
-                    f"[{log_tag}] FATAL: Model is in '{current_mode}' mode, expected 'train'. "
-                    "load_config may have failed to transition the model."
-                )
-
-    # Force left padding
-    if force_left:
-        tokenizer_obj2.padding_side = "left"
-        if getattr(tokenizer_obj2, "pad_token_id", None) is None:
-            tokenizer_obj2.pad_token = tokenizer_obj2.eos_token
-
-    # Reload train data for training phase
-    train_data_module2 = load_dataset(data, tokenizer_obj2, "train", return_module=True)
-    its_per_epoch2 = int(np.ceil(len(train_data_module2.dataset) / batch_size))
-    optimizer_steps_per_epoch2 = max(
-        1, math.ceil(its_per_epoch2 / max(1, gradient_accumulation_steps))
-    )
-
-    # Read env overrides for step configuration (same logic as main run_train)
-    env = os.environ
-    logging_steps2 = min(50, its_per_epoch2)
-    try:
-        if env.get("HP_LOGGING_STEPS"):
-            logging_steps2 = int(env.get("HP_LOGGING_STEPS"))
-    except Exception:
-        pass
-    if base_logging_steps is not None:
-        logging_steps2 = base_logging_steps
-
-    total_steps = int(num_epochs * optimizer_steps_per_epoch2)
-    try:
-        if env.get("HP_MAX_STEPS"):
-            total_steps = int(env.get("HP_MAX_STEPS"))
-    except Exception:
-        pass
-    if base_total_steps is not None:
-        total_steps = base_total_steps
-
-    eval_steps_override = base_eval_steps_override
-    save_steps_override = base_save_steps_override
-    try:
-        if env.get("HP_EVAL_STEPS"):
-            eval_steps_override = int(env.get("HP_EVAL_STEPS"))
-    except Exception:
-        pass
-    try:
-        if env.get("HP_SAVE_STEPS"):
-            save_steps_override = int(env.get("HP_SAVE_STEPS"))
-    except Exception:
-        pass
-
-    print(f"[{log_tag}] Training steps: {total_steps}")
-
-    # Run training phase
-    build_and_run_trainer_lat(
-        model=model2,
-        tokenizer=tokenizer_obj2,
-        model_type=model_type,
-        output_dir=str(output_dir),
-        cfg=cfg,
-        cfg_path=cfg_path,
-        learning_rate=learning_rate,
-        total_steps=total_steps,
-        logging_steps=logging_steps2,
-        gradient_accumulation_steps=gradient_accumulation_steps,
-        num_data_workers=num_data_workers,
-        batch_size=batch_size,
-        eval_batch_size=eval_batch_size,
-        eval_epochs=eval_epochs,
-        skip_eval=skip_eval,
-        no_save=no_save,
-        eval_steps_override=eval_steps_override,
-        save_steps_override=save_steps_override,
-        eval_gen=eval_gen,
-        resume_from_checkpoint=None,
-        min_eval_metric_after_epoch=None,
-        seed=seed,
-        data=data,
-        val_data=val_data,
-        val_data_split=val_data_split,
-        debug=debug,
-        gradient_checkpointing=gradient_checkpointing,
-        logits_to_keep=logits_to_keep,
-        train_data_module=train_data_module2,
-    )
-
-    print(f"\n[{log_tag}] SD-LoRA two-phase training completed!")
-
-
 def main():
     parser = argparse.ArgumentParser(description="Unified Linear Attention Training")
     parser.add_argument("--cfg", type=str, required=True, help="Path to config YAML file")
@@ -1020,7 +630,6 @@ def main():
     parser.add_argument("--lock", action="store_true")
     parser.add_argument("--model")
     parser.add_argument("--prec")
-    parser.add_argument("--peft", type=str, help="Path to PEFT config JSON file (for SD-LoRA)")
     parser.add_argument("--device")
     args = parser.parse_args()
 
@@ -1126,7 +735,7 @@ def main():
         }
 
     # Output directory
-    output_dir = get_output_path_for_cfg(args.cfg, cfg, peft_json_path=args.peft)
+    output_dir = get_output_path_for_cfg(args.cfg, cfg)
 
     # Merge cfg + CLI args into run_train parameters
     train_args = {
