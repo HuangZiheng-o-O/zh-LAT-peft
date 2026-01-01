@@ -821,6 +821,10 @@ def _run_sdlora_two_phase_training(
         print(f"[{log_tag}] Warmup already completed, skipping to Phase 2")
     else:
         # Run warmup phase
+        # [FIX] Disable gradient_checkpointing for warmup phase.
+        # SD-LoRA switches from warmup→train mode mid-forward, causing tensor metadata
+        # mismatch when gradient checkpointing recomputes the forward pass.
+        # Warmup is only ~100 iterations, so memory impact is minimal.
         build_and_run_trainer_lat(
             model=model,
             tokenizer=tokenizer_obj,
@@ -848,7 +852,7 @@ def _run_sdlora_two_phase_training(
             val_data=val_data,
             val_data_split=val_data_split,
             debug=debug,
-            gradient_checkpointing=gradient_checkpointing,
+            gradient_checkpointing=False,  # Disabled for warmup - mode switch breaks checkpointing
             logits_to_keep=logits_to_keep,
             train_data_module=train_data_module,
         )
