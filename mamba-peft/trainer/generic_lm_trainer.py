@@ -160,6 +160,12 @@ class GenericLMTrainer(Trainer):
                     f"batch_shape={tuple(input_ids.shape)}"
                 )
 
+        # IMPORTANT: Explicitly disable caching for GLA models during training/evaluation.
+        # GLA's default config sets use_cache=True, but caching conflicts with the
+        # unpadding/padding strategy used for variable-length sequences in batches.
+        # This causes "CUDA driver error: invalid argument" during evaluation.
+        add_inputs["use_cache"] = False
+
         lm_logits = model(input_ids, **add_inputs).logits
         return input_ids, label_ids, lm_logits
 
