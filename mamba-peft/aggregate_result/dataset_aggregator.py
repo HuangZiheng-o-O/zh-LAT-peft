@@ -45,6 +45,33 @@ def _checkpoint_path_for(exp_train_dir: Path, step: int) -> str:
     return str((exp_train_dir / f"checkpoint-{step}").resolve())
 
 
+def _read_parameter_counts(exp_train_dir: Path, exp_out_dir: Path) -> Tuple[Optional[int], Optional[int], Optional[float]]:
+    """Read parameter_counts.json from train dir (preferred) or output dir (fallback)."""
+    candidates = [
+        exp_train_dir / "parameter_counts.json",
+        exp_out_dir / "parameter_counts.json",
+    ]
+    for p in candidates:
+        if not p.is_file():
+            continue
+        try:
+            with open(p, "r") as f:
+                obj = json.load(f)
+            if not isinstance(obj, dict):
+                continue
+            total_params = obj.get("total_params", None)
+            trainable_params = obj.get("trainable_params", None)
+            trainable_ratio = obj.get("trainable_ratio", None)
+            return (
+                int(total_params) if total_params is not None else None,
+                int(trainable_params) if trainable_params is not None else None,
+                float(trainable_ratio) if trainable_ratio is not None else None,
+            )
+        except Exception:
+            continue
+    return None, None, None
+
+
 def _best_for_cola(df: pd.DataFrame, exp_train_dir: Path) -> BestRow:
     # primary: eval_matthews_correlation desc, tie -> eval_loss asc, tie -> step desc
     if "eval_matthews_correlation" not in df.columns:
@@ -195,6 +222,10 @@ def summarize_dataset(dataset_out_dir: Path, dataset_name: str, dataset_train_di
             record[k] = v
         record["experiment"] = exp_out.name
         record["step"] = best.step
+        total_params, trainable_params, trainable_ratio = _read_parameter_counts(exp_train_dir, exp_out)
+        record["total_params"] = total_params
+        record["trainable_params"] = trainable_params
+        record["trainable_ratio"] = trainable_ratio
         if not small:
             record["checkpoint_path"] = best.checkpoint_path
             cfgp = _cfg_path_for(exp_train_dir)

@@ -14,6 +14,35 @@ import pandas as pd
 from .glue_metrics import get_task_spec, select_score
 
 
+def load_parameter_counts(exp_dir: Path) -> Dict[str, Any]:
+    """Load parameter_counts.json from an experiment directory if present.
+
+    Expected keys (if produced by your training scripts):
+      - total_params (int)
+      - trainable_params (int)
+      - trainable_ratio (float)
+    """
+    p = exp_dir / "parameter_counts.json"
+    if not p.is_file():
+        return {}
+    try:
+        with open(p, "r") as f:
+            obj = json.load(f)
+        if not isinstance(obj, dict):
+            return {}
+        # Keep only the keys we care about to avoid bloating summaries.
+        out: Dict[str, Any] = {}
+        if "total_params" in obj:
+            out["total_params"] = int(obj["total_params"])
+        if "trainable_params" in obj:
+            out["trainable_params"] = int(obj["trainable_params"])
+        if "trainable_ratio" in obj:
+            out["trainable_ratio"] = float(obj["trainable_ratio"])
+        return out
+    except Exception:
+        return {}
+
+
 def load_log_history(trainer_state_json: Path) -> pd.DataFrame:
     with open(trainer_state_json, "r") as f:
         obj = json.load(f)
@@ -131,6 +160,7 @@ def aggregate_experiment(exp_dir: Path, dataset_name: str, out_dir: Path) -> Dic
         "experiment": exp_dir.name,
         "best_step": best_step,
         "best_metrics": best_row,
+        "parameter_counts": load_parameter_counts(exp_dir) or None,
         "csv_all": str(csv_all),
         "csv_eval": str(csv_eval) if csv_eval else None,
         "plots": plots,
