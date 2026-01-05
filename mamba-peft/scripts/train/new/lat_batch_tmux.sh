@@ -5,8 +5,8 @@ set -euo pipefail
 # Unified Linear Attention batch training script.
 # Supports GLA, RetNet, Mamba2 and other FLA models through MODEL_TYPE env var.
 #
-# Based on gla_batch_tmux_clean.sh with MODEL_TYPE generalization.
-# When MODEL_TYPE is unset or "gla", behavior is identical to gla_batch_tmux_clean.sh.
+# This is the canonical batch training script for the LAT framework.
+# MODEL_TYPE defaults to "auto" (auto-detect from model config).
 #
 # Usage examples:
 #   # GLA (default, backward compatible)
@@ -162,16 +162,13 @@ HDR
   printf 'export SWANLAB_EMAIL_ON_START=%q\n' "${SWANLAB_EMAIL_ON_START:-}"
   printf 'export SWANLAB_EMAIL_ON_FINISH=%q\n' "${SWANLAB_EMAIL_ON_FINISH:-}"
 
-  # LAT/GLA toggles (support both prefixes)
-  printf 'export LAT_FORCE_LEFT_PAD=%q\n' "${LAT_FORCE_LEFT_PAD:-${GLA_FORCE_LEFT_PAD:-}}"
-  printf 'export LAT_USE_MAX_NEW_TOKENS=%q\n' "${LAT_USE_MAX_NEW_TOKENS:-${GLA_USE_MAX_NEW_TOKENS:-}}"
-  printf 'export LAT_VERBOSE=%q\n' "${LAT_VERBOSE:-${GLA_VERBOSE:-}}"
-  printf 'export LAT_USE_FUSED_SWIGLU=%q\n' "${LAT_USE_FUSED_SWIGLU:-${GLA_USE_FUSED_SWIGLU:-}}"
-  # Also export GLA_* for backward compatibility
-  printf 'export GLA_FORCE_LEFT_PAD=%q\n' "${GLA_FORCE_LEFT_PAD:-}"
-  printf 'export GLA_USE_MAX_NEW_TOKENS=%q\n' "${GLA_USE_MAX_NEW_TOKENS:-}"
-  printf 'export GLA_VERBOSE=%q\n' "${GLA_VERBOSE:-}"
-  printf 'export GLA_USE_FUSED_SWIGLU=%q\n' "${GLA_USE_FUSED_SWIGLU:-}"
+  # LAT environment toggles (Python handles LAT_* > GLA_* fallback internally)
+  # We merge LAT_* and GLA_* here to support both naming conventions
+  printf 'export LAT_FORCE_LEFT_PAD=%q\n' "${LAT_FORCE_LEFT_PAD:-${GLA_FORCE_LEFT_PAD:-1}}"
+  printf 'export LAT_USE_MAX_NEW_TOKENS=%q\n' "${LAT_USE_MAX_NEW_TOKENS:-${GLA_USE_MAX_NEW_TOKENS:-1}}"
+  printf 'export LAT_VERBOSE=%q\n' "${LAT_VERBOSE:-${GLA_VERBOSE:-0}}"
+  printf 'export LAT_USE_FUSED_SWIGLU=%q\n' "${LAT_USE_FUSED_SWIGLU:-${GLA_USE_FUSED_SWIGLU:-0}}"
+  printf 'export LAT_LOG_PADDING_STATS=%q\n' "${LAT_LOG_PADDING_STATS:-${GLA_LOG_PADDING_STATS:-0}}"
 
   # HP_* hyperparameters
   printf 'export HP_EVAL_STEPS=%q\n' "${HP_EVAL_STEPS:-}"
@@ -196,9 +193,8 @@ HDR
   printf 'export EVAL_GEN_MIN_LENGTH=%q\n' "${EVAL_GEN_MIN_LENGTH:-}"
   printf 'export EVAL_GEN_NUM_BEAMS=%q\n' "${EVAL_GEN_NUM_BEAMS:-}"
 
-  # Launch staggering (support both LAT_* and GLA_*)
-  printf 'export LAT_LAUNCH_STAGGER_MINUTES=%q\n' "${LAT_LAUNCH_STAGGER_MINUTES:-${GLA_LAUNCH_STAGGER_MINUTES:-}}"
-  printf 'export GLA_LAUNCH_STAGGER_MINUTES=%q\n' "${GLA_LAUNCH_STAGGER_MINUTES:-}"
+  # Launch staggering (merge LAT_* and GLA_*)
+  printf 'export LAT_LAUNCH_STAGGER_MINUTES=%q\n' "${LAT_LAUNCH_STAGGER_MINUTES:-${GLA_LAUNCH_STAGGER_MINUTES:-0}}"
 
   # Other common env vars
   printf 'export GRADIENT_CHECKPOINTING=%q\n' "${GRADIENT_CHECKPOINTING:-}"

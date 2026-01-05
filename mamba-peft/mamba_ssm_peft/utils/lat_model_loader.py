@@ -1,4 +1,3 @@
-
 """
 Unified Linear Attention Model Loader.
 
@@ -10,19 +9,19 @@ Design Principles:
 1. **Backward Compatibility**: GLA loading remains identical to the original `load_gla()`.
 2. **Unified Interface**: All models use the same `load_lat_model()` entry point.
 3. **Auto-Detection**: Model type can be automatically detected from config.json.
-4. **Extensibility**: Easy to add new model types by updating MODEL_REGISTRY.
+4. **Extensibility**: Easy to add new model types via ModelRegistry.
 
-Supported Models (First Batch):
-==============================
+Supported Models:
+================
 - gla: Gated Linear Attention (https://arxiv.org/abs/2312.06635)
 - retnet: Retentive Network (https://arxiv.org/abs/2307.08621)
 - mamba2: Mamba2 State Space Model (https://arxiv.org/abs/2405.21060)
 
 Environment Variables (LAT_* preferred, GLA_* fallback for compatibility):
 =========================================================================
-- LAT_FORCE_LEFT_PAD / GLA_FORCE_LEFT_PAD: Force left padding
-- LAT_VERBOSE / GLA_VERBOSE: Enable verbose logging
-- LAT_USE_FUSED_SWIGLU / GLA_USE_FUSED_SWIGLU: Enable fused SwiGLU (default: disabled)
+- LAT_FORCE_LEFT_PAD: Force left padding
+- LAT_VERBOSE: Enable verbose logging
+- LAT_USE_FUSED_SWIGLU: Enable fused SwiGLU (default: disabled)
 
 Usage:
 ======
@@ -40,85 +39,25 @@ Usage:
 """
 
 import json
-import os
-import sys
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict
 
 import torch
 from transformers import AutoTokenizer
 from transformers.utils import CONFIG_NAME
 from transformers.utils.hub import cached_file
 
-
-# ============================================================================
-# MODEL REGISTRY
-# ============================================================================
-# Format: model_type -> (module_path, config_class_name, model_class_name, special_handling)
-# special_handling: dict of flags for model-specific behavior
-#   - has_fuse_swiglu: whether the model config has fuse_swiglu option
-#   - cache_type: "past_key_values" (GLA/RetNet) or "cache_params" (Mamba2)
-#   - inner_model_attr: attribute name for inner model ("model" or "backbone")
-
-MODEL_REGISTRY: Dict[str, Tuple[str, str, str, Dict[str, Any]]] = {
-    "gla": (
-        "fla.models.gla",
-        "GLAConfig",
-        "GLAForCausalLM",
-        {"has_fuse_swiglu": True, "cache_type": "past_key_values", "inner_model_attr": "model"},
-    ),
-    "retnet": (
-        "fla.models.retnet",
-        "RetNetConfig",
-        "RetNetForCausalLM",
-        {"has_fuse_swiglu": True, "cache_type": "past_key_values", "inner_model_attr": "model"},
-    ),
-    "mamba2": (
-        "fla.models.mamba2",
-        "Mamba2Config",
-        "Mamba2ForCausalLM",
-        {"has_fuse_swiglu": False, "cache_type": "cache_params", "inner_model_attr": "backbone"},
-    ),
-}
-
-# Mapping from config.json model_type to our registry key
-CONFIG_MODEL_TYPE_MAP: Dict[str, str] = {
-    "gla": "gla",
-    "retnet": "retnet",
-    "mamba2": "mamba2",
-}
-
-
-# ============================================================================
-# ENVIRONMENT VARIABLE HELPERS
-# ============================================================================
-def get_lat_env(key: str, default: str = "0") -> str:
-    """
-    Get environment variable with LAT_* prefix, falling back to GLA_* for compatibility.
-
-    Priority: LAT_{key} > GLA_{key} > default
-
-    Example:
-        get_lat_env("VERBOSE") checks LAT_VERBOSE, then GLA_VERBOSE, then returns default.
-    """
-    lat_key = f"LAT_{key}"
-    gla_key = f"GLA_{key}"
-    return os.getenv(lat_key, os.getenv(gla_key, default))
-
-
-def get_lat_env_bool(key: str, default: str = "0") -> bool:
-    """Get environment variable as boolean."""
-    return get_lat_env(key, default).lower() in ("1", "true", "yes", "on")
+# Import from new modular components
+from .env_config import env_config, get_lat_env, get_lat_env_bool
+from .lat_base import ModelRegistry, ModelSpec, ModelCapabilities, CONFIG_MODEL_TYPE_MAP
+from .patches import apply_model_patches
 
 
 def _verbose_print(msg: str) -> None:
-    """Print message if LAT_VERBOSE or GLA_VERBOSE is enabled."""
-    if get_lat_env_bool("VERBOSE"):
+    """Print message if LAT_VERBOSE is enabled."""
+    if env_config.get_bool("VERBOSE"):
         print(f"[LAT] {msg}")
 
 
-# ============================================================================
-# MODEL TYPE DETECTION
-# ============================================================================
 def detect_model_type(model_id: str, trust_remote_code: bool = True) -> str:
     """
     Auto-detect model type from config.json.
@@ -169,71 +108,6 @@ def detect_model_type(model_id: str, trust_remote_code: bool = True) -> str:
     return model_type
 
 
-# ============================================================================
-# FUSED OPERATIONS PATCHING
-# ============================================================================
-def _apply_swiglu_patch() -> None:
-    """
-    Disable fused SwiGLU operations by replacing with PyTorch implementations.
-
-    This ensures compatibility across different hardware and avoids potential
-    issues with fused Triton kernels.
-    """
-    try:
-        import torch.nn.functional as F
-        from importlib import import_module
-
-        _mlp = import_module("fla.modules.mlp")
-        _act = import_module("fla.modules.activations")
-
-        def _pt_swiglu(x, y):
-            return F.silu(x) * y
-
-        def _pt_swiglu_linear(x, y, weight, bias):
-            return F.linear(F.silu(x) * y, weight, bias)
-
-        _mlp.swiglu = _pt_swiglu
-        _mlp.swiglu_linear = _pt_swiglu_linear
-        _act.swiglu = _pt_swiglu
-        _act.swiglu_linear = _pt_swiglu_linear
-        _verbose_print("fuse_swiglu disabled; using PyTorch SwiGLU.")
-    except Exception as patch_err:
-        print(f"[LAT][warn] Failed to apply SwiGLU runtime patch: {patch_err}")
-
-
-# ============================================================================
-# MODEL LOADING
-# ============================================================================
-def _import_model_classes(model_type: str) -> Tuple[Any, Any]:
-    """
-    Dynamically import Config and ForCausalLM classes for a model type.
-
-    Args:
-        model_type: Model type key from MODEL_REGISTRY
-
-    Returns:
-        Tuple of (ConfigClass, ModelClass)
-    """
-    if model_type not in MODEL_REGISTRY:
-        supported = ", ".join(MODEL_REGISTRY.keys())
-        raise ValueError(f"[LAT] Unknown model_type '{model_type}'. Supported: {supported}")
-
-    module_path, config_cls_name, model_cls_name, _ = MODEL_REGISTRY[model_type]
-
-    try:
-        from importlib import import_module
-
-        module = import_module(module_path)
-        config_cls = getattr(module, config_cls_name)
-        model_cls = getattr(module, model_cls_name)
-        return config_cls, model_cls
-    except ImportError as e:
-        raise ImportError(
-            f"[LAT] Failed to import {module_path}. "
-            f"Ensure flash-linear-attention is installed. Error: {e}"
-        ) from e
-
-
 def load_lat_model(
     model_type: str,
     model_id: str,
@@ -259,7 +133,7 @@ def load_lat_model(
             - "model": The loaded model
             - "tokenizer": The loaded tokenizer
             - "model_type": The resolved model type string
-            - "special_handling": Model-specific handling flags from registry
+            - "capabilities": ModelCapabilities for this model type
 
     Raises:
         ValueError: If model_type is invalid or cannot be auto-detected
@@ -276,33 +150,25 @@ def load_lat_model(
     if model_type == "auto":
         model_type = detect_model_type(model_id, trust_remote_code)
 
-    # Validate model type
-    if model_type not in MODEL_REGISTRY:
-        supported = ", ".join(MODEL_REGISTRY.keys())
-        raise ValueError(f"[LAT] Unknown model_type '{model_type}'. Supported: {supported}")
+    # Get model spec from registry
+    spec = ModelRegistry.get(model_type)
+    capabilities = spec.capabilities
 
-    # Get model info from registry
-    _, _, _, special_handling = MODEL_REGISTRY[model_type]
-
-    # Import model classes
-    ConfigClass, ModelClass = _import_model_classes(model_type)
+    # Import model classes dynamically
+    ConfigClass, ModelClass = spec.import_classes()
 
     # Load config
     try:
         config = ConfigClass.from_pretrained(model_id)
     except Exception as e:
         raise RuntimeError(
-            f"[LAT] Failed to load {ConfigClass.__name__}.from_pretrained('{model_id}'). "
+            f"[LAT] Failed to load {spec.config_class_name}.from_pretrained('{model_id}'). "
             f"Error: {e}"
         ) from e
 
-    # Apply config patches
-    if special_handling.get("has_fuse_swiglu", False):
-        # Disable fused SwiGLU unless explicitly enabled
-        if not get_lat_env_bool("USE_FUSED_SWIGLU"):
-            if hasattr(config, "fuse_swiglu"):
-                config.fuse_swiglu = False
-            _apply_swiglu_patch()
+    # Apply patches (e.g., disable fused SwiGLU)
+    if capabilities.has_fuse_swiglu:
+        apply_model_patches(model_type, config)
 
     # Load tokenizer
     tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=trust_remote_code)
@@ -325,7 +191,13 @@ def load_lat_model(
         "model": model,
         "tokenizer": tokenizer,
         "model_type": model_type,
-        "special_handling": special_handling,
+        "capabilities": capabilities,
+        # Backward compatibility alias
+        "special_handling": {
+            "has_fuse_swiglu": capabilities.has_fuse_swiglu,
+            "cache_type": capabilities.cache_type,
+            "inner_model_attr": capabilities.inner_model_attr,
+        },
     }
 
 
@@ -396,26 +268,21 @@ def get_model_info(model_type: str) -> Dict[str, Any]:
         model_type: Model type key
 
     Returns:
-        Dict with model information including module_path, class names, and special_handling
+        Dict with model information
 
     Raises:
         ValueError: If model_type is not in registry
     """
-    if model_type not in MODEL_REGISTRY:
-        supported = ", ".join(MODEL_REGISTRY.keys())
-        raise ValueError(f"Unknown model_type '{model_type}'. Supported: {supported}")
-
-    module_path, config_cls, model_cls, special_handling = MODEL_REGISTRY[model_type]
+    spec = ModelRegistry.get(model_type)
     return {
-        "model_type": model_type,
-        "module_path": module_path,
-        "config_class": config_cls,
-        "model_class": model_cls,
-        "special_handling": special_handling,
+        "model_type": spec.model_type,
+        "module_path": spec.module_path,
+        "config_class": spec.config_class_name,
+        "model_class": spec.model_class_name,
+        "capabilities": spec.capabilities,
     }
 
 
 def list_supported_models() -> list:
     """Return list of supported model types."""
-    return list(MODEL_REGISTRY.keys())
-
+    return ModelRegistry.list_models()

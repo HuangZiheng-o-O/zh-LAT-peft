@@ -1,30 +1,34 @@
+"""
+HuggingFace Model Loading Utilities for LAT Framework.
+
+This module provides utilities for loading models and weights from the
+HuggingFace Hub, with proper path setup for the FLA library.
+
+Primary Functions:
+=================
+- load_gla: Load GLA (Gated Linear Attention) model
+- load_retnet: Load RetNet (Retentive Network) model
+- load_mamba2: Load Mamba2 (State Space Model)
+- load_config_hf: Load config.json from HuggingFace Hub
+- load_state_dict_hf: Load model weights from HuggingFace Hub
+
+All model loading functions delegate to the unified lat_model_loader.py
+for consistent behavior and reduced code duplication.
+"""
+
 import json
-import sys
-import datetime
-
-def _debug_print(msg: str):
-    ts = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
-    print(f"[DEBUG][{ts}] [hf.py] {msg}", flush=True)
-
-_debug_print("START importing mamba_ssm_peft/utils/hf.py...")
-
-_debug_print("  Importing torch...")
-import torch
-_debug_print(f"  torch {torch.__version__}... OK")
-
-_debug_print("  Importing transformers.utils (WEIGHTS_NAME, CONFIG_NAME)...")
-from transformers.utils import WEIGHTS_NAME, CONFIG_NAME
-_debug_print("  transformers.utils... OK")
-
-_debug_print("  Importing transformers.utils.hub.cached_file...")
-from transformers.utils.hub import cached_file
-_debug_print("  transformers.utils.hub.cached_file... OK")
-
-# Add flash-linear-attention to path for GLA support
 import sys
 import os
 
-# --- Robustly locate flash-linear-attention (prefer new submodule path) ---
+import torch
+from transformers.utils import WEIGHTS_NAME, CONFIG_NAME
+from transformers.utils.hub import cached_file
+
+
+# ============================================================================
+# FLA LIBRARY PATH SETUP
+# ============================================================================
+# Add flash-linear-attention to path for FLA support
 current_dir = os.path.dirname(os.path.abspath(__file__))
 repo_root = os.path.abspath(os.path.join(current_dir, '..', '..', '..'))  # .../zh-LAT-peft
 
@@ -32,54 +36,87 @@ repo_root = os.path.abspath(os.path.join(current_dir, '..', '..', '..'))  # .../
 preferred_dir = os.path.join(repo_root, '3rdparty', 'flash-linear-attention')
 legacy_dir = os.path.abspath(os.path.join(current_dir, '..', '..', '..', 'flash-linear-attention'))
 
-inserted = False
+_fla_path_inserted = False
 if os.path.isdir(preferred_dir):
     sys.path.insert(0, preferred_dir)
-    inserted = True
-else:
-    # Fallback: repo_root if it has a top-level 'fla' symlink/dir
-    if os.path.isdir(os.path.join(repo_root, 'fla')):
-        sys.path.insert(0, repo_root)
-        inserted = True
-    elif os.path.isdir(legacy_dir):
-        sys.path.insert(0, legacy_dir)
-        inserted = True
+    _fla_path_inserted = True
+elif os.path.isdir(os.path.join(repo_root, 'fla')):
+    sys.path.insert(0, repo_root)
+    _fla_path_inserted = True
+elif os.path.isdir(legacy_dir):
+    sys.path.insert(0, legacy_dir)
+    _fla_path_inserted = True
 
-if not inserted:
-    print(f"Warning: flash-linear-attention not found under {preferred_dir} or {legacy_dir}; relying on environment")
+if not _fla_path_inserted:
+    print(f"[LAT][warn] flash-linear-attention not found under {preferred_dir} or {legacy_dir}; "
+          "relying on environment")
 
 # Backward-compat shim: provide a no-op decorator for deprecate_kwarg when missing
 try:
-    from transformers.utils.deprecation import deprecate_kwarg as _hf_deprecate_kwarg  # type: ignore
+    from transformers.utils.deprecation import deprecate_kwarg as _hf_deprecate_kwarg  # noqa: F401
 except Exception:
     import types as _types
     _dep_mod = _types.ModuleType("transformers.utils.deprecation")
+
     def _noop_deprecate_kwarg(*args, **kwargs):
         def _decorator(fn):
             return fn
         return _decorator
+
     _dep_mod.deprecate_kwarg = _noop_deprecate_kwarg  # type: ignore[attr-defined]
     sys.modules["transformers.utils.deprecation"] = _dep_mod
 
 
-def load_config_hf(model_name):
+# ============================================================================
+# CONFIG AND WEIGHTS LOADING
+# ============================================================================
+def load_config_hf(model_name: str) -> dict:
+    """
+    Load config.json from HuggingFace Hub or local path.
+
+    Args:
+        model_name: HuggingFace model ID or local path
+
+    Returns:
+        Parsed config dictionary
+
+    Raises:
+        FileNotFoundError: If config.json is not found
+    """
     resolved_archive_file = cached_file(
         model_name, CONFIG_NAME, _raise_exceptions_for_missing_entries=False
     )
     if resolved_archive_file is None:
-        raise FileNotFoundError(f"[GLA] {CONFIG_NAME} not found for model '{model_name}'")
+        raise FileNotFoundError(f"[LAT] {CONFIG_NAME} not found for model '{model_name}'")
     with open(resolved_archive_file, "r") as f:
         return json.load(f)
 
 
-def load_state_dict_hf(model_name, device=None, dtype=None):
+def load_state_dict_hf(
+    model_name: str,
+    device: str = None,
+    dtype: torch.dtype = None,
+) -> dict:
     """
-    Load a HF state dict and optionally cast dtype and/or move to device.
+    Load model state_dict from HuggingFace Hub and optionally cast dtype and/or move to device.
+
+    Args:
+        model_name: HuggingFace model ID or local path
+        device: Target device (optional)
+        dtype: Target dtype (optional)
+
+    Returns:
+        Model state dictionary
+
+    Raises:
+        FileNotFoundError: If model weights are not found
     """
     mapped_device = "cpu" if dtype not in [torch.float32, None] else device
-    resolved_archive_file = cached_file(model_name, WEIGHTS_NAME, _raise_exceptions_for_missing_entries=False)
+    resolved_archive_file = cached_file(
+        model_name, WEIGHTS_NAME, _raise_exceptions_for_missing_entries=False
+    )
     if resolved_archive_file is None:
-        raise FileNotFoundError(f"[GLA] {WEIGHTS_NAME} not found for model '{model_name}'")
+        raise FileNotFoundError(f"[LAT] {WEIGHTS_NAME} not found for model '{model_name}'")
     state_dict = torch.load(resolved_archive_file, map_location=mapped_device)
     if dtype is not None:
         state_dict = {k: v.to(dtype=dtype) for k, v in state_dict.items()}
@@ -88,85 +125,58 @@ def load_state_dict_hf(model_name, device=None, dtype=None):
     return state_dict
 
 
-def load_gla(model_id, trust_remote_code=True, device="cuda", dtype=torch.bfloat16):
-    """
-    Robust GLA loader (flash-linear-attention first; hard fail on mismatch).
-    Current behavior:
-      1) Use flash-linear-attention GLAForCausalLM/GLAConfig exclusively.
-      2) If GLAConfig.from_pretrained fails, raise RuntimeError (no fallback to generic AutoModel).
-    Returns: {"model": model, "tokenizer": tokenizer}
-    """
-    # Try flash-linear-attention implementation first (more reliable for GLA)
-    from fla.models.gla import GLAForCausalLM, GLAConfig
-    from transformers import AutoTokenizer
-
-    # Strict config loading (no silent fallback)
-    try:
-        config = GLAConfig.from_pretrained(model_id)
-    except Exception as e:
-        raise RuntimeError(
-            f"[GLA] Failed to load GLAConfig.from_pretrained('{model_id}'). "
-            f"Ensure flash-linear-attention and model weights are compatible. Underlying error: {e}"
-        )
-
-    # Always disable fused SwiGLU; use PyTorch implementations unconditionally
-    try:
-        if hasattr(config, "fuse_swiglu"):
-            config.fuse_swiglu = False
-    except Exception:
-        pass
-    try:
-        import torch.nn.functional as F
-        from importlib import import_module
-        _mlp = import_module('fla.modules.mlp')
-        _act = import_module('fla.modules.activations')
-
-        def _pt_swiglu(x, y):
-            return F.silu(x) * y
-
-        def _pt_swiglu_linear(x, y, weight, bias):
-            return F.linear(F.silu(x) * y, weight, bias)
-
-        _mlp.swiglu = _pt_swiglu
-        _mlp.swiglu_linear = _pt_swiglu_linear
-        _act.swiglu = _pt_swiglu
-        _act.swiglu_linear = _pt_swiglu_linear
-        print("[GLA] fuse_swiglu disabled; using PyTorch SwiGLU.")
-    except Exception as patch_err:
-        print(f"[GLA][warn] Failed to apply SwiGLU runtime patch: {patch_err}")
-
-    # Load tokenizer and model
-    tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=trust_remote_code)
-    model = GLAForCausalLM.from_pretrained(
-        model_id,
-        config=config,
-        torch_dtype=dtype,
-        device_map="auto" if device == "auto" else None,
-    )
-    if device != "auto" and device is not None:
-        model = model.to(device=device)
-    return {"model": model, "tokenizer": tokenizer}
-
-
-def load_gla_tokenizer(model_id="fla-hub/gla-1.3B-100B", trust_remote_code=True):
-    """
-    Load GLA tokenizer
-    """
-    from transformers import AutoTokenizer
-    return AutoTokenizer.from_pretrained(model_id, trust_remote_code=trust_remote_code)
-
-
 # ============================================================================
-# ADDITIONAL LINEAR ATTENTION MODEL LOADERS
+# MODEL LOADING (delegate to lat_model_loader)
 # ============================================================================
-# These functions provide consistent interfaces for loading other FLA models.
-# They follow the same pattern as load_gla() for backward compatibility.
+# Import from unified loader
+from .lat_model_loader import (
+    load_lat_model,
+    load_lat_tokenizer,
+    load_gla as _load_gla,
+    load_gla_tokenizer as _load_gla_tokenizer,
+)
 
-def load_retnet(model_id, trust_remote_code=True, device="cuda", dtype=torch.bfloat16):
+
+def load_gla(
+    model_id: str,
+    trust_remote_code: bool = True,
+    device: str = "cuda",
+    dtype: torch.dtype = torch.bfloat16,
+) -> dict:
     """
-    Load RetNet model (Retentive Network).
+    Load GLA (Gated Linear Attention) model and tokenizer.
 
-    RetNet uses multi-scale retention mechanism for efficient sequence modeling.
+    This function delegates to the unified lat_model_loader for consistent behavior.
+
+    Args:
+        model_id: HuggingFace model ID or local path
+        trust_remote_code: Whether to trust remote code
+        device: Target device ("cuda", "cpu", or "auto")
+        dtype: Model dtype (default: torch.bfloat16)
+
+    Returns:
+        Dict with "model" and "tokenizer" keys
+    """
+    return _load_gla(model_id, trust_remote_code, device, dtype)
+
+
+def load_gla_tokenizer(
+    model_id: str = "fla-hub/gla-1.3B-100B",
+    trust_remote_code: bool = True,
+):
+    """Load GLA tokenizer."""
+    return _load_gla_tokenizer(model_id, trust_remote_code)
+
+
+def load_retnet(
+    model_id: str,
+    trust_remote_code: bool = True,
+    device: str = "cuda",
+    dtype: torch.dtype = torch.bfloat16,
+) -> dict:
+    """
+    Load RetNet (Retentive Network) model and tokenizer.
+
     Reference: "Retentive Network: A Successor to Transformer for Large Language Models"
                https://arxiv.org/abs/2307.08621
 
@@ -179,64 +189,24 @@ def load_retnet(model_id, trust_remote_code=True, device="cuda", dtype=torch.bfl
     Returns:
         Dict with "model" and "tokenizer" keys
     """
-    from fla.models.retnet import RetNetForCausalLM, RetNetConfig
-    from transformers import AutoTokenizer
-
-    # Load config
-    try:
-        config = RetNetConfig.from_pretrained(model_id)
-    except Exception as e:
-        raise RuntimeError(
-            f"[RetNet] Failed to load RetNetConfig.from_pretrained('{model_id}'). "
-            f"Error: {e}"
-        ) from e
-
-    # Disable fused SwiGLU for compatibility (same as GLA)
-    try:
-        if hasattr(config, "fuse_swiglu"):
-            config.fuse_swiglu = False
-    except Exception:
-        pass
-
-    # Apply SwiGLU patch (reuse the same logic as GLA)
-    try:
-        import torch.nn.functional as F
-        from importlib import import_module
-        _mlp = import_module('fla.modules.mlp')
-        _act = import_module('fla.modules.activations')
-
-        def _pt_swiglu(x, y):
-            return F.silu(x) * y
-
-        def _pt_swiglu_linear(x, y, weight, bias):
-            return F.linear(F.silu(x) * y, weight, bias)
-
-        _mlp.swiglu = _pt_swiglu
-        _mlp.swiglu_linear = _pt_swiglu_linear
-        _act.swiglu = _pt_swiglu
-        _act.swiglu_linear = _pt_swiglu_linear
-        print("[RetNet] fuse_swiglu disabled; using PyTorch SwiGLU.")
-    except Exception as patch_err:
-        print(f"[RetNet][warn] Failed to apply SwiGLU runtime patch: {patch_err}")
-
-    # Load tokenizer and model
-    tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=trust_remote_code)
-    model = RetNetForCausalLM.from_pretrained(
-        model_id,
-        config=config,
-        torch_dtype=dtype,
-        device_map="auto" if device == "auto" else None,
-    )
-    if device != "auto" and device is not None:
-        model = model.to(device=device)
-    return {"model": model, "tokenizer": tokenizer}
+    result = load_lat_model("retnet", model_id, trust_remote_code, device, dtype)
+    return {"model": result["model"], "tokenizer": result["tokenizer"]}
 
 
-def load_mamba2(model_id, trust_remote_code=True, device="cuda", dtype=torch.bfloat16):
+def load_retnet_tokenizer(model_id: str, trust_remote_code: bool = True):
+    """Load RetNet tokenizer."""
+    return load_lat_tokenizer(model_id, trust_remote_code)
+
+
+def load_mamba2(
+    model_id: str,
+    trust_remote_code: bool = True,
+    device: str = "cuda",
+    dtype: torch.dtype = torch.bfloat16,
+) -> dict:
     """
-    Load Mamba2 model (State Space Model).
+    Load Mamba2 (State Space Model) and tokenizer.
 
-    Mamba2 uses selective state space mechanisms with efficient hardware-aware design.
     Note: Mamba2 uses cache_params instead of past_key_values for caching.
 
     Reference: "Transformers are SSMs: Generalized Models and Efficient Algorithms
@@ -252,38 +222,10 @@ def load_mamba2(model_id, trust_remote_code=True, device="cuda", dtype=torch.bfl
     Returns:
         Dict with "model" and "tokenizer" keys
     """
-    from fla.models.mamba2 import Mamba2ForCausalLM, Mamba2Config
-    from transformers import AutoTokenizer
-
-    # Load config
-    try:
-        config = Mamba2Config.from_pretrained(model_id)
-    except Exception as e:
-        raise RuntimeError(
-            f"[Mamba2] Failed to load Mamba2Config.from_pretrained('{model_id}'). "
-            f"Error: {e}"
-        ) from e
-
-    # Load tokenizer and model
-    tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=trust_remote_code)
-    model = Mamba2ForCausalLM.from_pretrained(
-        model_id,
-        config=config,
-        torch_dtype=dtype,
-        device_map="auto" if device == "auto" else None,
-    )
-    if device != "auto" and device is not None:
-        model = model.to(device=device)
-    return {"model": model, "tokenizer": tokenizer}
+    result = load_lat_model("mamba2", model_id, trust_remote_code, device, dtype)
+    return {"model": result["model"], "tokenizer": result["tokenizer"]}
 
 
-def load_retnet_tokenizer(model_id, trust_remote_code=True):
-    """Load RetNet tokenizer."""
-    from transformers import AutoTokenizer
-    return AutoTokenizer.from_pretrained(model_id, trust_remote_code=trust_remote_code)
-
-
-def load_mamba2_tokenizer(model_id, trust_remote_code=True):
+def load_mamba2_tokenizer(model_id: str, trust_remote_code: bool = True):
     """Load Mamba2 tokenizer."""
-    from transformers import AutoTokenizer
-    return AutoTokenizer.from_pretrained(model_id, trust_remote_code=trust_remote_code)
+    return load_lat_tokenizer(model_id, trust_remote_code)

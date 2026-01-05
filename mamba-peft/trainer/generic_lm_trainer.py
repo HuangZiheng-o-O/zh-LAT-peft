@@ -1,14 +1,15 @@
 """
-Generic Language Model Trainer for GLA (Gated Linear Attention) and similar architectures.
+Generic Language Model Trainer for Linear Attention architectures.
 
-This trainer is designed to work with the FLA (Flash Linear Attention) library's GLA models.
+This trainer is designed to work with the FLA (Flash Linear Attention) library's
+models including GLA, RetNet, Mamba2, and other Linear Attention variants.
 It properly handles attention_mask to ensure correct training behavior.
 
-Key Design Considerations for GLA:
-==================================
+Key Design Considerations for Linear Attention:
+===============================================
 
-1. **attention_mask is REQUIRED for GLA**
-   Unlike Transformer's softmax attention, GLA uses linear state accumulation:
+1. **attention_mask is REQUIRED**
+   Unlike Transformer's softmax attention, Linear Attention uses state accumulation:
        S_t = Diag(α_t) · S_{t-1} + k_t^T ⊗ v_t
 
    Without attention_mask, padding tokens pollute the hidden state S_t.
@@ -23,13 +24,15 @@ Key Design Considerations for GLA:
    Loss is only computed at positions where label_ids != -100, so padding
    positions in labels are correctly ignored.
 
-Environment Variables:
-- GLA_LOG_PADDING_STATS=1: Log padding ratio every 500 steps for debugging
-- GLA_FORCE_LEFT_PAD=1: Force left padding in tokenizer (set in train_gla_only.py)
+Environment Variables (LAT_* preferred, GLA_* fallback for compatibility):
+=========================================================================
+- LAT_LOG_PADDING_STATS=1: Log padding ratio every 500 steps for debugging
+- LAT_FORCE_LEFT_PAD=1: Force left padding in tokenizer
+- LAT_VERBOSE=1: Enable verbose logging
 
 References:
-- GLA Paper: "Gated Linear Attention Transformers with Hardware-Efficient Training"
-  https://arxiv.org/abs/2312.06635
+- GLA Paper: https://arxiv.org/abs/2312.06635
+- RetNet Paper: https://arxiv.org/abs/2307.08621
 - FLA Library: https://github.com/sustcsonglin/flash-linear-attention
 """
 
@@ -59,6 +62,7 @@ from trainer.eval_utils import (
     TrainLossEarlyStop,
     BadEvalEarlyStop,
 )
+from mamba_ssm_peft.utils.env_config import env_config
 
 
 @dataclass
@@ -121,10 +125,10 @@ class GenericLMTrainer(Trainer):
         """
         Forward pass for training and evaluation.
 
-        IMPORTANT: For GLA (Gated Linear Attention) models from the FLA library,
+        IMPORTANT: For Linear Attention models from the FLA library,
+        attention_mask enables the unpadding strategy for correct behavior.
         References:
-        - GLA Paper: https://arxiv.org/abs/2312.06635
-        - FLA Implementation: fla/layers/gla.py (see get_unpad_data usage)
+        - FLA Implementation: fla/layers/*.py (see get_unpad_data usage)
         """
         input_ids = inputs["input_ids"]
         label_ids = inputs["label_ids"]
@@ -148,8 +152,8 @@ class GenericLMTrainer(Trainer):
                 add_inputs["label_ids"] = label_ids
 
         # Optional: Log padding statistics for debugging
-        # Enable via environment variable: GLA_LOG_PADDING_STATS=1
-        if attention_mask is not None and os.environ.get("GLA_LOG_PADDING_STATS", "0") == "1":
+        # Enable via environment variable: LAT_LOG_PADDING_STATS=1 (or GLA_LOG_PADDING_STATS=1)
+        if attention_mask is not None and env_config.get_bool("LOG_PADDING_STATS"):
             if hasattr(self, 'state') and self.state.global_step % 500 == 0:
                 valid_tokens = attention_mask.sum().item()
                 total_tokens = attention_mask.numel()
@@ -160,8 +164,8 @@ class GenericLMTrainer(Trainer):
                     f"batch_shape={tuple(input_ids.shape)}"
                 )
 
-        # IMPORTANT: Explicitly disable caching for GLA models during training/evaluation.
-        # GLA's default config sets use_cache=True, but caching conflicts with the
+        # IMPORTANT: Explicitly disable caching for Linear Attention models during training/evaluation.
+        # Many FLA models default to use_cache=True, but caching conflicts with the
         # unpadding/padding strategy used for variable-length sequences in batches.
         # This causes "CUDA driver error: invalid argument" during evaluation.
         add_inputs["use_cache"] = False

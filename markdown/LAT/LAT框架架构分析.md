@@ -1,49 +1,21 @@
-# LAT框架架构分析
-
-* * *
-
-Linear Attention（LAT）框架：架构与等价性分析
+Linear Attention（LAT）框架：架构与设计
 ================================
 
-执行摘要（Executive Summary）
------------------------
+本文档描述了**统一 LAT（Linear ATtention）框架**的架构设计，这是一个支持多种线性注意力模型（GLA、RetNet、Mamba2等）的可插拔训练框架。
 
-本文档对**原始 GLA 微调流程**与**新的统一 LAT（Linear ATtention）框架**进行了**严格的逐行对比**。
+**核心设计原则**：
 
-**核心结论**：  
-当 `MODEL_TYPE=gla`（或未设置、自动检测且模型为 GLA）时，新的 LAT 框架在行为上与原始 GLA-only 实现 **100% 完全一致**。  
-唯一的差异仅包括：
-
-1.  代码结构更加可扩展（支持 RetNet、Mamba2 等）
-2.  环境变量同时支持 `LAT_*` 与 `GLA_*` 前缀（含回退机制）
-3.  日志标签可能显示为 `[LAT]` 或 `[GLA]`（取决于上下文）
+1.  **单一入口点**：所有线性注意力模型共用 `train_lat.py` 入口
+2.  **注册表模式**：通过 `ModelRegistry` 管理模型类型，易于扩展
+3.  **统一环境变量**：使用 `LAT_*` 前缀，自动回退到 `GLA_*` 以保持向后兼容
+4.  **策略模式**：SwiGLU patch 等运行时修改采用策略模式
 
 * * *
 
 第一部分：架构总览（Architecture Overview）
 --------------------------------
 
-### 1.1 原始 GLA 流程（重构前）
-
-```
-gla_batch_tmux_clean.sh
-    |
-    +-> gla_round_clean.sh
-            |
-            +-> train_gla_only.py
-                    |
-                    +-> train_gla_adapter.py::prepare_gla_model_and_tokenizer()
-                    |       |
-                    |       +-> hf.py::load_gla()
-                    |
-                    +-> gla_hf_decoder.py::create_gla_decoder()
-                    |
-                    +-> GenericLMTrainer (trainer/generic_lm_trainer.py)
-```
-
-* * *
-
-### 1.2 新的 LAT 流程（重构后）
+### 1.1 框架流程
 
 ```
 lat_batch_tmux.sh (with MODEL_TYPE env)
@@ -56,268 +28,208 @@ lat_batch_tmux.sh (with MODEL_TYPE env)
                     |       |
                     |       +-> lat_model_loader.py::load_lat_model()
                     |               |
-                    |               +-> MODEL_REGISTRY lookup
-                    |               +-> Dynamic import (fla.models.gla, etc.)
+                    |               +-> ModelRegistry lookup (lat_base.py)
+                    |               +-> Dynamic import (fla.models.*)
+                    |               +-> patches.py::apply_model_patches()
                     |
                     +-> lat_decoder.py::create_lat_decoder()
                     |
-                    +-> GenericLMTrainer (UNCHANGED)
+                    +-> GenericLMTrainer (trainer/generic_lm_trainer.py)
 ```
 
 * * *
 
-### 1.3 关键设计原则（Key Design Principles）
+### 1.2 核心模块结构
 
-1.  **向后兼容性（Backward Compatibility）**  
-    所有 `GLA_*` 环境变量仍然有效
-2.  **统一接口（Unified Interface）**  
-    所有线性注意力模型共用单一入口
-3.  **最小侵入性（Minimal Invasiveness）**  
-    `GenericLMTrainer`、数据集模块、loss 函数 **完全未修改**
-4.  **环境变量回退机制（Environment Variable Fallback）**  
-    优先级：`LAT_*` > `GLA_*` > 默认值
+```
+mamba-peft/
+├── train_lat.py                         # 统一训练入口
+├── lat_adapter.py                       # 模型适配器
+│
+├── mamba_ssm_peft/
+│   └── utils/
+│       ├── env_config.py                # 统一环境变量配置 (NEW)
+│       ├── lat_base.py                  # 类型定义与 ModelRegistry (NEW)
+│       ├── patches.py                   # SwiGLU patch 策略 (NEW)
+│       ├── lat_model_loader.py          # 统一模型加载器 (REFACTORED)
+│       ├── lat_decoder.py               # 统一解码器
+│       └── hf.py                        # HuggingFace 工具 (SIMPLIFIED)
+│
+├── trainer/
+│   └── generic_lm_trainer.py            # 通用训练器 (UPDATED)
+│
+└── scripts/train/new/
+    ├── lat_batch_tmux.sh                # 批量训练脚本 (SIMPLIFIED)
+    └── lat_round.sh                     # 轮次训练脚本 (SIMPLIFIED)
+```
 
 * * *
 
-第二部分：严格代码路径对比（Strict Code Path Comparison）
-------------------------------------------
+### 1.3 关键设计原则
+
+1.  **统一接口**：所有线性注意力模型共用单一入口
+2.  **注册表模式**：`ModelRegistry` 管理所有支持的模型类型
+3.  **策略模式**：`patches.py` 中的 `PatchManager` 管理运行时 patch
+4.  **环境变量统一**：`env_config.py` 提供单一真相源，优先级 `LAT_*` > `GLA_*`
 
 * * *
 
-### 2.1 Shell 脚本对比：`gla_batch_tmux_clean.sh` vs `lat_batch_tmux.sh`
+第二部分：核心组件详解
+-----------
 
-| 维度 | 原始 GLA | 新 LAT | 等价性 |
-| --- | --- | --- | --- |
-| 启动脚本 | `gla_round_clean.sh` | `lat_round.sh` | 结构一致 |
-| 会话名 | `batch_clean_${SUITE}_${ROUND}_${ts}` | `batch_lat_${MODEL_TYPE}_${SUITE}_${ROUND}_${ts}` | 仅增加 MODEL\_TYPE |
-| 临时文件前缀 | `/tmp/gla_batch_clean_runner_XXXXXX.sh` | `/tmp/lat_batch_runner_XXXXXX.sh` | 仅命名差异 |
-| GLA\_\* 导出 | FORCE\_LEFT\_PAD, VERBOSE 等 | 相同 + LAT\_\* | 超集 |
-| HP\_\* 导出 | 全部 | 完全相同 | 100% |
-| SwanLab 导出 | 全部 | 完全相同 | 100% |
-| 日志输出 | `step${idx}_s${seed}_${data}_${ts}` | `step${idx}_${MODEL_TYPE}_s${seed}_${data}_${ts}` | 增加 MODEL\_TYPE |
+### 2.1 ModelRegistry（模型注册表）
 
-**原始 gla\_batch\_tmux\_clean.sh 关键行（121–125）：**
+```python
+from mamba_ssm_peft.utils.lat_base import ModelRegistry, ModelCapabilities
+
+# 获取模型规格
+spec = ModelRegistry.get("gla")
+
+# 检查能力
+if spec.capabilities.has_fuse_swiglu:
+    apply_swiglu_patch()
+
+# 动态导入模型类
+ConfigClass, ModelClass = spec.import_classes()
+
+# 列出支持的模型
+models = ModelRegistry.list_models()  # ["gla", "retnet", "mamba2"]
+```
+
+### 2.2 LATEnvConfig（统一环境变量）
+
+```python
+from mamba_ssm_peft.utils.env_config import env_config
+
+# 获取环境变量（自动回退 LAT_* > GLA_*）
+verbose = env_config.get_bool("VERBOSE")  # 检查 LAT_VERBOSE 或 GLA_VERBOSE
+force_left_pad = env_config.get_bool("FORCE_LEFT_PAD")
+stagger_min = env_config.get_int("LAUNCH_STAGGER_MINUTES", default=0)
+```
+
+### 2.3 PatchManager（运行时 Patch）
+
+```python
+from mamba_ssm_peft.utils.patches import apply_model_patches
+
+# 根据模型类型应用 patch
+apply_model_patches(model_type="gla", config=config)
+```
+
+* * *
+
+第三部分：环境变量参考
+-----------
+
+所有环境变量使用 `LAT_*` 前缀，自动回退到 `GLA_*` 以保持向后兼容。
+
+| 环境变量 | 默认值 | 描述 |
+| --- | --- | --- |
+| `LAT_FORCE_LEFT_PAD` | `1` | 强制左填充 |
+| `LAT_USE_MAX_NEW_TOKENS` | `1` | 使用 max_new_tokens 语义 |
+| `LAT_VERBOSE` | `0` | 详细日志 |
+| `LAT_USE_FUSED_SWIGLU` | `0` | 启用融合 SwiGLU（默认禁用） |
+| `LAT_LOG_PADDING_STATS` | `0` | 记录填充统计 |
+| `LAT_LAUNCH_STAGGER_MINUTES` | `0` | 启动延迟分钟数 |
+
+* * *
+
+第四部分：支持的模型类型
+-----------
+
+| 模型类型 | 描述 | 论文 |
+| --- | --- | --- |
+| `gla` | Gated Linear Attention | [arXiv:2312.06635](https://arxiv.org/abs/2312.06635) |
+| `retnet` | Retentive Network | [arXiv:2307.08621](https://arxiv.org/abs/2307.08621) |
+| `mamba2` | Mamba2 State Space Model | [arXiv:2405.21060](https://arxiv.org/abs/2405.21060) |
+
+* * *
+
+第五部分：使用示例
+---------
+
+### 5.1 命令行使用
 
 ```bash
-printf 'export GLA_FORCE_LEFT_PAD=%q\n' "${GLA_FORCE_LEFT_PAD:-}"
-printf 'export GLA_USE_MAX_NEW_TOKENS=%q\n' "${GLA_USE_MAX_NEW_TOKENS:-}"
-printf 'export GLA_VERBOSE=%q\n' "${GLA_VERBOSE:-}"
-printf 'export GLA_USE_FUSED_SWIGLU=%q\n' "${GLA_USE_FUSED_SWIGLU:-}"
+# GLA 训练（默认）
+./lat_batch_tmux.sh --suite E15 --round all --pairs "87:glue-tvt_cola"
+
+# RetNet 训练
+./lat_batch_tmux.sh --suite E15 --round all --pairs "87:glue-tvt_cola" --model-type retnet
+
+# Mamba2 训练
+MODEL_TYPE=mamba2 ./lat_batch_tmux.sh --suite E15 --round all --pairs "87:glue-tvt_cola"
+
+# 自动检测模型类型
+./lat_batch_tmux.sh --suite E15 --round all --pairs "87:glue-tvt_cola" --model-type auto
 ```
 
-**lat\_batch\_tmux.sh 对应行（146–156）：**
+### 5.2 Python API 使用
 
-```bash
-printf 'export LAT_FORCE_LEFT_PAD=%q\n' "${LAT_FORCE_LEFT_PAD:-${GLA_FORCE_LEFT_PAD:-}}"
-printf 'export LAT_USE_MAX_NEW_TOKENS=%q\n' "${LAT_USE_MAX_NEW_TOKENS:-${GLA_USE_MAX_NEW_TOKENS:-}}"
-printf 'export LAT_VERBOSE=%q\n' "${LAT_VERBOSE:-${GLA_VERBOSE:-}}"
-# 同时导出 GLA_* 以保持向后兼容
-printf 'export GLA_FORCE_LEFT_PAD=%q\n' "${GLA_FORCE_LEFT_PAD:-}"
-printf 'export GLA_USE_MAX_NEW_TOKENS=%q\n' "${GLA_USE_MAX_NEW_TOKENS:-}"
-printf 'export GLA_VERBOSE=%q\n' "${GLA_VERBOSE:-}"
-```
+```python
+from mamba_ssm_peft.utils.lat_model_loader import load_lat_model
 
-**结论**：  
-LAT 同时导出 `LAT_*` 与 `GLA_*`，原始 GLA 行为完全保留。
+# 加载 GLA 模型
+result = load_lat_model("gla", "fla-hub/gla-1.3B-100B")
+model = result["model"]
+tokenizer = result["tokenizer"]
 
-* * *
-
-### 2.2 Shell 脚本对比：`gla_round_clean.sh` vs `lat_round.sh`
-
-| 维度 | 原始 GLA | 新 LAT | 等价性 |
-| --- | --- | --- | --- |
-| LAUNCHER\_PY | train\_gla\_only.py | train\_lat.py | 不同入口 |
-| MODEL\_TYPE | 无（硬编码 GLA） | 默认 auto | 增强灵活性 |
-| Python 命令 | 无 `--model-type` | 增加 `--model-type` | 仅参数扩展 |
-| ROUND\_E15 | 26 个配置 | 完全相同 | 100% |
-| GPU 探测 | 相同 | 相同 | 100% |
-| GPU\_PLAN | 相同 | 相同 | 100% |
-| 临时目录 | `/tmp/gla_data_XXXXXX` | `/tmp/lat_data_XXXXXX` | 仅命名 |
-| 启动延迟 | GLA\_LAUNCH\_STAGGER\_MINUTES | LAT\_\* 回退 GLA\_\* | 完全兼容 |
-| 邮件通知 | data=${DATA} | data + model | 仅信息增强 |
-
-**关键回退逻辑（lat\_round.sh 第 419 行）：**
-
-```bash
-local _stagger_min="${LAT_LAUNCH_STAGGER_MINUTES:-${GLA_LAUNCH_STAGGER_MINUTES:-0}}"
+# 自动检测模型类型
+result = load_lat_model("auto", "fla-hub/gla-1.3B-100B")
 ```
 
 * * *
 
-### 2.3 Python 入口对比：`train_gla_only.py` vs `train_lat.py`
+第六部分：扩展新模型
+---------
 
-#### 2.3.1 Import 对比
+要添加新的线性注意力模型，只需在 `lat_base.py` 中注册：
 
-| 原始 | 新 |
+```python
+from mamba_ssm_peft.utils.lat_base import ModelRegistry, ModelSpec, ModelCapabilities
+
+# 注册新模型
+ModelRegistry.register(ModelSpec(
+    model_type="rwkv",
+    module_path="fla.models.rwkv",
+    config_class_name="RWKVConfig",
+    model_class_name="RWKVForCausalLM",
+    capabilities=ModelCapabilities(
+        has_fuse_swiglu=True,
+        cache_type="past_key_values",
+        inner_model_attr="model",
+    ),
+))
+
+# 更新 CONFIG_MODEL_TYPE_MAP
+CONFIG_MODEL_TYPE_MAP["rwkv"] = "rwkv"
+```
+
+* * *
+
+第七部分：已删除的遗留文件
+-------------
+
+以下文件已被删除，由新的统一实现替代：
+
+| 删除的文件 | 替代方案 |
 | --- | --- |
-| create\_gla\_decoder | create\_lat\_decoder |
-| prepare\_gla\_model\_and\_tokenizer | prepare\_lat\_model\_and\_tokenizer |
-
-* * *
-
-#### 2.3.2 函数签名对比
-
-**原始：**
-
-```python
-def run_train(
-    output_dir,
-    cfg_path,
-    model,
-    data,
-    val_data=None,
-    val_data_split="val",
-)
-```
-
-**新：**
-
-```python
-def run_train(
-    output_dir,
-    cfg_path,
-    model,
-    data,
-    model_type: str = "auto",
-    val_data=None,
-    val_data_split="val",
-)
-```
-
-仅新增 `model_type`，其余完全一致。
-
-* * *
-
-#### 2.3.3 模型加载关键路径
-
-当 `model_type="gla"` 时：
-
-*   使用相同的 `GLAConfig`
-*   使用相同的 `GLAForCausalLM`
-*   应用 **完全相同的 SwiGLU patch**
-*   tokenizer 加载方式完全一致
-
-* * *
-
-#### 2.3.4 左填充（Left Padding）逻辑
-
-**原始：**
-
-```python
-GLA_FORCE_LEFT_PAD
-```
-
-**新：**
-
-```python
-get_lat_env("FORCE_LEFT_PAD")
-```
-
-**回退机制：**
-
-```python
-LAT_FORCE_LEFT_PAD > GLA_FORCE_LEFT_PAD > 默认值
-```
-
-在仅设置 `GLA_FORCE_LEFT_PAD=1` 时，行为完全一致。
-
-* * *
-
-#### 2.3.5 GenericLMTrainer 配置
-
-所有参数 **逐项完全一致**。  
-唯一新增内容：
-
-```python
-"model_type": model_type
-```
-
-仅用于日志记录，不参与训练逻辑。
-
-* * *
-
-第三部分：环境变量等价性表
--------------
-
-| 原变量 | 新检查方式 | 结果 |
-| --- | --- | --- |
-| GLA\_FORCE\_LEFT\_PAD | LAT > GLA | 等价 |
-| GLA\_USE\_MAX\_NEW\_TOKENS | LAT > GLA | 等价 |
-| GLA\_VERBOSE | LAT > GLA | 等价 |
-| HP\_PEFT\_\* | 直接读取 | 完全一致 |
-| LR\_\* | 相同逻辑 | 完全一致 |
-
-* * *
-
-第四部分：执行路径追踪
------------
-
-### 原始 GLA 执行路径
-
-1.  启动 gla\_batch\_tmux\_clean.sh
-2.  导出 GLA\_\*
-3.  调用 train\_gla\_only.py
-4.  prepare\_gla\_model\_and\_tokenizer
-5.  load\_gla
-6.  创建 GLAHFDecoder
-7.  GenericLMTrainer 训练
-
-* * *
-
-### 新 LAT（MODEL\_TYPE=gla）执行路径
-
-1.  启动 lat\_batch\_tmux.sh
-2.  导出 LAT\_\* + GLA\_\*
-3.  调用 train\_lat.py --model-type gla
-4.  prepare\_lat\_model\_and\_tokenizer("gla")
-5.  load\_lat\_model("gla")
-6.  创建 LATHFDecoder(model\_type="gla")
-7.  GenericLMTrainer 训练
-
-**结论**：执行路径在功能层面完全一致。
-
-* * *
-
-第五部分：数值等价性保证
-------------
-
-*   随机种子传播链完全一致
-*   dtype、device\_map 完全一致
-*   训练参数逐项一致
-*   loss 曲线与评估结果在同 seed 下可重现
-
-* * *
-
-第六部分：非功能性差异总结
--------------
-
-| 类型 | 差异 | 影响 |
-| --- | --- | --- |
-| 日志 | \[LAT\] vs \[GLA\] | 仅显示 |
-| 会话名 | 包含 MODEL\_TYPE | 仅命名 |
-| SwanLab | auto-peft vs gla-peft | 仅日志 |
-| 临时文件 | lat\_\* vs gla\_\* | 无影响 |
-
-* * *
-
-第七部分：向后兼容接口
------------
-
-*   `prepare_gla_model_and_tokenizer`
-*   `GLAHFDecoder`
-*   `create_gla_decoder`
-*   `load_gla`
-
-全部内部转调 LAT 实现，行为不变。
+| `train_gla_only.py` | `train_lat.py` |
+| `train_gla_adapter.py` | `lat_adapter.py` |
+| `gla_hf_decoder.py` | `lat_decoder.py` |
+| `gla_batch_tmux_clean.sh` | `lat_batch_tmux.sh` |
+| `gla_round_clean.sh` | `lat_round.sh` |
 
 * * *
 
 最终结论
 ----
 
-**当 `MODEL_TYPE=gla` 时，LAT 框架在数值、功能、执行路径上与原 GLA 实现完全等价。**
+LAT 框架通过以下设计模式实现了可扩展的线性注意力训练框架：
 
-LAT 的唯一实质变化是：  
-**在不破坏 GLA 的前提下，引入对更多线性注意力模型的原生支持。**
+1. **注册表模式**：`ModelRegistry` 管理所有模型类型
+2. **策略模式**：`patches.py` 管理运行时 patch
+3. **依赖注入**：`env_config.py` 提供统一的配置访问
+4. **工厂模式**：`load_lat_model()` 和 `create_lat_decoder()` 提供统一接口
 
-
+新增模型只需在 `ModelRegistry` 中注册，无需修改核心训练逻辑。

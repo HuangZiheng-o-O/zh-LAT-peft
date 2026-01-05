@@ -2,8 +2,8 @@
 # Unified Linear Attention Training Round Script
 # Supports GLA, RetNet, Mamba2 and other FLA models through MODEL_TYPE env var.
 #
-# Based on gla_round_clean.sh with MODEL_TYPE generalization.
-# When MODEL_TYPE is unset or "gla", behavior is identical to gla_round_clean.sh.
+# This is the canonical round training script for the LAT framework.
+# MODEL_TYPE defaults to "auto" (auto-detect from model config).
 #
 set -euo pipefail
 
@@ -179,9 +179,11 @@ for _k in \
   HP_VAL_SPLIT \
   SPIDER_LOCAL_DIR \
   NLTK_DATA \
-  LAT_FORCE_LEFT_PAD GLA_FORCE_LEFT_PAD \
-  LAT_USE_MAX_NEW_TOKENS GLA_USE_MAX_NEW_TOKENS \
-  LAT_VERBOSE GLA_VERBOSE \
+  LAT_FORCE_LEFT_PAD \
+  LAT_USE_MAX_NEW_TOKENS \
+  LAT_VERBOSE \
+  LAT_LOG_PADDING_STATS \
+  LAT_LAUNCH_STAGGER_MINUTES \
   EVAL_GEN EVAL_GEN_MAX_LENGTH EVAL_GEN_MIN_LENGTH EVAL_GEN_NUM_BEAMS \
   PYTORCH_CUDA_ALLOC_CONF TOKENIZERS_PARALLELISM OMP_NUM_THREADS MKL_NUM_THREADS \
   GRADIENT_CHECKPOINTING \
@@ -191,8 +193,7 @@ for _k in \
   HP_DATA HP_BATCH_SIZE HP_LR HP_EPOCHS HP_EVAL_BATCH_SIZE HP_PREC HP_SEED \
   HP_PEFT_R HP_PEFT_ALPHA HP_PEFT_DROPOUT HP_INIT HP_PISSA_FAST \
   HP_MAX_STEPS HP_EVAL_STEPS HP_SAVE_STEPS HP_LOGGING_STEPS \
-  LR_SCHEDULER_TYPE LR_WARMUP_STEPS LR_WARMUP_RATIO \
-  LAT_LAUNCH_STAGGER_MINUTES GLA_LAUNCH_STAGGER_MINUTES
+  LR_SCHEDULER_TYPE LR_WARMUP_STEPS LR_WARMUP_RATIO
 do
   v="${!_k-}"
   if [[ -n "${v:-}" ]]; then
@@ -441,12 +442,8 @@ run_round () {
   local TMP_CFG_DIR
   TMP_CFG_DIR="$(mktemp -d /tmp/lat_data_XXXXXX)"
 
-  # Support both LAT_* and GLA_* for stagger
-  # Priority: LAT_* > GLA_*, but if LAT_* is 0/empty, use GLA_*
+  # Stagger minutes (LAT_* already merged with GLA_* in batch script)
   local _stagger_min="${LAT_LAUNCH_STAGGER_MINUTES:-0}"
-  if [[ "$_stagger_min" == "0" || -z "$_stagger_min" ]]; then
-    _stagger_min="${GLA_LAUNCH_STAGGER_MINUTES:-0}"
-  fi
   if ! [[ "${_stagger_min}" =~ ^[0-9]+$ ]]; then
     _stagger_min=0
   fi

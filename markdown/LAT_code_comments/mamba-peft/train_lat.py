@@ -4,88 +4,43 @@
 本脚本的目标：
 ---------------------------------
 提供一个统一接口，用于训练 FLA（Fast Linear Attention / Flash Linear Attention 等相关实现）生态中的
-多种 Linear Attention / SSM 模型结构，包括但不限于：
-- GLA（Gated Linear Attention）
-- RetNet（Retentive Network）
-- Mamba2（State Space Model 变体）
-
-设计原则（Design Principles）：
----------------------------------
-1. **向后兼容（Backward Compatibility）**
-   - 当 model_type="gla" 或默认行为路径下，训练行为应当与历史脚本 train_gla_only.py 保持一致；
-   - 也就是说：同样的 cfg、同样的 env 覆盖、同样的数据加载、同样的训练器参数，输出应当一致或近似一致。
-
-2. **统一接口（Unified Interface）**
-   - 不管使用 GLA/RetNet/Mamba2，训练流程都走同一套：
-     - 统一读取 YAML config
-     - 统一读取环境变量覆盖
-     - 统一 prepare_lat_model_and_tokenizer() 加载模型与 tokenizer
-     - 统一使用 GenericLMTrainer / GenericLMTrainingArguments
-     - 统一保存 cfg.yaml 与 checkpoint
-     - 统一评估逻辑（可选 generation）
-
-3. **自动检测（Auto-Detection）**
-   - 允许用户传入 model_type="auto"
-   - 允许用环境变量 MODEL_TYPE 覆盖
-   - （如果你后续扩展）也可以从配置文件（或模型名）推断模型类型
+多种 Linear Attention / SSM 模型
 
 支持模型（Supported Models）：
 ---------------------------------
 - gla: Gated Linear Attention (https://arxiv.org/abs/2312.06635)
 - retnet: Retentive Network (https://arxiv.org/abs/2307.08621)
-- mamba2: Mamba2 State Space Model (https://arxiv.org/abs/2405.21060)
-
-环境变量（Environment Variables）：
----------------------------------
-- MODEL_TYPE: 模型类型强制覆盖（gla / retnet / mamba2 / auto）
-- LAT_* / GLA_*: 其他训练或模型相关开关（此脚本通过 get_lat_env/get_lat_env_bool 等读取部分）
 
 使用方式（Usage）：
 ---------------------------------
-    # 显式指定模型类型
+    # model-type
     python train_lat.py --cfg configs/gla.yaml --model-type gla
 
-    # 自动检测（由 MODEL_TYPE env 或未来扩展的 config 推断）
+    # auto（由 MODEL_TYPE env 或未来扩展的 config 推断）
     python train_lat.py --cfg configs/model.yaml --model-type auto
 
-    # 兼容 GLA 的老行为（等价于 train_gla_only.py）
-    python train_lat.py --cfg configs/gla.yaml
 """
 
 import sys
 from pathlib import Path
 
-# --- 确保在从 mamba-peft/ 目录运行时，本地的 fla 子模块可导入 ---
-# 背景：
-#   - 一些 repo 的结构是：根目录下有 fla/ 子目录（可能是 submodule 或 symlink）
-#   - 但是 python 的 import 搜索路径 sys.path 可能不包含该根目录
-#   - 于是 import fla 失败
-# 策略：
-#   - 先尝试直接 import fla
-#   - 如果失败，尝试推断 repo_root，把它插入 sys.path，再 import fla
 try:
-    import fla  # noqa: F401
+    import fla
 except Exception:
     try:
-        # Path(__file__).resolve(): 当前脚本的绝对路径
-        # .parents[1]：往上两级目录（父目录的父目录）
-        # 这里注释写的是：.../zh-LAT-peft
+
         repo_root = Path(__file__).resolve().parents[1]  # .../zh-LAT-peft
 
-        # 如果根目录下有 fla（可能是 symlink），就把 repo_root 加到 sys.path
         fla_symlink = repo_root / "fla"
         if fla_symlink.exists():
             sys.path.insert(0, str(repo_root))
             import fla  # noqa: F401
-    except Exception:
-        # 这里选择吞掉异常：
-        #   - 因为即便 fla 导入失败，后面可能仍能继续（例如某些路径不需要 fla）
-        #   - 但实际运行若依赖 fla 的地方会再报错
+    except Exception as e:
+        print(f"Error importing 'fla': {e}")
         pass
 
-import json
+
 import os
-import shutil
 from typing import Optional, Dict
 
 import torch
@@ -95,11 +50,7 @@ from torch.utils.data import DataLoader  # noqa: F401  # 兼容性保留：可�
 
 import yaml
 
-# W&B 项目名固定写死为 mamba-peft
-# 背景：
-#   - 许多训练框架会读取 WANDB_PROJECT 来决定日志归属项目
-#   - 你这里后面其实 report_to="none"，但保留项目名设置对某些外部 hook 也有用
-os.environ["WANDB_PROJECT"] = "mamba-peft"
+os.environ["WANDB_PROJECT"] = "LAT-peft"
 
 # 数据集加载函数：你项目内部 dataset.py
 # 负责：
@@ -110,7 +61,6 @@ from dataset import load_dataset
 # GenericLMTrainingArguments：类似 TrainingArguments 的封装
 from trainer.generic_lm_trainer import GenericLMTrainer, GenericLMTrainingArguments
 
-# PEFT（参数高效微调）工具：
 # get_trainable_parameters_ratio：计算可训练参数占比
 # print_trainable_parameter_names：打印可训练参数名（常用于 sanity check）
 from mamba_ssm_peft import get_trainable_parameters_ratio, print_trainable_parameter_names
@@ -125,7 +75,7 @@ from lat_adapter import prepare_lat_model_and_tokenizer
 # generation 评估时用于创建 decoder：
 # create_lat_decoder：
 #   - 封装 model.generate 的调用参数
-#   - 统一适配不同模型类型的 generation 细节
+#   - 统一适配不同模型类型的 generation 细节vn
 from mamba_ssm_peft.utils.lat_decoder import create_lat_decoder
 
 # 环境变量读取工具
@@ -188,27 +138,10 @@ def _lock_share(name: str, model_type: str = "LAT") -> bool:
     """
     在 share/lock/<name> 下创建一个简单“文件锁”，用来避免多进程/多脚本重复训练同一个 output_dir。
 
-    这个锁机制非常朴素，但在集群/多卡/多任务脚本里很常见。
-
-    参数：
-    - name:
-        通常传 output_dir（字符串），因为 output_dir 唯一对应一次实验
-    - model_type:
-        用于打印日志 tag（例如 [GLA] 或 [MAMBA2]）
-
-    返回语义（重要！）：
-    - True  -> 锁已经存在（说明别的进程正在训练/已经占用），调用者应该 skip / return
-    - False -> 锁创建成功（当前进程获得锁），调用者可以继续训练；训练结束应删除锁文件
-
-    实现细节：
-    - path.exists(): 先快速判断
-    - open(path, "x"): 以“独占创建”方式创建文件
-        - 若文件已存在，会抛 OSError
     """
     path = Path("share/lock") / name
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    # 如果锁文件已经存在，说明已经有人先跑了
     if path.exists():
         print(f"[{model_type}][lock] {path} exists; skipping this run to avoid duplicate training.")
         return True
@@ -287,8 +220,7 @@ def build_and_run_trainer_lat(
     - logits_to_keep: 可能用于减少计算/内存（例如只保留 top-k logits），放入 info 记录
     """
 
-    # log_tag 用于所有 print 日志的前缀
-    # 若 model_type 仍是 "auto"，则标签统一显示 "LAT"
+
     log_tag = model_type.upper() if model_type != "auto" else "LAT"
 
     # 打印可训练参数名：用于确认 PEFT 是否生效
@@ -349,7 +281,7 @@ def build_and_run_trainer_lat(
         min_length = int(_eval.get("min_length", 5))
 
         # create_lat_decoder 内部会封装 generate 参数
-        # do_sample=False 表示使用 greedy 或 beam（取决于内部实现），这里明确不采样
+        # ⚠️do_sample=False 表示使用 greedy 或 beam（取决于内部实现），这里明确不采样
         eval_generator = create_lat_decoder(
             tokenizer,
             model_type=model_type,
