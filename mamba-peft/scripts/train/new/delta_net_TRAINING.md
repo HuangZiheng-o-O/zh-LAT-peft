@@ -8,8 +8,8 @@
 
 export HP_USE_RSLoRA=0
 export HP_USE_DORA=1
-export MODEL_TYPE=retnet
-export LAT_MODEL=/home/user/mzs_h/model/retnet-1.3B-100B/
+export MODEL_TYPE=delta_net
+export LAT_MODEL=/home/user/mzs_h/model/delta_net-1.3B-100B/
 export LAT_PREC=bf16
 ```
 
@@ -34,8 +34,8 @@ export WANDB_DIR=/mnt/data4/user_cache/wandb
 ```bash
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
-export MODEL_TYPE=retnet
-export LAT_MODEL=/home/user/mzs_h/model/retnet-1.3B-100B/
+export MODEL_TYPE=delta_net
+export LAT_MODEL=/home/user/mzs_h/model/delta_net-1.3B-100B/
 export LAT_PREC=bf16
 
 export NLTK_DATA=/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/data/nltk_data
@@ -45,7 +45,7 @@ export LAT_FORCE_LEFT_PAD=1
 export LAT_USE_MAX_NEW_TOKENS=1
 export LAT_USE_FUSED_SWIGLU=0
 export LAT_VERBOSE=1
-
+ 
 export EVAL_GEN=1
 export EVAL_GEN_MAX_LENGTH=256
 export EVAL_GEN_MIN_LENGTH=0
@@ -60,7 +60,7 @@ export HP_LOGGING_STEPS=100
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="retnet-spider-1-4090-E155-mail02-r4"
+export SWANLAB_PROJECT="delta_net-spider-1-4090-E155-mail02-r4"
 export SWANLAB_LOGDIR="/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/my_swanlog/local_eval_logs"
 export SWANLAB_EMAIL_YAML="/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/dangerous/email_notify.yaml"
 export SWANLAB_EMAIL_ON_START=0
@@ -81,7 +81,7 @@ export LOGITS_TO_KEEP=1
   --pairs "87:spider-tvt" \
   --gpus "0 1 3 4 6" \
   --gpu-plan "2,2,2,2,2" \
-  --model-type retnet
+  --model-type delta_net
 ```
 
 
@@ -91,8 +91,8 @@ export LOGITS_TO_KEEP=1
 ```bash
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
-export MODEL_TYPE=retnet
-export LAT_MODEL=/home/user/mzs_h/model/retnet-1.3B-100B/
+export MODEL_TYPE=delta_net
+export LAT_MODEL=/home/user/mzs_h/model/delta_net-1.3B-100B/
 export LAT_PREC=bf16
 
 export EVAL_GEN=1
@@ -121,7 +121,7 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="retnet-samsum-E15-clean-decoder-r3-3090-t4"
+export SWANLAB_PROJECT="delta_net-samsum-E15-clean-decoder-r3-3090-t4"
 export SWANLAB_EMAIL_ON_START=1
 export SWANLAB_EMAIL_ON_FINISH=1
 
@@ -133,7 +133,7 @@ export SAMSUM_LOCAL_DIR=/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/data/samsum
   --pairs "87:samsum" \
   --gpus "3 4 5 6" \
   --gpu-plan "2,2,2,2" \
-  --model-type retnet
+  --model-type delta_net
 ```
 
 ---
@@ -146,8 +146,8 @@ export SAMSUM_LOCAL_DIR=/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/data/samsum
 ```bash
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
-export MODEL_TYPE=retnet
-export LAT_MODEL=/home/user/mzs_h/model/retnet-1.3B-100B/
+export MODEL_TYPE=delta_net
+export LAT_MODEL=/home/user/mzs_h/model/delta_net-1.3B-100B/
 export LAT_PREC=bf16
 
 export HF_HUB_OFFLINE=1
@@ -193,7 +193,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=local
-export SWANLAB_PROJECT="retnet-dart-E15-2-4090-r11"
+export SWANLAB_PROJECT="delta_net-dart-E15-2-4090-r11"
 export SWANLAB_EMAIL_YAML="/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/dangerous/email_notify.yaml"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
@@ -205,7 +205,7 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
   --pairs "87:dart" \
   --gpus "1 2 3 4 5 6 7" \
   --gpu-plan "2,2,2,2,2,2,2" \
-  --model-type retnet
+  --model-type delta_net
 ```
 
 ---
@@ -215,8 +215,8 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 ```bash
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
-export MODEL_TYPE=retnet
-export LAT_MODEL=/home/user/mzs_h/model/retnet-1.3B-100B/
+export MODEL_TYPE=delta_net
+export LAT_MODEL=/home/user/mzs_h/model/delta_net-1.3B-100B/
 export LAT_PREC=bf16
 
 export EVAL_GEN=0
@@ -247,7 +247,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="retnet-glue-all-test"
+export SWANLAB_PROJECT="delta_net-glue-all-test"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -258,7 +258,7 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
   --pairs "87:glue-tvt_sst2 87:glue-tvt_qqp 87:glue-tvt_mnli" \
   --gpus "0 1 2 3 4 5 6" \
   --name glue_multidata_e15 \
-  --model-type retnet
+  --model-type delta_net
 ```
 
 ---
@@ -268,8 +268,8 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 ```bash
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
-export MODEL_TYPE=retnet
-export LAT_MODEL=/home/user/mzs_h/model/retnet-1.3B-100B/
+export MODEL_TYPE=delta_net
+export LAT_MODEL=/home/user/mzs_h/model/delta_net-1.3B-100B/
 export LAT_PREC=bf16
 
 export HF_HUB_OFFLINE=1
@@ -304,7 +304,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="retnet-cola-1-4090-Dec25-2"
+export SWANLAB_PROJECT="delta_net-cola-1-4090-Dec25-2"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -315,7 +315,7 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
   --pairs "87:glue-tvt_cola" \
   --gpus "0 1 2 3 4 5 6" \
   --gpu-plan "2,2,2,2,2,2,2" \
-  --model-type retnet
+  --model-type delta_net
 ```
 
 ---
@@ -325,8 +325,8 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 ```bash
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
-export MODEL_TYPE=retnet
-export LAT_MODEL=/home/user/mzs_h/model/retnet-1.3B-100B/
+export MODEL_TYPE=delta_net
+export LAT_MODEL=/home/user/mzs_h/model/delta_net-1.3B-100B/
 export LAT_PREC=bf16
 
 export EVAL_GEN=0
@@ -357,7 +357,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="retnet-rte-2-4090-Dec25"
+export SWANLAB_PROJECT="delta_net-rte-2-4090-Dec25"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -368,7 +368,7 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
   --pairs "87:glue-tvt_rte" \
   --gpus "4 5 6" \
   --gpu-plan "2,2,1" \
-  --model-type retnet
+  --model-type delta_net
 ```
 
 ---
@@ -378,8 +378,8 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 ```bash
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
-export MODEL_TYPE=retnet
-export LAT_MODEL=/home/user/mzs_h/model/retnet-1.3B-100B/
+export MODEL_TYPE=delta_net
+export LAT_MODEL=/home/user/mzs_h/model/delta_net-1.3B-100B/
 export LAT_PREC=bf16
 
 export HF_HUB_OFFLINE=1
@@ -417,7 +417,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="retnet-tvt_qnli-2-4090-Dec25"
+export SWANLAB_PROJECT="delta_net-tvt_qnli-2-4090-Dec25"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -428,7 +428,7 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
   --pairs "87:glue-tvt_qnli" \
   --gpus "0 1 2 3 4 5 6" \
   --gpu-plan "1,1,2,2,2,2,2" \
-  --model-type retnet
+  --model-type delta_net
 ```
 
 ---
@@ -438,8 +438,8 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 ```bash
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
-export MODEL_TYPE=retnet
-export LAT_MODEL=/home/user/mzs_h/model/retnet-1.3B-100B/
+export MODEL_TYPE=delta_net
+export LAT_MODEL=/home/user/mzs_h/model/delta_net-1.3B-100B/
 export LAT_PREC=bf16
 
 export HF_HUB_OFFLINE=1
@@ -478,7 +478,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="retnet-glue-tvt_mnli-3090-Dec27"
+export SWANLAB_PROJECT="delta_net-glue-tvt_mnli-3090-Dec27"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -489,7 +489,7 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
   --pairs "87:glue-tvt_mnli" \
   --gpus "0 1 2 3 4 5 6" \
   --gpu-plan "2,2,2,2,2,2,2" \
-  --model-type retnet
+  --model-type delta_net
 ```
 
 ### tvt_mnli（单卡 debug 方案）
@@ -497,8 +497,8 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 ```bash
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
-export MODEL_TYPE=retnet
-export LAT_MODEL=/home/user/mzs_h/model/retnet-1.3B-100B/
+export MODEL_TYPE=delta_net
+export LAT_MODEL=/home/user/mzs_h/model/delta_net-1.3B-100B/
 export LAT_PREC=bf16
 
 export HF_HUB_OFFLINE=0
@@ -546,7 +546,7 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
   --pairs "87:glue-tvt_mnli" \
   --gpus "1" \
   --gpu-plan "1" \
-  --model-type retnet
+  --model-type delta_net
 ```
 
 ---
@@ -556,8 +556,8 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 ```bash
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
-export MODEL_TYPE=retnet
-export LAT_MODEL=/home/user/mzs_h/model/retnet-1.3B-100B/
+export MODEL_TYPE=delta_net
+export LAT_MODEL=/home/user/mzs_h/model/delta_net-1.3B-100B/
 export LAT_PREC=bf16
 
 export HF_HUB_OFFLINE=1
@@ -596,7 +596,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="retnet-sst2-1-4090-Dec26"
+export SWANLAB_PROJECT="delta_net-sst2-1-4090-Dec26"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -607,7 +607,7 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
   --pairs "87:glue-tvt_sst2" \
   --gpus "1 2 3 4 5 6 7" \
   --gpu-plan "2,2,2,2,2,2,2" \
-  --model-type retnet
+  --model-type delta_net
 ```
 
 ---
@@ -617,8 +617,8 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 ```bash
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
-export MODEL_TYPE=retnet
-export LAT_MODEL=/home/user/mzs_h/model/retnet-1.3B-100B/
+export MODEL_TYPE=delta_net
+export LAT_MODEL=/home/user/mzs_h/model/delta_net-1.3B-100B/
 export LAT_PREC=bf16
 
 export HF_HUB_OFFLINE=1
@@ -656,7 +656,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="retnet-glue-tvt_qqp-1-4090-Jan1-v2"
+export SWANLAB_PROJECT="delta_net-glue-tvt_qqp-1-4090-Jan1-v2"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -669,7 +669,7 @@ export LAT_LAUNCH_STAGGER_MINUTES=15
   --pairs "87:glue-tvt_qqp" \
   --gpus "0 1 2 3 4 5 6" \
   --gpu-plan "1,1,1,1,1,1,1" \
-  --model-type retnet
+  --model-type delta_net
 ```
 
 ---
@@ -679,8 +679,8 @@ export LAT_LAUNCH_STAGGER_MINUTES=15
 ```bash
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
-export MODEL_TYPE=retnet
-export LAT_MODEL=/home/user/mzs_h/model/retnet-1.3B-100B/
+export MODEL_TYPE=delta_net
+export LAT_MODEL=/home/user/mzs_h/model/delta_net-1.3B-100B/
 export LAT_PREC=bf16
 
 export EVAL_GEN=0
@@ -710,7 +710,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="retnet-tvt_mrpc-1-4090-Dec25"
+export SWANLAB_PROJECT="delta_net-tvt_mrpc-1-4090-Dec25"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -721,9 +721,9 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
   --pairs "87:glue-tvt_mrpc" \
   --gpus "0 1 2 3 4 5 6" \
   --gpu-plan "2,2,2,2,2,2,2" \
-  --model-type retnet
+  --model-type delta_net
 ```
 
 ---
  
-https://huggingface.co/fla-hub/retnet-1.3B-100B
+ 
