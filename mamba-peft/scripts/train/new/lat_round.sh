@@ -106,13 +106,16 @@ ROUND_E12=(
 # =============================================================================
 # ROUND_E13_RETNET: RetNet 专用配置（无 gk_proj，RetNet 架构不包含此模块）
 # =============================================================================
+# 调用指南：
+#   - RetNet: 运行脚本时使用 --suite E13
+#   - 其余模型: 保持原有 E12/E15 等套件
 # 说明：RetNet (Retentive Network) 使用 MultiScaleRetention 层，其结构与 GLA 不同：
 #   - RetNet 有: q_proj, k_proj, v_proj, o_proj, g_proj (输出门控)
 #   - RetNet 没有: gk_proj (GLA 特有的低秩门控投影)
 #   - MLP 相同: gate_proj, up_proj, down_proj (SwiGLU)
 # 因此所有包含 gk_proj 的配置在 RetNet 上会报错，需要使用此专用 ROUND。
 # =============================================================================
-ROUND_E12_RETNET=(#ROUND_E12_RETNET
+ROUND_E13=(#ROUND_E12_RETNET
   # 0) FULL 上限（QKVO + G + MLP，无 GK）
   #    对应 GLA 的 E1_QKVO_plus_G_plus_GK_plus_MLP，但移除了 gk_proj
   "E1_QKVO_plus_G_plus_MLP_r8_alpha16.yaml"
@@ -146,6 +149,9 @@ ROUND_E12_RETNET=(#ROUND_E12_RETNET
 # =============================================================================
 # ROUND_E12_DELTANET: DeltaNet 专用配置（无 gk_proj, 默认无 g_proj）
 # =============================================================================
+# 调用指南：
+#   - DeltaNet: 运行脚本时使用 --suite E14
+#   - 若模型开启 use_gate，可自行复制该 suite 并加入相应配置
 # 说明：DeltaNet (Delta Rule Linear Transformer) 架构与 GLA 显著不同：
 #   - DeltaNet 有: q_proj, k_proj, v_proj, o_proj, b_proj (beta 写入强度)
 #   - DeltaNet 默认无: g_proj (use_gate=False), gk_proj (GLA 特有)
@@ -154,7 +160,7 @@ ROUND_E12_RETNET=(#ROUND_E12_RETNET
 # 因此 DeltaNet 使用 QKVO + MLP 作为上限配置，删除所有 gk/g 相关配置。
 # 参考论文: https://arxiv.org/abs/2406.06484
 # =============================================================================
-ROUND_E12_DELTANET=(
+ROUND_E14=(# ROUND_E12_DELTANET
   # 0) FULL 上限（QKVO + MLP，无 GK/G）
   #    DeltaNet 的最大可训练范围，不包含 b_proj（维度太小）
   "E1_QKVO_plus_MLP_r8_alpha16.yaml"
@@ -417,29 +423,7 @@ if [[ "${1:-}" =~ ^([Ee][0-9]+)$ ]]; then
   SELECT_SUITE="$suite"
   shift
 
-  # 根据 MODEL_TYPE 选择合适的 ROUND 配置
-  # RetNet 和 DeltaNet 优先使用带后缀的配置（避免 gk_proj/g_proj 不兼容问题）
   varname="ROUND_${suite}"
-
-  if [[ "${MODEL_TYPE,,}" == "retnet" ]]; then
-    varname_retnet="ROUND_${suite}_RETNET"
-    if eval "[[ -v ${varname_retnet} && \${#${varname_retnet}[@]} -gt 0 ]]"; then
-      varname="${varname_retnet}"
-      echo "[LAT] MODEL_TYPE=retnet detected, using ${varname} (RetNet-specific, no gk_proj)"
-    else
-      echo "[LAT] MODEL_TYPE=retnet but ${varname_retnet} not defined, falling back to ${varname}"
-      echo "[LAT] WARNING: Ensure ${varname} does not contain gk_proj targets!"
-    fi
-  elif [[ "${MODEL_TYPE,,}" == "delta_net" ]]; then
-    varname_deltanet="ROUND_${suite}_DELTANET"
-    if eval "[[ -v ${varname_deltanet} && \${#${varname_deltanet}[@]} -gt 0 ]]"; then
-      varname="${varname_deltanet}"
-      echo "[LAT] MODEL_TYPE=delta_net detected, using ${varname} (DeltaNet-specific, no gk_proj/g_proj)"
-    else
-      echo "[LAT] MODEL_TYPE=delta_net but ${varname_deltanet} not defined, falling back to ${varname}"
-      echo "[LAT] WARNING: Ensure ${varname} does not contain gk_proj or g_proj targets!"
-    fi
-  fi
 
   if ! eval "[[ -v ${varname} && \${#${varname}[@]} -gt 0 ]]"; then
     echo "ERROR: Suite '${suite}' is not defined." >&2
