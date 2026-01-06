@@ -73,6 +73,36 @@ ROUND_E15=(# 26 个 分组更清晰：FULL → 主轴 → Attn细粒度 → Head
   "E2_OMLP_plus_G_plus_GK_r8_alpha16.yaml"
 )
 
+ROUND_E12=(
+  # 0) FULL 上限
+  "E1_QKVO_plus_G_plus_GK_plus_MLP_r8_alpha16.yaml"
+
+  # 1) Attention 主轴
+  "E1_QKVO_r8_alpha16.yaml"
+
+  # 2) Attention 单点（同参数桶对照）
+  "E4_VONLY_r8_alpha16.yaml"
+  "E11_OONLY_r8_alpha16.yaml"
+
+  # 3) Attention 两两组合（写入端 vs 混合）
+  "E7_KVONLY_r8_alpha16.yaml"
+  "E6_QVONLY_r8_alpha16.yaml"
+  "E6_VOONLY_r8_alpha16.yaml"
+
+  # 4) Gating（只保留 G）
+  "E1_QKVO_plus_G_r8_alpha16.yaml"
+
+  # 5) MLP 细粒度（内容路径 vs 全量）
+  "E4_MLPUPDOWN_r8_alpha16.yaml"
+  "E4_MLPONLY_r8_alpha16.yaml"
+
+  # 6) Attention + MLP 叠加
+  "E1_QKVO_plus_MLP_r8_alpha16.yaml"
+
+  # 7) O-MLP 骨架
+  "E2_OMLP_r8_alpha16.yaml"
+)
+
 #####################################################################
 #                           Core Logic                               #
 #####################################################################
