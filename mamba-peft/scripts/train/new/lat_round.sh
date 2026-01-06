@@ -79,7 +79,6 @@ ROUND_E12=(
   "E1_QKVO_plus_MLP_r8_alpha16.yaml"
 
   "E1_QKVO_r8_alpha16.yaml"
-  "E1_QKVO_plus_MLP_r8_alpha16.yaml"
   "E1_QKVO_plus_G_r8_alpha16.yaml"
   "E4_MLPONLY_r8_alpha16.yaml"
   "E2_OMLP_r8_alpha16.yaml"
@@ -113,7 +112,6 @@ ROUND_E13=(#ROUND_E12_RETNET
   "E1_QKVO_plus_MLP_r8_alpha16.yaml"
 
   "E1_QKVO_r8_alpha16.yaml"
-  "E1_QKVO_plus_MLP_r8_alpha16.yaml"
   "E4_MLPONLY_r8_alpha16.yaml"
   "E2_OMLP_r8_alpha16.yaml"
 
@@ -150,7 +148,6 @@ ROUND_E14=(# ROUND_E12_DELTANET
   "E1_QKVO_plus_MLP_r8_alpha16.yaml"
 
   "E1_QKVO_r8_alpha16.yaml"
-  "E1_QKVO_plus_MLP_r8_alpha16.yaml"
   "E4_MLPONLY_r8_alpha16.yaml"
   "E2_OMLP_r8_alpha16.yaml"
 

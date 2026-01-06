@@ -357,7 +357,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="retnet-rte-2-4090-Dec25"
+export SWANLAB_PROJECT="retnet-rte-2-4090-Jan"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -417,7 +417,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="retnet-tvt_qnli-2-4090-Dec25"
+export SWANLAB_PROJECT="retnet-tvt_qnli-2-4090-Jan"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -675,7 +675,9 @@ export LAT_LAUNCH_STAGGER_MINUTES=15
 ---
 
 ### tvt_mrpc
-
+All jobs finished successfully (MODEL_TYPE=retnet).
+2-4090
+https://swanlab.cn/@zh2701/retnet-tvt_mrpc-2-4090-Jan6/runs/yxyopbij6er8th2rjgml
 ```bash
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
@@ -710,7 +712,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="retnet-tvt_mrpc-2-4090-Dec25"
+export SWANLAB_PROJECT="retnet-tvt_mrpc-2-4090-Jan6"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -725,5 +727,5 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 ```
 
 ---
- 
+
 https://huggingface.co/fla-hub/retnet-1.3B-100B

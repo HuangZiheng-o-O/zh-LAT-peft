@@ -15,7 +15,6 @@ set -euo pipefail
 #   # RetNet
 #   MODEL_TYPE=retnet ./lat_batch_tmux.sh --suite E15 --round all --pairs "87:glue-tvt_qnli"
 #
-#   # Mamba2
 #   ./lat_batch_tmux.sh --suite E15 --round all --pairs "87:glue-tvt_qnli" --model-type mamba2
 #
 # Requirements: tmux, awk, nohup. Place this script next to lat_round.sh.

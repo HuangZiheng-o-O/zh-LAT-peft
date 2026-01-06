@@ -60,7 +60,7 @@ export HP_LOGGING_STEPS=100
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="delta_net-spider-1-4090-E14-mail02-r4"
+export SWANLAB_PROJECT="delta_net-spider-3090-E14-mail02-r4"
 export SWANLAB_LOGDIR="/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/my_swanlog/local_eval_logs"
 export SWANLAB_EMAIL_YAML="/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/dangerous/email_notify.yaml"
 export SWANLAB_EMAIL_ON_START=0
@@ -128,7 +128,7 @@ export SWANLAB_EMAIL_ON_FINISH=1
 export SAMSUM_LOCAL_DIR=/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/data/samsum
 
 ./lat_batch_tmux.sh \
-  --suite ROUND_E12 \
+  --suite E14 \
   --round 1 \
   --pairs "87:samsum" \
   --gpus "3 4 5 6" \
@@ -200,7 +200,7 @@ export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 ./lat_batch_tmux.sh \
-  --suite ROUND_E12 \
+  --suite E14 \
   --round all \
   --pairs "87:dart" \
   --gpus "1 2 3 4 5 6 7" \
@@ -253,7 +253,7 @@ export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 ./lat_batch_tmux.sh \
-  --suite ROUND_E12 \
+  --suite E14 \
   --round all \
   --pairs "87:glue-tvt_sst2 87:glue-tvt_qqp 87:glue-tvt_mnli" \
   --gpus "0 1 2 3 4 5 6" \
@@ -304,13 +304,13 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="delta_net-cola-1-4090-Dec25-2"
+export SWANLAB_PROJECT="delta_net-cola-3090-Jan6-2"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 ./lat_batch_tmux.sh \
-  --suite ROUND_E12 \
+  --suite E14 \
   --round all \
   --pairs "87:glue-tvt_cola" \
   --gpus "0 1 2 3 4 5 6" \
@@ -357,13 +357,13 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="delta_net-rte-2-4090-Dec25"
+export SWANLAB_PROJECT="delta_net-rte-2-4090-Jan6"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 ./lat_batch_tmux.sh \
-  --suite ROUND_E12 \
+  --suite E14 \
   --round all \
   --pairs "87:glue-tvt_rte" \
   --gpus "4 5 6" \
@@ -417,13 +417,13 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="delta_net-tvt_qnli-2-4090-Dec25"
+export SWANLAB_PROJECT="delta_net-tvt_qnli-2-4090-Jan6"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 ./lat_batch_tmux.sh \
-  --suite ROUND_E12 \
+  --suite E14 \
   --round all \
   --pairs "87:glue-tvt_qnli" \
   --gpus "0 1 2 3 4 5 6" \
@@ -484,7 +484,7 @@ export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 ./lat_batch_tmux.sh \
-  --suite ROUND_E12 \
+  --suite E14 \
   --round all \
   --pairs "87:glue-tvt_mnli" \
   --gpus "0 1 2 3 4 5 6" \
@@ -541,7 +541,7 @@ export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 ./lat_batch_tmux.sh \
-  --suite ROUND_E12 \
+  --suite E14 \
   --round all \
   --pairs "87:glue-tvt_mnli" \
   --gpus "1" \
@@ -596,13 +596,13 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="delta_net-sst2-1-4090-Dec26"
+export SWANLAB_PROJECT="delta_net-sst2-3090-Dec26"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 ./lat_batch_tmux.sh \
-  --suite ROUND_E12 \
+  --suite E14 \
   --round all \
   --pairs "87:glue-tvt_sst2" \
   --gpus "1 2 3 4 5 6 7" \
@@ -656,7 +656,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="delta_net-glue-tvt_qqp-1-4090-Jan1-v2"
+export SWANLAB_PROJECT="delta_net-glue-tvt_qqp-3090-Jan1-v2"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -710,20 +710,20 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="delta_net-tvt_mrpc-1-4090-Dec25"
+export SWANLAB_PROJECT="delta_net-tvt_mrpc-3090-Jan6"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 ./lat_batch_tmux.sh \
-  --suite ROUND_E12 \
+  --suite E14 \
   --round all \
   --pairs "87:glue-tvt_mrpc" \
-  --gpus "0 1 2 3 4 5 6" \
-  --gpu-plan "2,2,2,2,2,2,2" \
+  --gpus "0 1 2 3" \
+  --gpu-plan "2,2,2,2" \
   --model-type delta_net
 ```
 
 ---
- 
+
  
