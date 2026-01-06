@@ -109,8 +109,6 @@ ROUND_E12=(
 # =============================================================================
 ROUND_E13=(#ROUND_E12_RETNET
 
-  "E1_QKVO_plus_G_plus_MLP_r8_alpha16.yaml"
-  "E1_QKVO_plus_G_r8_alpha16.yaml"
 
   "E1_QKVO_plus_MLP_r8_alpha16.yaml"
 
@@ -127,6 +125,10 @@ ROUND_E13=(#ROUND_E12_RETNET
   "E7_KVONLY_r8_alpha16.yaml"
   "E6_QVONLY_r8_alpha16.yaml"
   "E6_VOONLY_r8_alpha16.yaml"
+
+  "E1_QKVO_plus_G_plus_MLP_r8_alpha16.yaml"
+  "E1_QKVO_plus_G_r8_alpha16.yaml"
+
 
 )
 # =============================================================================
