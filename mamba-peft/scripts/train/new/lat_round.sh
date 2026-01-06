@@ -74,33 +74,25 @@ ROUND_E15=(# 26 个 分组更清晰：FULL → 主轴 → Attn细粒度 → Head
 )
 
 ROUND_E12=(
-  # 0) FULL 上限
-  "E1_QKVO_plus_G_plus_GK_plus_MLP_r8_alpha16.yaml"
 
-  # 1) Attention 主轴
+  "E1_QKVO_plus_G_plus_MLP_r8_alpha16.yaml"
+  "E1_QKVO_plus_MLP_r8_alpha16.yaml"
+
   "E1_QKVO_r8_alpha16.yaml"
+  "E1_QKVO_plus_MLP_r8_alpha16.yaml"
+  "E1_QKVO_plus_G_r8_alpha16.yaml"
+  "E4_MLPONLY_r8_alpha16.yaml"
+  "E2_OMLP_r8_alpha16.yaml"
 
-  # 2) Attention 单点（同参数桶对照）
+  "E4_QONLY_r8_alpha16.yaml"
+  "E4_KONLY_r8_alpha16.yaml"
   "E4_VONLY_r8_alpha16.yaml"
   "E11_OONLY_r8_alpha16.yaml"
 
-  # 3) Attention 两两组合（写入端 vs 混合）
   "E7_KVONLY_r8_alpha16.yaml"
   "E6_QVONLY_r8_alpha16.yaml"
   "E6_VOONLY_r8_alpha16.yaml"
 
-  # 4) Gating（只保留 G）
-  "E1_QKVO_plus_G_r8_alpha16.yaml"
-
-  # 5) MLP 细粒度（内容路径 vs 全量）
-  "E4_MLPUPDOWN_r8_alpha16.yaml"
-  "E4_MLPONLY_r8_alpha16.yaml"
-
-  # 6) Attention + MLP 叠加
-  "E1_QKVO_plus_MLP_r8_alpha16.yaml"
-
-  # 7) O-MLP 骨架
-  "E2_OMLP_r8_alpha16.yaml"
 )
 
 # =============================================================================
@@ -116,36 +108,27 @@ ROUND_E12=(
 # 因此所有包含 gk_proj 的配置在 RetNet 上会报错，需要使用此专用 ROUND。
 # =============================================================================
 ROUND_E13=(#ROUND_E12_RETNET
-  # 0) FULL 上限（QKVO + G + MLP，无 GK）
-  #    对应 GLA 的 E1_QKVO_plus_G_plus_GK_plus_MLP，但移除了 gk_proj
+
   "E1_QKVO_plus_G_plus_MLP_r8_alpha16.yaml"
+  "E1_QKVO_plus_G_r8_alpha16.yaml"
 
-  # 1) Attention 主轴（通用）
+  "E1_QKVO_plus_MLP_r8_alpha16.yaml"
+
   "E1_QKVO_r8_alpha16.yaml"
+  "E1_QKVO_plus_MLP_r8_alpha16.yaml"
+  "E4_MLPONLY_r8_alpha16.yaml"
+  "E2_OMLP_r8_alpha16.yaml"
 
-  # 2) Attention 单点（通用）
+  "E4_QONLY_r8_alpha16.yaml"
+  "E4_KONLY_r8_alpha16.yaml"
   "E4_VONLY_r8_alpha16.yaml"
   "E11_OONLY_r8_alpha16.yaml"
 
-  # 3) Attention 两两组合（通用）
   "E7_KVONLY_r8_alpha16.yaml"
   "E6_QVONLY_r8_alpha16.yaml"
   "E6_VOONLY_r8_alpha16.yaml"
 
-  # 4) 门控（仅 G，RetNet 有 g_proj 但无 gk_proj）
-  "E1_QKVO_plus_G_r8_alpha16.yaml"
-
-  # 5) MLP 细粒度（通用）
-  "E4_MLPUPDOWN_r8_alpha16.yaml"
-  "E4_MLPONLY_r8_alpha16.yaml"
-
-  # 6) Attention + MLP 叠加（通用）
-  "E1_QKVO_plus_MLP_r8_alpha16.yaml"
-
-  # 7) O-MLP 骨架（通用）
-  "E2_OMLP_r8_alpha16.yaml"
 )
-
 # =============================================================================
 # ROUND_E12_DELTANET: DeltaNet 专用配置（无 gk_proj, 默认无 g_proj）
 # =============================================================================
@@ -161,35 +144,56 @@ ROUND_E13=(#ROUND_E12_RETNET
 # 参考论文: https://arxiv.org/abs/2406.06484
 # =============================================================================
 ROUND_E14=(# ROUND_E12_DELTANET
-  # 0) FULL 上限（QKVO + MLP，无 GK/G）
-  #    DeltaNet 的最大可训练范围，不包含 b_proj（维度太小）
+
   "E1_QKVO_plus_MLP_r8_alpha16.yaml"
 
-  # 1) Attention 主轴（通用）
   "E1_QKVO_r8_alpha16.yaml"
+  "E1_QKVO_plus_MLP_r8_alpha16.yaml"
+  "E4_MLPONLY_r8_alpha16.yaml"
+  "E2_OMLP_r8_alpha16.yaml"
 
-  # 2) Attention 单点（通用）
+  "E4_QONLY_r8_alpha16.yaml"
+  "E4_KONLY_r8_alpha16.yaml"
   "E4_VONLY_r8_alpha16.yaml"
   "E11_OONLY_r8_alpha16.yaml"
 
-  # 3) Attention 两两组合（通用）
   "E7_KVONLY_r8_alpha16.yaml"
   "E6_QVONLY_r8_alpha16.yaml"
   "E6_VOONLY_r8_alpha16.yaml"
 
-  # 4) 门控 - DeltaNet 跳过（默认 use_gate=False，无 g_proj）
-  #    如需实验 g_proj，需要模型配置 use_gate=True
-
-  # 5) MLP 细粒度（通用）
-  "E4_MLPUPDOWN_r8_alpha16.yaml"
-  "E4_MLPONLY_r8_alpha16.yaml"
-
-  # 6) Attention + MLP 叠加（与上限相同，已包含）
-  # "E1_QKVO_plus_MLP_r8_alpha16.yaml"  # 与 #0 重复，已注释
-
-  # 7) O-MLP 骨架（通用）
-  "E2_OMLP_r8_alpha16.yaml"
 )
+
+# =============================================================================
+  # ROUND_E15_BASED: Based 专用配置（无 g_proj, 无 gk_proj）
+  # =============================================================================
+  # 调用指南：
+  #   - Based: 运行脚本时使用 --suite E15 或 MODEL_TYPE=based
+  # 说明：Based (Simple Linear Attention with Taylor Feature Map) 架构最为简洁：
+  #   - Based 有: q_proj, k_proj, v_proj, o_proj
+  #   - Based 没有: g_proj (无输出门控), gk_proj (GLA 特有)
+  #   - 使用 TaylorFeatureMap 替代门控机制: φ(q)^T φ(k) = 1 + qk + (qk)²/2
+  #   - MLP 相同: gate_proj, up_proj, down_proj (SwiGLU)
+  # 参考论文: https://arxiv.org/abs/2402.18668
+  # =============================================================================
+  ROUND_E15=(# ROUND_E15_BASED
+
+    "E1_QKVO_plus_MLP_r8_alpha16.yaml"
+
+    "E1_QKVO_r8_alpha16.yaml"
+    "E4_MLPONLY_r8_alpha16.yaml"
+    "E2_OMLP_r8_alpha16.yaml"
+
+    "E4_QONLY_r8_alpha16.yaml"
+    "E4_KONLY_r8_alpha16.yaml"
+    "E4_VONLY_r8_alpha16.yaml"
+    "E11_OONLY_r8_alpha16.yaml"
+
+    "E7_KVONLY_r8_alpha16.yaml"
+    "E6_QVONLY_r8_alpha16.yaml"
+    "E6_VOONLY_r8_alpha16.yaml"
+
+  )
+
 
 #####################################################################
 #                           Core Logic                               #

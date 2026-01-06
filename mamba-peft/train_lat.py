@@ -75,8 +75,9 @@ from mamba_ssm_peft.utils.lat_decoder import create_lat_decoder
 from mamba_ssm_peft.utils.lat_model_loader import get_lat_env, get_lat_env_bool
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_NOW_OUTPUT_ROOT = REPO_ROOT / "output" / "benchmark" / "glue"
+DEFAULT_NOW_OUTPUT_ROOT = REPO_ROOT / "output" / "benchmark"
 NOW_OUTPUT_ROOT = Path(os.environ.get("LAT_OUTPUT_ROOT", DEFAULT_NOW_OUTPUT_ROOT)).expanduser()
+DATASET_ROOT_NAME = os.environ.get("LAT_DATASET_ROOT_NAME", "glue")
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -585,9 +586,9 @@ def run_train(
 def get_output_path_for_cfg(cfg_path, cfg, model_type: str = "gla"):
     """
     Target path:
-      <NOW_OUTPUT_ROOT>/<model_type>/<data>_seed<seed>/<yaml_stem>
+      <NOW_OUTPUT_ROOT>/<model_type>/<DATASET_ROOT_NAME>/<data>_seed<seed>/<yaml_stem>
     Fallback (missing data/seed):
-      <NOW_OUTPUT_ROOT>/<model_type>/cola_gla/<yaml_stem>
+      <NOW_OUTPUT_ROOT>/<model_type>/<DATASET_ROOT_NAME>/cola_gla/<yaml_stem>
 
     Args:
         cfg_path: Path to config YAML file
@@ -604,10 +605,12 @@ def get_output_path_for_cfg(cfg_path, cfg, model_type: str = "gla"):
     # Normalize model_type to lowercase for consistent path naming
     model_type = model_type.lower()
 
+    base_dir = NOW_OUTPUT_ROOT / model_type / DATASET_ROOT_NAME
+
     if data and seed is not None:
         folder = f"{data}_seed{seed}"
-        return NOW_OUTPUT_ROOT / model_type / folder / yaml_stem
-    return NOW_OUTPUT_ROOT / model_type / "cola_gla" / yaml_stem
+        return base_dir / folder / yaml_stem
+    return base_dir / "cola_gla" / yaml_stem
 
 
 def _find_last_checkpoint(root: Path) -> Optional[Path]:

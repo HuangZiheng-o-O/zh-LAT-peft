@@ -145,6 +145,45 @@ class ModelCapabilities:
             ),
         )
 
+    @classmethod
+    def for_based(cls) -> "ModelCapabilities":
+        """
+        Standard capabilities for Based models.
+
+        Based (Simple linear attention language models balance the recall-throughput tradeoff)
+        Reference: https://arxiv.org/abs/2402.18668
+
+        Based uses Taylor linear attention with 2nd-order Taylor approximation of softmax:
+            φ(q)^T φ(k) = 1 + q^T k + (q^T k)^2 / 2
+
+        Key differences from GLA:
+        - NO gating mechanism (no g_proj, no gk_proj)
+        - Uses TaylorFeatureMap instead of gated recurrence
+        - feature_dim (e.g., 16) separate from head_dim (e.g., 64)
+
+        Based Layer projections:
+        - q_proj: Projects to feature_dim * num_heads
+        - k_proj: Projects to feature_dim * num_heads
+        - v_proj: Projects to num_kv_heads * head_dim
+        - o_proj: Output projection
+
+        Note: Based does NOT have g_proj or gk_proj (those are GLA-specific).
+              Based is simpler - just Q/K/V/O projections with Taylor feature map.
+
+        MLP uses SwiGLU with gate_proj, up_proj, down_proj (same as GLA).
+        """
+        return cls(
+            has_fuse_swiglu=True,
+            cache_type="past_key_values",
+            inner_model_attr="model",
+            default_lora_targets=(
+                # Based layer projections (NO g_proj, NO gk_proj!)
+                "q_proj", "k_proj", "v_proj", "o_proj",
+                # MLP projections (SwiGLU)
+                "gate_proj", "up_proj", "down_proj"
+            ),
+        )
+
 
 @dataclass
 class ModelSpec:
@@ -261,6 +300,17 @@ class ModelRegistry:
             capabilities=ModelCapabilities.for_delta_net(),
         ))
 
+        # Based: Simple linear attention with Taylor feature map
+        # Reference: https://arxiv.org/abs/2402.18668
+        # NOTE: Based 模型在 mamba_ssm_peft.models.based (避免修改 3rdparty)
+        cls.register(ModelSpec(
+            model_type="based",
+            module_path="mamba_ssm_peft.models.based",
+            config_class_name="BasedConfig",
+            model_class_name="BasedForCausalLM",
+            capabilities=ModelCapabilities.for_based(),
+        ))
+
         cls._initialized = True
 
     @classmethod
@@ -321,4 +371,5 @@ CONFIG_MODEL_TYPE_MAP: Dict[str, str] = {
     "retnet": "retnet",
     "mamba2": "mamba2",
     "delta_net": "delta_net",
+    "based": "based",
 }
