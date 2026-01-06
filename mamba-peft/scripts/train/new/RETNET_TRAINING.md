@@ -128,7 +128,7 @@ export SWANLAB_EMAIL_ON_FINISH=1
 export SAMSUM_LOCAL_DIR=/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/data/samsum
 
 ./lat_batch_tmux.sh \
-  --suite E12 \
+  --suite ROUND_E12_RETNET \
   --round 1 \
   --pairs "87:samsum" \
   --gpus "3 4 5 6" \
@@ -200,7 +200,7 @@ export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 ./lat_batch_tmux.sh \
-  --suite E12 \
+  --suite ROUND_E12_RETNET \
   --round all \
   --pairs "87:dart" \
   --gpus "1 2 3 4 5 6 7" \
@@ -253,7 +253,7 @@ export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 ./lat_batch_tmux.sh \
-  --suite E12 \
+  --suite ROUND_E12_RETNET \
   --round all \
   --pairs "87:glue-tvt_sst2 87:glue-tvt_qqp 87:glue-tvt_mnli" \
   --gpus "0 1 2 3 4 5 6" \
@@ -310,7 +310,7 @@ export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 ./lat_batch_tmux.sh \
-  --suite E12 \
+  --suite ROUND_E12_RETNET \
   --round all \
   --pairs "87:glue-tvt_cola" \
   --gpus "0 1 2 3 4 5 6" \
@@ -363,7 +363,7 @@ export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 ./lat_batch_tmux.sh \
-  --suite E12 \
+  --suite ROUND_E12_RETNET \
   --round all \
   --pairs "87:glue-tvt_rte" \
   --gpus "4 5 6" \
@@ -423,7 +423,7 @@ export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 ./lat_batch_tmux.sh \
-  --suite E12 \
+  --suite ROUND_E12_RETNET \
   --round all \
   --pairs "87:glue-tvt_qnli" \
   --gpus "0 1 2 3 4 5 6" \
@@ -484,7 +484,7 @@ export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 ./lat_batch_tmux.sh \
-  --suite E12 \
+  --suite ROUND_E12_RETNET \
   --round all \
   --pairs "87:glue-tvt_mnli" \
   --gpus "0 1 2 3 4 5 6" \
@@ -541,7 +541,7 @@ export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 ./lat_batch_tmux.sh \
-  --suite E12 \
+  --suite ROUND_E12_RETNET \
   --round all \
   --pairs "87:glue-tvt_mnli" \
   --gpus "1" \
@@ -602,7 +602,7 @@ export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 ./lat_batch_tmux.sh \
-  --suite E12 \
+  --suite ROUND_E12_RETNET \
   --round all \
   --pairs "87:glue-tvt_sst2" \
   --gpus "1 2 3 4 5 6 7" \
@@ -716,7 +716,7 @@ export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 ./lat_batch_tmux.sh \
-  --suite E12 \
+  --suite ROUND_E12_RETNET \
   --round all \
   --pairs "87:glue-tvt_mrpc" \
   --gpus "0 1 2 3 4 5 6" \
