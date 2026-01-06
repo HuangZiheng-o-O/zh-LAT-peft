@@ -73,13 +73,27 @@ class ModelCapabilities:
 
     @classmethod
     def for_retnet(cls) -> "ModelCapabilities":
-        """Standard capabilities for RetNet models."""
+        """
+        Standard capabilities for RetNet (Retentive Network) models.
+
+        RetNet uses MultiScaleRetention layer with the following projections:
+        - q_proj, k_proj, v_proj: Query, Key, Value projections
+        - g_proj: Gate projection for output gating (swish gate)
+        - o_proj: Output projection
+
+        Note: RetNet does NOT have gk_proj (that's GLA-specific).
+        RetNet uses RotaryEmbedding for position encoding instead of learned gating.
+
+        MLP uses SwiGLU with gate_proj, up_proj, down_proj (same as GLA).
+        """
         return cls(
             has_fuse_swiglu=True,
             cache_type="past_key_values",
             inner_model_attr="model",
             default_lora_targets=(
-                "q_proj", "k_proj", "v_proj", "o_proj",
+                # MultiScaleRetention projections (no gk_proj - that's GLA-specific)
+                "q_proj", "k_proj", "v_proj", "o_proj", "g_proj",
+                # MLP projections (SwiGLU)
                 "gate_proj", "up_proj", "down_proj"
             ),
         )

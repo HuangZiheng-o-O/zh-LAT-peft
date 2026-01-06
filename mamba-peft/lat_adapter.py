@@ -181,13 +181,35 @@ def _get_target_modules_for_model(model_type: str, model: Any) -> Optional[list]
 
     Returns:
         List of target module names, or None to use PEFT's auto-detection
+
+    Model-specific projections:
+    - GLA (GatedLinearAttention):
+        Attention: q_proj, k_proj, v_proj, o_proj, g_proj, gk_proj
+        MLP: gate_proj, up_proj, down_proj (SwiGLU)
+
+    - RetNet (MultiScaleRetention):
+        Attention: q_proj, k_proj, v_proj, o_proj, g_proj
+        MLP: gate_proj, up_proj, down_proj (SwiGLU)
+        Note: RetNet has NO gk_proj (uses RotaryEmbedding instead of learned gating)
+
+    - Mamba2:
+        Mixer: in_proj, out_proj
     """
     # Model-specific default target modules
     # These are the key projection layers in each architecture
     defaults = {
-        "gla": ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
-        "retnet": ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
-        "mamba2": ["in_proj", "out_proj"],  # Mamba2 has different layer structure
+        # GLA: includes gk_proj for low-rank gating mechanism
+        "gla": [
+            "q_proj", "k_proj", "v_proj", "o_proj", "g_proj", "gk_proj",
+            "gate_proj", "up_proj", "down_proj"
+        ],
+        # RetNet: includes g_proj but NO gk_proj (uses RotaryEmbedding, not learned gating)
+        "retnet": [
+            "q_proj", "k_proj", "v_proj", "o_proj", "g_proj",
+            "gate_proj", "up_proj", "down_proj"
+        ],
+        # Mamba2: different layer structure, no SwiGLU MLP
+        "mamba2": ["in_proj", "out_proj"],
     }
 
     return defaults.get(model_type)
