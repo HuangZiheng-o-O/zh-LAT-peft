@@ -193,6 +193,7 @@ declare -a PIDS=()
 declare -a COMPLETED_ROUNDS=()
 declare -a RUN_QUEUE=()
 declare -a DETECTED_GPUS=()
+declare -a Round_all=()
 
 CURRENT_ROUND=""
 FAILED_ROUND=""
