@@ -2,7 +2,7 @@
 Unified Linear Attention Training Entry Point.
 
 This script provides a unified interface for training various Linear Attention models
-from the FLA library, including GLA, RetNet, and Mamba2.
+from the FLA library, including GLA, RetNet, DeltaNet, and Mamba2.
 
 Design Principles:
 ==================
@@ -14,11 +14,12 @@ Supported Models:
 ================
 - gla: Gated Linear Attention (https://arxiv.org/abs/2312.06635)
 - retnet: Retentive Network (https://arxiv.org/abs/2307.08621)
+- delta_net: DeltaNet (https://arxiv.org/abs/2406.06484)
 - mamba2: Mamba2 State Space Model (https://arxiv.org/abs/2405.21060)
 
 Environment Variables:
 =====================
-- MODEL_TYPE: Model type override (gla, retnet, mamba2, auto)
+- MODEL_TYPE: Model type override (gla, retnet, delta_net, mamba2, auto)
 - LAT_* / GLA_*: Various configuration options (see documentation)
 
 Usage:

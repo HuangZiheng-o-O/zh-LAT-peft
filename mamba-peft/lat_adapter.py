@@ -17,6 +17,7 @@ Supported Models:
 ================
 - gla: Gated Linear Attention
 - retnet: Retentive Network
+- delta_net: DeltaNet (Linear Transformers with Delta Rule)
 - mamba2: Mamba2 State Space Model
 
 Environment Variables for PEFT overrides:
@@ -192,6 +193,13 @@ def _get_target_modules_for_model(model_type: str, model: Any) -> Optional[list]
         MLP: gate_proj, up_proj, down_proj (SwiGLU)
         Note: RetNet has NO gk_proj (uses RotaryEmbedding instead of learned gating)
 
+    - DeltaNet (Delta Rule Linear Transformer):
+        DeltaNet Layer: q_proj, k_proj, v_proj, o_proj, b_proj (optional: g_proj)
+        MLP: gate_proj, up_proj, down_proj (SwiGLU)
+        Note: b_proj outputs only num_heads scalars (beta/writing strength)
+              Not included in default LoRA targets due to small output dimension.
+        Reference: https://arxiv.org/abs/2406.06484
+
     - Mamba2:
         Mixer: in_proj, out_proj
     """
@@ -206,6 +214,15 @@ def _get_target_modules_for_model(model_type: str, model: Any) -> Optional[list]
         # RetNet: includes g_proj but NO gk_proj (uses RotaryEmbedding, not learned gating)
         "retnet": [
             "q_proj", "k_proj", "v_proj", "o_proj", "g_proj",
+            "gate_proj", "up_proj", "down_proj"
+        ],
+        # DeltaNet: uses delta rule for state updates
+        # b_proj outputs only num_heads scalars - not included by default as it may
+        # not benefit much from LoRA due to small output dimension
+        # g_proj is optional (when use_gate=True)
+        # Reference: https://arxiv.org/abs/2406.06484
+        "delta_net": [
+            "q_proj", "k_proj", "v_proj", "o_proj",
             "gate_proj", "up_proj", "down_proj"
         ],
         # Mamba2: different layer structure, no SwiGLU MLP

@@ -53,11 +53,11 @@ class FLASwiGLUPatch(PatchStrategy):
     SwiGLU operations, which may cause issues on certain hardware or
     when specific configurations are used.
 
-    Applies to: GLA, RetNet, and other FLA models with fuse_swiglu capability.
+    Applies to: GLA, RetNet, DeltaNet, and other FLA models with fuse_swiglu capability.
     """
 
     _applied: bool = False
-    _applicable_models = frozenset({"gla", "retnet", "rwkv", "hgrn", "linear_attn"})
+    _applicable_models = frozenset({"gla", "retnet", "delta_net", "rwkv", "hgrn", "linear_attn"})
 
     def is_applicable(self, model_type: str) -> bool:
         return model_type.lower() in self._applicable_models

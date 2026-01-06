@@ -108,6 +108,43 @@ class ModelCapabilities:
             default_lora_targets=("in_proj", "out_proj"),
         )
 
+    @classmethod
+    def for_delta_net(cls) -> "ModelCapabilities":
+        """
+        Standard capabilities for DeltaNet models.
+
+        DeltaNet (Parallelizing Linear Transformers with the Delta Rule)
+        Reference: https://arxiv.org/abs/2406.06484
+
+        DeltaNet uses the delta rule for state updates instead of simple
+        additive updates. Key architectural differences from GLA:
+
+        DeltaNet Layer projections:
+        - q_proj, k_proj, v_proj: Query, Key, Value projections
+        - o_proj: Output projection
+        - b_proj: Beta projection (writing strength, DeltaNet-specific)
+                  Outputs num_heads scalars controlling write strength
+        - g_proj: Gate projection (optional, when use_gate=True)
+
+        Note: DeltaNet does NOT have gk_proj (that's GLA-specific).
+              DeltaNet uses b_proj for beta (writing strength) instead.
+
+        MLP uses SwiGLU with gate_proj, up_proj, down_proj (same as GLA).
+        """
+        return cls(
+            has_fuse_swiglu=True,
+            cache_type="past_key_values",
+            inner_model_attr="model",
+            default_lora_targets=(
+                # DeltaNet layer projections
+                # Note: b_proj outputs only num_heads scalars, may not be ideal for LoRA
+                # We include it for completeness but q/k/v/o are the primary targets
+                "q_proj", "k_proj", "v_proj", "o_proj",
+                # MLP projections (SwiGLU)
+                "gate_proj", "up_proj", "down_proj"
+            ),
+        )
+
 
 @dataclass
 class ModelSpec:
@@ -214,6 +251,16 @@ class ModelRegistry:
             capabilities=ModelCapabilities.for_mamba2(),
         ))
 
+        # DeltaNet: Linear Transformers with Delta Rule
+        # Reference: https://arxiv.org/abs/2406.06484
+        cls.register(ModelSpec(
+            model_type="delta_net",
+            module_path="fla.models.delta_net",
+            config_class_name="DeltaNetConfig",
+            model_class_name="DeltaNetForCausalLM",
+            capabilities=ModelCapabilities.for_delta_net(),
+        ))
+
         cls._initialized = True
 
     @classmethod
@@ -273,4 +320,5 @@ CONFIG_MODEL_TYPE_MAP: Dict[str, str] = {
     "gla": "gla",
     "retnet": "retnet",
     "mamba2": "mamba2",
+    "delta_net": "delta_net",
 }

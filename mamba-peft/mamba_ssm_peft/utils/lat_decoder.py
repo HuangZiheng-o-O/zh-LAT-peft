@@ -2,7 +2,7 @@
 Unified Linear Attention HuggingFace Decoder for text generation.
 
 This decoder wraps HuggingFace's generate() method for various Linear Attention
-models from the FLA library, including GLA, RetNet, and Mamba2.
+models from the FLA library, including GLA, RetNet, DeltaNet, and Mamba2.
 
 Design Principles:
 ==================
@@ -20,6 +20,7 @@ Supported Models:
 ================
 - gla: Gated Linear Attention - uses standard HF generate()
 - retnet: Retentive Network - uses standard HF generate()
+- delta_net: DeltaNet - uses standard HF generate()
 - mamba2: Mamba2 - uses HF generate() with cache_params handling
 
 Usage:

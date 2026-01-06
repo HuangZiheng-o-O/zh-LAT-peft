@@ -15,6 +15,7 @@ Supported Models:
 ================
 - gla: Gated Linear Attention (https://arxiv.org/abs/2312.06635)
 - retnet: Retentive Network (https://arxiv.org/abs/2307.08621)
+- delta_net: DeltaNet (https://arxiv.org/abs/2406.06484)
 - mamba2: Mamba2 State Space Model (https://arxiv.org/abs/2405.21060)
 
 Environment Variables (LAT_* preferred, GLA_* fallback for compatibility):
