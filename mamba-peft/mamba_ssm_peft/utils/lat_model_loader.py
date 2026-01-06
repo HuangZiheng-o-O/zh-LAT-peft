@@ -171,8 +171,22 @@ def load_lat_model(
     if capabilities.has_fuse_swiglu:
         apply_model_patches(model_type, config)
 
-    # Load tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=trust_remote_code)
+    # Load tokenizer with fallback for fast tokenizer compatibility issues
+    # Some models (e.g., DeltaNet) may have tokenizer.json with newer format
+    # that's incompatible with older tokenizers library versions
+    try:
+        tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=trust_remote_code)
+    except Exception as e:
+        if "PyPreTokenizerTypeWrapper" in str(e) or "did not match any variant" in str(e):
+            _verbose_print(
+                f"Fast tokenizer loading failed (format compatibility issue), "
+                f"falling back to slow tokenizer. Error: {e}"
+            )
+            tokenizer = AutoTokenizer.from_pretrained(
+                model_id, trust_remote_code=trust_remote_code, use_fast=False
+            )
+        else:
+            raise
 
     # Load model
     model = ModelClass.from_pretrained(
@@ -216,7 +230,19 @@ def load_lat_tokenizer(
     Returns:
         The loaded tokenizer
     """
-    return AutoTokenizer.from_pretrained(model_id, trust_remote_code=trust_remote_code)
+    try:
+        return AutoTokenizer.from_pretrained(model_id, trust_remote_code=trust_remote_code)
+    except Exception as e:
+        if "PyPreTokenizerTypeWrapper" in str(e) or "did not match any variant" in str(e):
+            _verbose_print(
+                f"Fast tokenizer loading failed (format compatibility issue), "
+                f"falling back to slow tokenizer. Error: {e}"
+            )
+            return AutoTokenizer.from_pretrained(
+                model_id, trust_remote_code=trust_remote_code, use_fast=False
+            )
+        else:
+            raise
 
 
 # ============================================================================
