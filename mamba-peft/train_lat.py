@@ -582,21 +582,32 @@ def run_train(
                 print(f"[{log_tag}][lock][warn] failed to remove lock: {e}")
 
 
-def get_output_path_for_cfg(cfg_path, cfg):
+def get_output_path_for_cfg(cfg_path, cfg, model_type: str = "gla"):
     """
     Target path:
-      <NOW_OUTPUT_ROOT>/<data>_seed<seed>/<yaml_stem>
+      <NOW_OUTPUT_ROOT>/<model_type>/<data>_seed<seed>/<yaml_stem>
     Fallback (missing data/seed):
-      <NOW_OUTPUT_ROOT>/cola_gla/<yaml_stem>
+      <NOW_OUTPUT_ROOT>/<model_type>/cola_gla/<yaml_stem>
+
+    Args:
+        cfg_path: Path to config YAML file
+        cfg: Parsed config dict
+        model_type: Model type (gla, retnet, mamba2, deltanet, etc.)
+
+    Returns:
+        Output directory path with model_type to prevent cross-model overwrites
     """
     yaml_stem = Path(cfg_path).stem
     data = cfg.get("data")
     seed = cfg.get("seed")
 
+    # Normalize model_type to lowercase for consistent path naming
+    model_type = model_type.lower()
+
     if data and seed is not None:
         folder = f"{data}_seed{seed}"
-        return NOW_OUTPUT_ROOT / folder / yaml_stem
-    return NOW_OUTPUT_ROOT / "cola_gla" / yaml_stem
+        return NOW_OUTPUT_ROOT / model_type / folder / yaml_stem
+    return NOW_OUTPUT_ROOT / model_type / "cola_gla" / yaml_stem
 
 
 def _find_last_checkpoint(root: Path) -> Optional[Path]:
@@ -735,8 +746,8 @@ def main():
             "min_length": int(min_len),
         }
 
-    # Output directory
-    output_dir = get_output_path_for_cfg(args.cfg, cfg)
+    # Output directory (include model_type to prevent cross-model overwrites)
+    output_dir = get_output_path_for_cfg(args.cfg, cfg, model_type=args.model_type)
 
     # Merge cfg + CLI args into run_train parameters
     train_args = {
