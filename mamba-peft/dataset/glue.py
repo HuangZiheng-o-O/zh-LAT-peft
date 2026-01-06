@@ -129,10 +129,18 @@ class GlueDataset(NluDatasetBase):
         emb_size = 50280
         self.id_to_int_label = np.full(emb_size, self.ignore_index, dtype=int)
 
+        # Get vocab dict - compatible with both fast and slow tokenizers
+        # Fast tokenizer: has .vocab attribute
+        # Slow tokenizer: uses .get_vocab() method
+        if hasattr(tokenizer, 'vocab') and not callable(tokenizer.vocab):
+            vocab_dict = tokenizer.vocab
+        else:
+            vocab_dict = tokenizer.get_vocab()
+
         self.choice_ids = []
         for i in range(num_labels[name]):
-            self.id_to_int_label[tokenizer.vocab[str(i)]] = i
-            self.choice_ids.append(tokenizer.vocab[str(i)])
+            self.id_to_int_label[vocab_dict[str(i)]] = i
+            self.choice_ids.append(vocab_dict[str(i)])
 
     def __len__(self):
         if self.data is not None:

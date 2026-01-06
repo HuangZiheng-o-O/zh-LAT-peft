@@ -15,8 +15,11 @@ class MnistDataset(NluDatasetBase):
         path = "mnist"
         self.torch_dataset = None
 
+        # Get vocab dict - compatible with both fast and slow tokenizers
+        vocab_dict = tokenizer.vocab if (hasattr(tokenizer, 'vocab') and not callable(tokenizer.vocab)) else tokenizer.get_vocab()
+
         self.choice_labels = [f"{i}" for i in range(10)]
-        self.choice_ids = [tokenizer.vocab[c] for c in self.choice_labels]
+        self.choice_ids = [vocab_dict[c] for c in self.choice_labels]
 
         prompt_prefix = "What digit is the following image? "
 

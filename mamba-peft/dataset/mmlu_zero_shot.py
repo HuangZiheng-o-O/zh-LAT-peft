@@ -81,13 +81,16 @@ class MmluZeroShotDataset(NluDatasetBase):
             "dev": "dev"
         }[split]
 
+        # Get vocab dict - compatible with both fast and slow tokenizers
+        vocab_dict = tokenizer.vocab if (hasattr(tokenizer, 'vocab') and not callable(tokenizer.vocab)) else tokenizer.get_vocab()
+
         # emb_size = 50280
         # self.out_of_cls_index = -1
         # self.id_to_int_label = np.full(emb_size, self.out_of_cls_index, dtype=int)
         # for i, c in enumerate(self.choice_labels):
-        #     self.id_to_int_label[tokenizer.vocab[c]] = i
+        #     self.id_to_int_label[vocab_dict[c]] = i
         self.choice_labels = ["A", "B", "C", "D"]
-        self.choice_ids = [tokenizer.vocab[c] for c in self.choice_labels]
+        self.choice_ids = [vocab_dict[c] for c in self.choice_labels]
 
         super().__init__(tokenizer, path, split, use_cache=use_cache, **kwargs)
 

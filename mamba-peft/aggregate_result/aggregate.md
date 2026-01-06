@@ -52,8 +52,8 @@ python -m aggregate_result.main \
   1️⃣ 你选中的命令（无 --dataset 参数）
 
   python -m aggregate_result.main \
-    --base_dir /home/user/mzs_h/output/benchmark/glue \
-    --output /home/user/mzs_h/output/benchmark/glue_agg \
+    --base_dir /home/user/mzs_h/output/1/Jan4/ \
+    --output /home/user/mzs_h/output/1/glue_aggJan4 \
     --workers 8
   功能：聚合 /home/user/mzs_h/output/benchmark/glue 下的所有数据集
   - CoLA
