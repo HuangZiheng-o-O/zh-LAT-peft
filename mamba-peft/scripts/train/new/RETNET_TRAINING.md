@@ -60,7 +60,7 @@ export HP_LOGGING_STEPS=100
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="retnet-spider-1-4090-E155-mail02-r4"
+export SWANLAB_PROJECT="retnet-spider-1-4090-E125-mail02-r4"
 export SWANLAB_LOGDIR="/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/my_swanlog/local_eval_logs"
 export SWANLAB_EMAIL_YAML="/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/dangerous/email_notify.yaml"
 export SWANLAB_EMAIL_ON_START=0
@@ -76,7 +76,7 @@ export GRADIENT_CHECKPOINTING=true
 export LOGITS_TO_KEEP=1
 
 ./lat_batch_tmux.sh \
-  --suite E155 \
+  --suite E125 \
   --round all \
   --pairs "87:spider-tvt" \
   --gpus "0 1 3 4 6" \
@@ -121,14 +121,14 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="retnet-samsum-E15-clean-decoder-r3-3090-t4"
+export SWANLAB_PROJECT="retnet-samsum-E12-clean-decoder-r3-3090-t4"
 export SWANLAB_EMAIL_ON_START=1
 export SWANLAB_EMAIL_ON_FINISH=1
 
 export SAMSUM_LOCAL_DIR=/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/data/samsum
 
 ./lat_batch_tmux.sh \
-  --suite E15 \
+  --suite E12 \
   --round 1 \
   --pairs "87:samsum" \
   --gpus "3 4 5 6" \
@@ -193,14 +193,14 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=local
-export SWANLAB_PROJECT="retnet-dart-E15-2-4090-r11"
+export SWANLAB_PROJECT="retnet-dart-E12-2-4090-r11"
 export SWANLAB_EMAIL_YAML="/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/dangerous/email_notify.yaml"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 ./lat_batch_tmux.sh \
-  --suite E15 \
+  --suite E12 \
   --round all \
   --pairs "87:dart" \
   --gpus "1 2 3 4 5 6 7" \
@@ -253,7 +253,7 @@ export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 ./lat_batch_tmux.sh \
-  --suite E15 \
+  --suite E12 \
   --round all \
   --pairs "87:glue-tvt_sst2 87:glue-tvt_qqp 87:glue-tvt_mnli" \
   --gpus "0 1 2 3 4 5 6" \
@@ -304,13 +304,13 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="retnet-cola-1-4090-Dec25-2"
+export SWANLAB_PROJECT="retnet-cola-1-4090-E12-Jan5"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 ./lat_batch_tmux.sh \
-  --suite E15 \
+  --suite E12 \
   --round all \
   --pairs "87:glue-tvt_cola" \
   --gpus "0 1 2 3 4 5 6" \
@@ -363,7 +363,7 @@ export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 ./lat_batch_tmux.sh \
-  --suite E15 \
+  --suite E12 \
   --round all \
   --pairs "87:glue-tvt_rte" \
   --gpus "4 5 6" \
@@ -423,7 +423,7 @@ export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 ./lat_batch_tmux.sh \
-  --suite E15 \
+  --suite E12 \
   --round all \
   --pairs "87:glue-tvt_qnli" \
   --gpus "0 1 2 3 4 5 6" \
@@ -484,7 +484,7 @@ export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 ./lat_batch_tmux.sh \
-  --suite E15 \
+  --suite E12 \
   --round all \
   --pairs "87:glue-tvt_mnli" \
   --gpus "0 1 2 3 4 5 6" \
@@ -541,7 +541,7 @@ export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 ./lat_batch_tmux.sh \
-  --suite E15 \
+  --suite E12 \
   --round all \
   --pairs "87:glue-tvt_mnli" \
   --gpus "1" \
@@ -602,7 +602,7 @@ export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 ./lat_batch_tmux.sh \
-  --suite E15 \
+  --suite E12 \
   --round all \
   --pairs "87:glue-tvt_sst2" \
   --gpus "1 2 3 4 5 6 7" \
@@ -716,7 +716,7 @@ export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 ./lat_batch_tmux.sh \
-  --suite E15 \
+  --suite E12 \
   --round all \
   --pairs "87:glue-tvt_mrpc" \
   --gpus "0 1 2 3 4 5 6" \
