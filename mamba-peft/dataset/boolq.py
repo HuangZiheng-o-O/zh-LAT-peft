@@ -25,6 +25,11 @@ class BoolQDataset(NluDatasetBase):
 
         super().__init__(tokenizer, path, split, use_cache=use_cache, **kwargs)
 
+    def get_cache_name(self):
+        # Bump cache name to invalidate legacy caches that stored "true/false" labels.
+        base = super().get_cache_name()
+        return f"{base}_single_token_v2"
+
     def __len__(self):
         return len(self.data) if self.data is not None else len(self.get_hf_dataset())
 

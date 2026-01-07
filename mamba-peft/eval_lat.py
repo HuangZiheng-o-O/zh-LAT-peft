@@ -38,12 +38,6 @@ REPO_ROOT = Path(__file__).resolve().parent.parent  # .../zh-LAT-peft
 DEFAULT_EVAL_OUT_ROOT = Path(__file__).resolve().parent / "outputs" / "lm_eval"
 
 
-def _truthy(v: Optional[str]) -> bool:
-    if v is None:
-        return False
-    return str(v).strip().lower() in ("1", "true", "yes", "on")
-
-
 def _dtype_from_prec(prec: str) -> torch.dtype:
     prec = str(prec).lower()
     if prec in ("bf16", "bfloat16"):
@@ -105,7 +99,8 @@ def _load_cfg(cfg_path: str) -> Dict[str, Any]:
 
 def _apply_env_overrides(cfg: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Mirror the minimal env override behavior used in train_lat.py for model/prec.
+    Only apply safe env overrides (base model + precision). Eval should not
+    silently mutate dataset/seed metadata because that changes checkpoint dirs.
     """
     env = os.environ
     out = dict(cfg)
@@ -116,31 +111,39 @@ def _apply_env_overrides(cfg: Dict[str, Any]) -> Dict[str, Any]:
     prec_env = env.get("LAT_PREC") or env.get("HP_PREC")
     if prec_env:
         out["prec"] = prec_env
-    seed_env = env.get("HP_SEED")
-    if seed_env:
-        try:
-            out["seed"] = int(seed_env)
-        except Exception:
-            pass
-    data_env = env.get("HP_DATA")
-    if data_env:
-        # Keep train_lat.py mapping logic minimal here: allow raw string
-        # Users can pass full names like glue-tvt_cola, etc.
-        out["data"] = data_env
-    val_split_env = env.get("HP_VAL_SPLIT")
-    if val_split_env in {"train", "val", "test"}:
-        out["val_data_split"] = val_split_env
     return out
 
 
-def _compute_output_dir_from_train_lat(cfg_path: str, cfg: Dict[str, Any]) -> Optional[Path]:
+def _resolve_model_type(arg_model_type: str, cfg: Dict[str, Any]) -> str:
+    """
+    Determine the concrete model_type. Unlike training, eval cannot auto-detect
+    from adapters, so we require an explicit answer (CLI, env, or cfg).
+    """
+    resolved = arg_model_type.lower()
+    if resolved == "auto":
+        env_model_type = os.environ.get("MODEL_TYPE")
+        if env_model_type and env_model_type.lower() != "auto":
+            resolved = env_model_type.lower()
+    if resolved == "auto":
+        cfg_model_type = cfg.get("model_type")
+        if cfg_model_type:
+            resolved = str(cfg_model_type).lower()
+    if resolved == "auto":
+        raise ValueError(
+            "model_type must be specified for eval (pass --model-type or set MODEL_TYPE). "
+            "Default 'auto' is ambiguous and previously defaulted to 'gla', which hid bugs."
+        )
+    return resolved
+
+
+def _compute_output_dir_from_train_lat(cfg_path: str, cfg: Dict[str, Any], model_type: str) -> Optional[Path]:
     """
     Reuse train_lat.py's output_dir logic to locate adapter checkpoints for this config.
     """
     try:
         import train_lat  # local import (mamba-peft/train_lat.py)
 
-        return Path(train_lat.get_output_path_for_cfg(cfg_path, cfg))
+        return Path(train_lat.get_output_path_for_cfg(cfg_path, cfg, model_type=model_type))
     except Exception:
         return None
 
@@ -159,12 +162,6 @@ def main() -> None:
     parser.add_argument("--output-root", type=str, default=None, help="Where to write eval outputs (default: mamba-peft/outputs/lm_eval)")
     parser.add_argument("--debug", action="store_true", help="Force CPU for debugging")
     args = parser.parse_args()
-
-    # Resolve model_type (env override like train_lat.py)
-    if args.model_type == "auto":
-        env_model_type = os.environ.get("MODEL_TYPE", "auto")
-        if env_model_type != "auto":
-            args.model_type = env_model_type
 
     # Tasks
     tasks_str = (
@@ -188,6 +185,9 @@ def main() -> None:
     if args.cfg:
         cfg = _apply_env_overrides(_load_cfg(args.cfg))
 
+    # Resolve model_type (must be explicit)
+    model_type = _resolve_model_type(args.model_type, cfg)
+
     # Resolve base model + prec from CLI/env/cfg
     model_id = args.model or cfg.get("model") or os.environ.get("LAT_MODEL") or os.environ.get("GLA_MODEL")
     if not model_id:
@@ -196,18 +196,32 @@ def main() -> None:
     dtype = _dtype_from_prec(prec)
 
     # Determine PEFT weights dir
-    peft_dir: Optional[Path] = Path(args.peft_weights).expanduser() if args.peft_weights else None
-    if peft_dir is None and args.cfg:
-        out_dir = _compute_output_dir_from_train_lat(args.cfg, cfg)
-        if out_dir is not None:
-            peft_dir = _infer_peft_weights_dir(out_dir)
-            if peft_dir is None:
-                print(f"[LAT][eval][warn] No PEFT adapter files found under {out_dir}. Running base model evaluation.")
+    peft_dir: Optional[Path] = None
+    if args.peft_weights:
+        peft_dir = Path(args.peft_weights).expanduser()
+        if not peft_dir.exists():
+            raise FileNotFoundError(f"PEFT weights path not found: {peft_dir}")
+        if not _looks_like_peft_dir(peft_dir):
+            raise ValueError(f"{peft_dir} does not contain adapter_config/adapter_model files.")
+    elif args.cfg:
+        out_dir = _compute_output_dir_from_train_lat(args.cfg, cfg, model_type)
+        if out_dir is None:
+            raise RuntimeError(
+                f"Could not resolve output directory for cfg={args.cfg}. "
+                "Ensure you run eval_lat.py from repo root and the config path is correct."
+            )
+        peft_dir = _infer_peft_weights_dir(out_dir)
+        if peft_dir is None:
+            raise FileNotFoundError(
+                f"No PEFT adapter files found under {out_dir}. "
+                "Training output might be missing or incomplete. "
+                "Specify --peft-weights explicitly if you really want base-model eval."
+            )
 
     # Load base model via unified adapter (NO peft_json here; we attach trained adapter weights below)
     device = "cpu" if args.debug else "cuda"
     model, tokenizer, _ = prepare_lat_model_and_tokenizer(
-        model_type=args.model_type,
+        model_type=model_type,
         model_id=str(model_id),
         prec=str(prec),
         debug=(device == "cpu"),
@@ -230,14 +244,14 @@ def main() -> None:
     out_root.mkdir(parents=True, exist_ok=True)
 
     # Run name
-    safe_model_type = str(args.model_type).replace("/", "_")
+    safe_model_type = str(model_type).replace("/", "_")
     safe_model_id = str(model_id).split("/")[-1].replace("/", "_")
     peft_tag = peft_dir.name if peft_dir is not None else "base"
     run_dir = out_root / f"{safe_model_type}_{safe_model_id}_{peft_tag}"
     run_dir.mkdir(parents=True, exist_ok=True)
 
     all_metrics: Dict[str, Any] = {
-        "model_type": args.model_type,
+        "model_type": model_type,
         "model": str(model_id),
         "prec": str(prec),
         "device": device,
@@ -290,5 +304,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
-
