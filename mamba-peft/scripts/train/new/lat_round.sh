@@ -83,6 +83,9 @@ ROUND_E15=(# 26 个 分组更清晰：FULL → 主轴 → Attn细粒度 → Head
   "E2_OMLP_plus_G_plus_GK_r8_alpha16.yaml"
 )
 
+ROUND_E11=(
+  "E1_QKVO_r8_alpha16.yaml"
+)
 ROUND_E12=(
 
   "E1_QKVO_plus_G_plus_MLP_r8_alpha16.yaml"
