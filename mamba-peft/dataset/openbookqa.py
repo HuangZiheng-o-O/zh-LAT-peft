@@ -20,9 +20,13 @@ class OpenBookQADataset(NluDatasetBase):
         self.config_name = config_name
         self.hf_dataset = None
 
-        vocab_dict = tokenizer.vocab if (hasattr(tokenizer, "vocab") and not callable(tokenizer.vocab)) else tokenizer.get_vocab()
         self.choice_labels = ["A", "B", "C", "D"]
-        self.choice_ids = [vocab_dict[c] for c in self.choice_labels]
+        self.choice_ids = []
+        for c in self.choice_labels:
+            ids = tokenizer.encode(c, add_special_tokens=False)
+            if len(ids) != 1:
+                raise ValueError(f"[OpenBookQA] label '{c}' is not single-token for this tokenizer: ids={ids}")
+            self.choice_ids.append(ids[0])
 
         super().__init__(tokenizer, path, split, use_cache=use_cache, **kwargs)
 

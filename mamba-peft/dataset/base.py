@@ -265,7 +265,15 @@ class DatasetBase(ABC):
         return base
 
     def encode(self, seq):
-        return torch.LongTensor(self.tokenizer.encode(seq))
+        # IMPORTANT:
+        # For classification-style tasks in this repo, the "label" part is expected to be
+        # a single token (e.g., "A"/"B"/"0"/"1"). If we allow tokenizer to inject BOS/EOS
+        # via add_special_tokens=True (the default), labels become multi-token and metrics
+        # break (e.g., BOS id=1 shows up in label_ids, causing "1 is not in list").
+        #
+        # Therefore we ALWAYS encode with add_special_tokens=False and let datasets
+        # explicitly include any separators/eos via text (sep_token/eos_token).
+        return torch.LongTensor(self.tokenizer.encode(seq, add_special_tokens=False))
 
     def preproc(self, idx):
         input, label = self.get_input_label(idx)
