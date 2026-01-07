@@ -70,6 +70,10 @@ _debug_print("  Importing OpenBookQADataModule...")
 from dataset.openbookqa import OpenBookQADataModule
 _debug_print("  OpenBookQADataModule... OK")
 
+_debug_print("  Importing Commonsense170kDataModule...")
+from dataset.commonsense_170k import Commonsense170kDataModule
+_debug_print("  Commonsense170kDataModule... OK")
+
 _debug_print("  Importing RandomDataModule...")
 from dataset.random_data import RandomDataModule
 _debug_print("  RandomDataModule... OK")
@@ -269,6 +273,12 @@ def load_dataset(data, tokenizer, split, return_module=False, **kwargs):
         )
     elif data == "openbookqa":
         data_module = OpenBookQADataModule(
+            tokenizer=tokenizer,
+            split=split,
+            **kwargs
+        )
+    elif data in ("commonsense_170k", "commonsense170k", "cs170k"):
+        data_module = Commonsense170kDataModule(
             tokenizer=tokenizer,
             split=split,
             **kwargs

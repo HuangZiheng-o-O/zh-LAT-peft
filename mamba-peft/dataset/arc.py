@@ -66,7 +66,7 @@ class ArcDataset(NluDatasetBase):
         label = answer
 
         if str(os.environ.get("LAT_VERBOSE", os.environ.get("GLA_VERBOSE", "0"))).lower() in ("1", "true", "yes", "on"):
-            print(input)
+        print(input)
 
         return input, label
     
