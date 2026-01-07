@@ -42,9 +42,15 @@ class HellaSwagDataset(NluDatasetBase):
     def get_input_label(self, idx):
         self.get_hf_dataset()
 
-        # Common HF columns:
-        # - ctx: string, endings: list[str] len=4, label: int (0..3)
-        ctx = self.hf_dataset["ctx"][idx]
+        # HF columns differ across versions. Common ones include:
+        # - ctx (string) OR (ctx_a, ctx_b) OR (activity_label + ctx_a/ctx_b)
+        if "ctx" in getattr(self.hf_dataset, "column_names", []):
+            ctx = self.hf_dataset["ctx"][idx]
+        else:
+            ctx_a = self.hf_dataset["ctx_a"][idx] if "ctx_a" in getattr(self.hf_dataset, "column_names", []) else ""
+            ctx_b = self.hf_dataset["ctx_b"][idx] if "ctx_b" in getattr(self.hf_dataset, "column_names", []) else ""
+            act = self.hf_dataset["activity_label"][idx] if "activity_label" in getattr(self.hf_dataset, "column_names", []) else ""
+            ctx = " ".join([str(x).strip() for x in [act, ctx_a, ctx_b] if str(x).strip() != ""]).strip()
         endings = self.hf_dataset["endings"][idx]
         label_idx = int(self.hf_dataset["label"][idx])
         assert 0 <= label_idx <= 3

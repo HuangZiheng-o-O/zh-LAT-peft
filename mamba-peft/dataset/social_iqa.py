@@ -49,9 +49,12 @@ class SocialIQADataset(NluDatasetBase):
         a = self.hf_dataset["answerA"][idx]
         b = self.hf_dataset["answerB"][idx]
         c = self.hf_dataset["answerC"][idx]
-        label_idx = int(self.hf_dataset["label"][idx])
-
-        assert 0 <= label_idx <= 2
+        label_raw = self.hf_dataset["label"][idx]
+        label_idx = int(label_raw)
+        # Some variants store labels as 1/2/3 instead of 0/1/2
+        if label_idx in (1, 2, 3):
+            label_idx = label_idx - 1
+        assert 0 <= label_idx <= 2, f"Unexpected SocialIQA label={label_raw}"
         label = self.choice_labels[label_idx]
 
         choices_txt = "\n".join([f"{l}. {opt}" for l, opt in zip(self.choice_labels, [a, b, c])])
