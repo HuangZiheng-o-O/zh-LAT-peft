@@ -48,7 +48,17 @@ class DatasetBase(ABC):
             if subset_size is not None:
                 cache_file_stem += f"_{subset_size}"
 
-            cache_file = Path("data") / path.replace("/", "_") / f"{cache_file_stem}.pkl"
+            # Cache root:
+            # - Prefer putting our preprocessed .pkl caches under a dedicated cache directory
+            #   to avoid colliding with locally downloaded dataset repos (also under ./data).
+            # - Backward compatible: if old cache exists under ./data/<dataset>/, we still load it.
+            cache_root = Path(
+                os.environ.get("LAT_DATA_CACHE_DIR")
+                or os.environ.get("DATA_CACHE_DIR")
+                or os.path.join("data", "cache")
+            )
+            cache_file = cache_root / path.replace("/", "_") / f"{cache_file_stem}.pkl"
+            legacy_cache_file = Path("data") / path.replace("/", "_") / f"{cache_file_stem}.pkl"
             cache_file.parent.mkdir(parents=True, exist_ok=True)
             lock_file = cache_file.with_suffix(cache_file.suffix + ".lock")
             _debug_print(f"  cache_file = {cache_file}")
@@ -61,6 +71,16 @@ class DatasetBase(ABC):
                 with open(cache_file, "rb") as f:
                     self.data = pickle.load(f)
                 _debug_print(f"  FAST-PATH: Loaded {len(self.data)} samples from cache")
+            elif legacy_cache_file.exists() and not lock_file.exists():
+                # Backward compatible: old cache location
+                _debug_print(f"  FAST-PATH (legacy): Loading from cache...")
+                try:
+                    with open(legacy_cache_file, "rb") as f:
+                        self.data = pickle.load(f)
+                    _debug_print(f"  FAST-PATH (legacy): Loaded {len(self.data)} samples from cache")
+                except Exception:
+                    # fall through to rebuild
+                    self.data = None
             else:
                 _debug_print(f"  SLOW-PATH: Cache miss or locked, need to build data...")
                 # Cooperative lock to prevent multiple processes writing the same cache concurrently
@@ -210,10 +230,19 @@ class DatasetBase(ABC):
         if self.data is not None:
             return
         cache_file_stem = self.get_cache_name()
-        cache_file = Path("data") / self.path.replace("/", "_") / f"{cache_file_stem}.pkl"
+        cache_root = Path(
+            os.environ.get("LAT_DATA_CACHE_DIR")
+            or os.environ.get("DATA_CACHE_DIR")
+            or os.path.join("data", "cache")
+        )
+        cache_file = cache_root / self.path.replace("/", "_") / f"{cache_file_stem}.pkl"
+        legacy_cache_file = Path("data") / self.path.replace("/", "_") / f"{cache_file_stem}.pkl"
         try:
             if cache_file.exists():
                 with open(cache_file, "rb") as f:
+                    self.data = pickle.load(f)
+            elif legacy_cache_file.exists():
+                with open(legacy_cache_file, "rb") as f:
                     self.data = pickle.load(f)
             else:
                 # Fallback: build in-memory without cache

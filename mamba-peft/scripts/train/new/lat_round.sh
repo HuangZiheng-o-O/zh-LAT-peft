@@ -14,6 +14,16 @@ LAT_PREC="${LAT_PREC:-${HP_PREC:-}}"
 
 # Launcher Python script - uses unified entry point
 LAUNCHER_PY="train_lat.py"
+EVAL_PY="eval_lat.py"
+
+# Eval controls (optional)
+# - EVAL_AFTER_TRAIN=1: run eval_lat.py after each training job (same GPU)
+# - EVAL_ONLY=1: skip training and only run eval_lat.py for each config
+# - EVAL_TASKS=...: comma-separated tasks (default handled in eval_lat.py)
+# - EVAL_BATCH_SIZE / HP_EVAL_BATCH_SIZE: eval batch size
+# - HP_VAL_SPLIT: val|test (eval_lat.py will respect)
+EVAL_AFTER_TRAIN="${EVAL_AFTER_TRAIN:-0}"
+EVAL_ONLY="${EVAL_ONLY:-0}"
 
 #########
 #                               USER CONFIG HERE                              #
@@ -592,8 +602,29 @@ run_round () {
     if [[ -n "${LAT_PREC:-}" ]]; then
       _cmd+=("--prec" "${LAT_PREC}")
     fi
-    MODEL_TYPE="${MODEL_TYPE}" HP_SEED=${FORCE_SEED} CUDA_VISIBLE_DEVICES="$GPU" \
-      "${_cmd[@]}" &
+
+    # Eval command (reuses same cfg, uses env/overrides to locate output + adapter)
+    local -a _eval_cmd=(python "$EVAL_PY" --cfg "$CFG_INJ" --model-type "${MODEL_TYPE}")
+    if [[ -n "${EVAL_TASKS:-}" ]]; then
+      _eval_cmd+=("--tasks" "${EVAL_TASKS}")
+    fi
+    if [[ -n "${EVAL_OUTPUT_ROOT:-}" ]]; then
+      _eval_cmd+=("--output-root" "${EVAL_OUTPUT_ROOT}")
+    fi
+    if [[ -n "${EVAL_BATCH_SIZE:-}" ]]; then
+      _eval_cmd+=("--eval-batch-size" "${EVAL_BATCH_SIZE}")
+    fi
+
+    if [[ "${EVAL_ONLY}" == "1" ]]; then
+      MODEL_TYPE="${MODEL_TYPE}" HP_SEED=${FORCE_SEED} CUDA_VISIBLE_DEVICES="$GPU" \
+        "${_eval_cmd[@]}" &
+    elif [[ "${EVAL_AFTER_TRAIN}" == "1" ]]; then
+      MODEL_TYPE="${MODEL_TYPE}" HP_SEED=${FORCE_SEED} CUDA_VISIBLE_DEVICES="$GPU" \
+        bash -lc "$(printf '%q ' "${_cmd[@]}") && $(printf '%q ' "${_eval_cmd[@]}")" &
+    else
+      MODEL_TYPE="${MODEL_TYPE}" HP_SEED=${FORCE_SEED} CUDA_VISIBLE_DEVICES="$GPU" \
+        "${_cmd[@]}" &
+    fi
     PIDS+=("$!")
   done
 

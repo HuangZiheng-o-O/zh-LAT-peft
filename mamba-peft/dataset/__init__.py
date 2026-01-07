@@ -54,6 +54,22 @@ _debug_print("  Importing PiqaDataModule...")
 from dataset.piqa import PiqaDataModule
 _debug_print("  PiqaDataModule... OK")
 
+_debug_print("  Importing SocialIQADataModule...")
+from dataset.social_iqa import SocialIQADataModule
+_debug_print("  SocialIQADataModule... OK")
+
+_debug_print("  Importing HellaSwagDataModule...")
+from dataset.hellaswag import HellaSwagDataModule
+_debug_print("  HellaSwagDataModule... OK")
+
+_debug_print("  Importing WinoGrandeDataModule...")
+from dataset.winogrande import WinoGrandeDataModule
+_debug_print("  WinoGrandeDataModule... OK")
+
+_debug_print("  Importing OpenBookQADataModule...")
+from dataset.openbookqa import OpenBookQADataModule
+_debug_print("  OpenBookQADataModule... OK")
+
 _debug_print("  Importing RandomDataModule...")
 from dataset.random_data import RandomDataModule
 _debug_print("  RandomDataModule... OK")
@@ -207,8 +223,10 @@ def load_dataset(data, tokenizer, split, return_module=False, **kwargs):
         )
     elif data.startswith("arc"):
         # Require explicit ARC variant: 'arc-easy' or 'arc-challenge'
-        if data in ("arc-easy", "arc-challenge"):
-            arc_name = data
+        if data in ("arc-easy", "arc-challenge", "arc_easy", "arc_challenge"):
+            arc_name = (
+                data.replace("_", "-")  # arc_easy -> arc-easy
+            )
         else:
             raise ValueError(
                 "ARC dataset requires data to be 'arc-easy' or 'arc-challenge' (got: %s)" % data
@@ -227,6 +245,30 @@ def load_dataset(data, tokenizer, split, return_module=False, **kwargs):
         )
     elif data == "boolq":
         data_module = BoolQDataModule(
+            tokenizer=tokenizer,
+            split=split,
+            **kwargs
+        )
+    elif data in ("social_iqa", "siqa"):
+        data_module = SocialIQADataModule(
+            tokenizer=tokenizer,
+            split=split,
+            **kwargs
+        )
+    elif data == "hellaswag":
+        data_module = HellaSwagDataModule(
+            tokenizer=tokenizer,
+            split=split,
+            **kwargs
+        )
+    elif data == "winogrande":
+        data_module = WinoGrandeDataModule(
+            tokenizer=tokenizer,
+            split=split,
+            **kwargs
+        )
+    elif data == "openbookqa":
+        data_module = OpenBookQADataModule(
             tokenizer=tokenizer,
             split=split,
             **kwargs

@@ -6,6 +6,9 @@ from datasets import load_dataset
 from dataset.collator import DataCollator
 from .base import NluDatasetBase
 import numpy as np
+import os
+
+from dataset.hf_local import resolve_dataset_path
 
 
 class ArcDataset(NluDatasetBase):
@@ -30,10 +33,11 @@ class ArcDataset(NluDatasetBase):
 
     def get_hf_dataset(self):
         if self.hf_dataset is None:
-            self.hf_dataset = load_dataset(
-                self.path, {"arc-easy": "ARC-Easy", "arc-challenge": "ARC-Challenge"}[self.name], trust_remote_code=True)[
-                {"train": "train", "val": "test"}[self.split]
-            ]
+            ds_path = resolve_dataset_path(self.path)
+            subset = {"arc-easy": "ARC-Easy", "arc-challenge": "ARC-Challenge"}[self.name]
+            split_map = {"train": "train", "val": "test", "test": "test"}
+            hf_split = split_map.get(self.split, self.split)
+            self.hf_dataset = load_dataset(ds_path, subset, trust_remote_code=True)[hf_split]
 
         return self.hf_dataset
 
@@ -58,7 +62,8 @@ class ArcDataset(NluDatasetBase):
         input = f"Question: {question}\nChoices:\n{choices_txt}\nAnswer: "
         label = answer
 
-        print(input)
+        if str(os.environ.get("LAT_VERBOSE", os.environ.get("GLA_VERBOSE", "0"))).lower() in ("1", "true", "yes", "on"):
+            print(input)
 
         return input, label
     

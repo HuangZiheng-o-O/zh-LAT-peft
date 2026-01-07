@@ -7,6 +7,8 @@ from dataset.collator import DataCollator
 from .base import NluDatasetBase
 import numpy as np
 
+from dataset.hf_local import resolve_dataset_path
+
 
 class BoolQDataset(NluDatasetBase):
     def __init__(self, tokenizer: AutoTokenizer, split="train", use_cache=True, **kwargs):
@@ -16,7 +18,9 @@ class BoolQDataset(NluDatasetBase):
         # Get vocab dict - compatible with both fast and slow tokenizers
         vocab_dict = tokenizer.vocab if (hasattr(tokenizer, 'vocab') and not callable(tokenizer.vocab)) else tokenizer.get_vocab()
 
-        self.choice_labels = ["false", "true"]
+        # IMPORTANT: Labels must be single-token for our next-token classification metric.
+        # "true/false" may not be single-token under GPT-Neox BPE; use digits for robustness.
+        self.choice_labels = ["0", "1"]  # 0 = false/no, 1 = true/yes
         self.choice_ids = [vocab_dict[c] for c in self.choice_labels]
 
         super().__init__(tokenizer, path, split, use_cache=use_cache, **kwargs)
@@ -26,10 +30,10 @@ class BoolQDataset(NluDatasetBase):
 
     def get_hf_dataset(self):
         if self.hf_dataset is None:
-            self.hf_dataset = load_dataset(
-                self.path, trust_remote_code=True)[
-                {"train": "train", "val": "validation"}[self.split]
-            ]
+            split_map = {"train": "train", "val": "validation", "test": "validation"}
+            hf_split = split_map.get(self.split, self.split)
+            ds_path = resolve_dataset_path(self.path)
+            self.hf_dataset = load_dataset(ds_path, trust_remote_code=True)[hf_split]
 
         return self.hf_dataset
 
@@ -40,10 +44,17 @@ class BoolQDataset(NluDatasetBase):
         passage = self.hf_dataset["passage"][idx]
         label = self.hf_dataset["answer"][idx]
 
-        label = {False: "false", True: "true"}[label]
+        # Map bool -> digit label (single token)
+        label = {False: "0", True: "1"}[label]
         assert label in self.choice_labels
         
-        input = f"Question: {question}\nPassage: {passage}\nAnswer: "
+        input = (
+            "Answer the question based on the passage. "
+            "Respond with '0' for No/False and '1' for Yes/True.\n"
+            f"Question: {question}\n"
+            f"Passage: {passage}\n"
+            "Answer: "
+        )
 
         # print(input)
 

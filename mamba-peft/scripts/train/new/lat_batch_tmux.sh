@@ -38,6 +38,11 @@ LOG_DIR="/home/user/mzs_h/log"
 MODEL_TYPE="${MODEL_TYPE:-auto}"  # NEW: Model type (gla, retnet, mamba2, auto)
 MODEL_PATH="${LAT_MODEL:-${GLA_MODEL:-}}"
 MODEL_PREC="${LAT_PREC:-${HP_PREC:-}}"
+EVAL_AFTER_TRAIN="${EVAL_AFTER_TRAIN:-0}"
+EVAL_ONLY="${EVAL_ONLY:-0}"
+EVAL_TASKS="${EVAL_TASKS:-}"
+EVAL_BATCH_SIZE="${EVAL_BATCH_SIZE:-}"
+EVAL_OUTPUT_ROOT="${EVAL_OUTPUT_ROOT:-}"
 
 print_help() {
   cat <<'EOF'
@@ -56,6 +61,11 @@ Options:
   --gpus        Space- or comma-separated GPU IDs (overrides auto-detect)
   --gpu-plan    Comma/space ints per GPU concurrency (e.g. "1,1,1" or single int)
   --pissa-fast  Enable fast PiSSA init
+  --eval-after-train  Run eval after each training job (calls eval_lat.py)
+  --eval-only   Only run eval_lat.py (no training)
+  --eval-tasks  Comma-separated tasks for eval_lat.py (default handled in eval_lat.py)
+  --eval-batch-size  Eval batch size override
+  --eval-output-root Where to write eval outputs (default: mamba-peft/outputs/lm_eval/)
   -h, --help    Show this help
 
 Environment:
@@ -88,6 +98,11 @@ while [[ $# -gt 0 ]]; do
     --gpus)       export GPU_IDS="$2"; shift 2;;
     --gpu-plan)   export GPU_PLAN="$2"; shift 2;;
     --pissa-fast) PISSA_FAST=1; shift 1;;
+    --eval-after-train) EVAL_AFTER_TRAIN=1; shift 1;;
+    --eval-only)  EVAL_ONLY=1; shift 1;;
+    --eval-tasks) EVAL_TASKS="$2"; shift 2;;
+    --eval-batch-size) EVAL_BATCH_SIZE="$2"; shift 2;;
+    --eval-output-root) EVAL_OUTPUT_ROOT="$2"; shift 2;;
     -h|--help)    print_help; exit 0;;
     *)            echo "Unknown arg: $1" >&2; print_help; exit 2;;
   esac
@@ -146,6 +161,11 @@ HDR
   printf 'export ROUND=%q\n' "$ROUND"
   printf 'export LOG_DIR=%q\n' "$LOG_DIR"
   printf 'export MODEL_TYPE=%q\n' "$MODEL_TYPE"
+  printf 'export EVAL_AFTER_TRAIN=%q\n' "${EVAL_AFTER_TRAIN:-0}"
+  printf 'export EVAL_ONLY=%q\n' "${EVAL_ONLY:-0}"
+  printf 'export EVAL_TASKS=%q\n' "${EVAL_TASKS:-}"
+  printf 'export EVAL_BATCH_SIZE=%q\n' "${EVAL_BATCH_SIZE:-}"
+  printf 'export EVAL_OUTPUT_ROOT=%q\n' "${EVAL_OUTPUT_ROOT:-}"
   printf 'export GPU_IDS=%q\n' "${GPU_IDS:-}"
   printf 'export GPU_PLAN=%q\n' "${GPU_PLAN:-}"
   printf 'export PISSA_FAST=%q\n' "${PISSA_FAST:-0}"

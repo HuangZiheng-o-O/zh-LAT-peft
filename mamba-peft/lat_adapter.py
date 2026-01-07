@@ -307,6 +307,35 @@ def prepare_lat_model_and_tokenizer(
     return model, tokenizer, peft_cfg
 
 
+def attach_peft_weights(
+    model: Any,
+    peft_weights_path: str,
+    torch_dtype: Optional[torch.dtype] = None,
+) -> Any:
+    """
+    Attach an existing PEFT adapter (LoRA/DoRA/RSLoRA/...) onto a base model.
+
+    This is used for evaluation workflows where the adapter is already trained and
+    saved under a checkpoint directory (contains adapter_config.json + adapter weights).
+
+    Args:
+        model: Base model (NOT already wrapped by get_peft_model)
+        peft_weights_path: Directory path containing PEFT adapter files
+        torch_dtype: Optional dtype override for loading adapter weights
+
+    Returns:
+        PeftModel wrapping the base model
+    """
+    from peft import PeftModel
+
+    return PeftModel.from_pretrained(
+        model,
+        peft_weights_path,
+        torch_dtype=torch_dtype,
+        is_trainable=False,
+    )
+
+
 # ============================================================================
 # BACKWARD COMPATIBILITY: GLA-specific function
 # ============================================================================
