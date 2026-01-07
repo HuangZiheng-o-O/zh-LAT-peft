@@ -34,7 +34,8 @@ class OpenBookQADataset(NluDatasetBase):
         return len(self.data) if self.data is not None else len(self.get_hf_dataset())
 
     def get_cache_name(self):
-        return f"cache_openbookqa_{self.config_name}_{self.split}"
+        base = super().get_cache_name()
+        return f"{base}_{self.config_name}"
 
     def get_hf_dataset(self):
         if self.hf_dataset is None:

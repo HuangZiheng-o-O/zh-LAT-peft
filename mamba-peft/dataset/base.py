@@ -16,6 +16,25 @@ def _debug_print(msg: str):
 from utils.parallel_processor_fs import ParallelProcessorFS
 
 
+# Cache format versioning
+# -----------------------
+# We MUST invalidate old cached .pkl files when we change tokenization semantics or sample format.
+# In particular, classification tasks in this repo assume the label is a *single token*; older caches
+# were built when tokenizer.encode() used add_special_tokens=True (default), which can inject BOS/EOS.
+# That makes cached label_ids length > 1 and causes metric crashes like "1 is not in list".
+#
+# Design:
+# - Always include a built-in base version (bumped in code when cache schema changes)
+# - Optionally append a user suffix via env, so you can force-rebuild without editing code
+_BASE_CACHE_FORMAT_VERSION = "fmt3_nospecial"
+_USER_CACHE_FORMAT_SUFFIX = os.environ.get("LAT_CACHE_FORMAT_VERSION") or os.environ.get("DATA_CACHE_FORMAT_VERSION")
+_CACHE_FORMAT_VERSION = (
+    _BASE_CACHE_FORMAT_VERSION
+    if not _USER_CACHE_FORMAT_SUFFIX
+    else f"{_BASE_CACHE_FORMAT_VERSION}-{_USER_CACHE_FORMAT_SUFFIX}"
+)
+
+
 class DatasetBase(ABC):
     shuffle_seeds = [
         123,
@@ -47,6 +66,13 @@ class DatasetBase(ABC):
 
             if subset_size is not None:
                 cache_file_stem += f"_{subset_size}"
+
+            # Cache format versioning:
+            # We changed tokenizer encoding semantics (no special tokens) and cache root layout.
+            # Old caches can silently contain incompatible label tokenization (e.g., BOS=1),
+            # causing evaluation crashes like "1 is not in list". Always namespace cache stems
+            # with a format version to force a one-time rebuild after such changes.
+            cache_file_stem = f"{cache_file_stem}__{_CACHE_FORMAT_VERSION}"
 
             # Cache root:
             # - Prefer putting our preprocessed .pkl caches under a dedicated cache directory
@@ -230,6 +256,7 @@ class DatasetBase(ABC):
         if self.data is not None:
             return
         cache_file_stem = self.get_cache_name()
+        cache_file_stem = f"{cache_file_stem}__{_CACHE_FORMAT_VERSION}"
         cache_root = Path(
             os.environ.get("LAT_DATA_CACHE_DIR")
             or os.environ.get("DATA_CACHE_DIR")
