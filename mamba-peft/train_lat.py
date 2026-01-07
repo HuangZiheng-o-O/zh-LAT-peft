@@ -301,6 +301,58 @@ def build_and_run_trainer_lat(
 
     _eval_batch_size = int(cfg.get("eval_batch_size", 1) or 1)
 
+    # ---------------------------------------------------------------------
+    # Checkpoint policy (disk-safe, paper-style, non-cheating)
+    #
+    # Recommended default:
+    # - save_total_limit=2  (keep last + best)
+    # - load_best_model_at_end=True (select best on *validation*, NOT test)
+    # - metric_for_best_model=eval_loss (always available; lower is better)
+    #
+    # You can override via env:
+    #   HP_SAVE_TOTAL_LIMIT / LAT_SAVE_TOTAL_LIMIT / SAVE_TOTAL_LIMIT
+    #   HP_LOAD_BEST_MODEL_AT_END / LAT_LOAD_BEST_MODEL_AT_END
+    #   HP_METRIC_FOR_BEST_MODEL / LAT_METRIC_FOR_BEST_MODEL
+    #   HP_GREATER_IS_BETTER / LAT_GREATER_IS_BETTER
+    env = os.environ
+    def _env_int_opt(name: str) -> int | None:
+        v = env.get(name)
+        if v is None or str(v).strip() == "":
+            return None
+        try:
+            return int(v)
+        except Exception:
+            return None
+
+    def _env_bool_opt(name: str) -> bool | None:
+        v = env.get(name)
+        if v is None or str(v).strip() == "":
+            return None
+        return str(v).lower() in ("1", "true", "yes", "on")
+
+    save_total_limit = (
+        _env_int_opt("HP_SAVE_TOTAL_LIMIT")
+        or _env_int_opt("LAT_SAVE_TOTAL_LIMIT")
+        or _env_int_opt("SAVE_TOTAL_LIMIT")
+    )
+    if save_total_limit is None:
+        save_total_limit = 2 if not no_save else None
+
+    load_best_model_at_end = (
+        _env_bool_opt("HP_LOAD_BEST_MODEL_AT_END")
+        if _env_bool_opt("HP_LOAD_BEST_MODEL_AT_END") is not None
+        else _env_bool_opt("LAT_LOAD_BEST_MODEL_AT_END")
+    )
+    if load_best_model_at_end is None:
+        load_best_model_at_end = (not no_save) and (not skip_eval)
+
+    metric_for_best_model = env.get("HP_METRIC_FOR_BEST_MODEL") or env.get("LAT_METRIC_FOR_BEST_MODEL") or "eval_loss"
+    greater_is_better_env = env.get("HP_GREATER_IS_BETTER") or env.get("LAT_GREATER_IS_BETTER")
+    if greater_is_better_env is None or str(greater_is_better_env).strip() == "":
+        greater_is_better = False  # eval_loss: lower is better
+    else:
+        greater_is_better = str(greater_is_better_env).lower() in ("1", "true", "yes", "on")
+
     trainer = GenericLMTrainer(
         model=model,
         train_dataset=train_data_module.dataset,
@@ -332,6 +384,10 @@ def build_and_run_trainer_lat(
             save_optimizer_state=_save_optimizer_state,
             save_strategy="steps" if not no_save else "no",
             evaluation_strategy="steps" if not skip_eval else "no",
+            save_total_limit=save_total_limit,
+            load_best_model_at_end=bool(load_best_model_at_end) if not (no_save or skip_eval) else False,
+            metric_for_best_model=str(metric_for_best_model),
+            greater_is_better=bool(greater_is_better),
             save_steps=(
                 save_steps_override
                 if save_steps_override is not None
@@ -370,6 +426,14 @@ def build_and_run_trainer_lat(
     try:
         with gpu_memory_tracker(output_dir):
             trainer.train(resume_from_checkpoint=resume_from_checkpoint)
+        # Write a stable "final" snapshot into output_dir root.
+        # If load_best_model_at_end=True, this is the best checkpoint on validation.
+        if not no_save:
+            try:
+                # GenericLMTrainer.save_model uses HF/PEFT save_pretrained semantics.
+                trainer.save_model(output_dir, _internal_call=True)
+            except Exception as _save_e:
+                print(f"[{log_tag}][warn] Failed to save final model snapshot to {output_dir}: {_save_e}")
         try:
             _fin_env = str(os.environ.get("SWANLAB_EMAIL_ON_FINISH", "1")).lower()
             if _sl_enable and _fin_env in ("1", "true", "yes", "on"):

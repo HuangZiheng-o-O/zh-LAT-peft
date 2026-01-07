@@ -22,6 +22,7 @@ import argparse
 import json
 import os
 import re
+import subprocess
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -99,8 +100,12 @@ def _load_cfg(cfg_path: str) -> Dict[str, Any]:
 
 def _apply_env_overrides(cfg: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Only apply safe env overrides (base model + precision). Eval should not
-    silently mutate dataset/seed metadata because that changes checkpoint dirs.
+    Apply safe env overrides used by train_lat.py so we can locate the correct
+    output/checkpoint directory for a given run.
+
+    Note: In this repo, seed is often injected via env (HP_SEED) rather than written
+    into the YAML. Without mirroring that behavior here, eval would search a wrong
+    output_dir and fail to find adapter checkpoints.
     """
     env = os.environ
     out = dict(cfg)
@@ -111,6 +116,13 @@ def _apply_env_overrides(cfg: Dict[str, Any]) -> Dict[str, Any]:
     prec_env = env.get("LAT_PREC") or env.get("HP_PREC")
     if prec_env:
         out["prec"] = prec_env
+    # Seed override (match train_lat.py)
+    seed_env = env.get("HP_SEED")
+    if seed_env and out.get("seed") is None:
+        try:
+            out["seed"] = int(seed_env)
+        except Exception:
+            pass
     return out
 
 
@@ -154,6 +166,13 @@ def main() -> None:
     parser.add_argument("--model-type", type=str, default="auto", help="gla|retnet|delta_net|mamba2|auto")
     parser.add_argument("--model", type=str, default=None, help="Base model id/path override")
     parser.add_argument("--prec", type=str, default=None, help="bf16|fp16|fp32 override")
+    parser.add_argument(
+        "--backend",
+        type=str,
+        default=None,
+        help="Evaluation backend: 'lat' (internal dataset/*) or 'lm_eval' (EleutherAI lm-evaluation-harness). "
+             "Can also be set via EVAL_BACKEND env.",
+    )
     parser.add_argument("--tasks", type=str, default=None, help="Comma-separated tasks")
     parser.add_argument("--split", type=str, default=None, help="val|test (dataset-dependent; default uses HP_VAL_SPLIT or val)")
     parser.add_argument("--eval-batch-size", type=int, default=None, help="Per-device eval batch size")
@@ -179,6 +198,10 @@ def main() -> None:
     # Eval batch size
     eval_bs = args.eval_batch_size or int(os.environ.get("EVAL_BATCH_SIZE") or os.environ.get("HP_EVAL_BATCH_SIZE") or 64)
     num_workers = args.num_data_workers if args.num_data_workers is not None else int(os.environ.get("NUM_DATA_WORKERS") or 4)
+
+    backend = (args.backend or os.environ.get("EVAL_BACKEND") or "lat").strip().lower()
+    if backend not in {"lat", "lm_eval"}:
+        raise ValueError(f"Unknown --backend={backend}. Expected 'lat' or 'lm_eval'.")
 
     # Load cfg if provided
     cfg: Dict[str, Any] = {}
@@ -249,6 +272,56 @@ def main() -> None:
     peft_tag = peft_dir.name if peft_dir is not None else "base"
     run_dir = out_root / f"{safe_model_type}_{safe_model_id}_{peft_tag}"
     run_dir.mkdir(parents=True, exist_ok=True)
+
+    if backend == "lm_eval":
+        # Use lm-evaluation-harness for evaluation. We intentionally reuse the same loader stack by
+        # calling our wrapper script, which registers the "LAT" model and loads adapters via lat_adapter.
+        script_path = Path(__file__).resolve().parent / "scripts" / "eval" / "lat_lm_harness_eval.py"
+        if not script_path.is_file():
+            raise FileNotFoundError(f"lm_eval wrapper script not found: {script_path}")
+
+        # Construct model_args compatible with scripts/eval/lat_lm_harness_eval.py::LATEvalWrapper
+        # NOTE: include batch_size here to avoid relying on global harness defaults.
+        parts = [
+            f'pretrained="{model_id}"',
+            f"model_type={model_type}",
+            f"prec={prec}",
+            f'peft_weights="{peft_dir}"' if peft_dir is not None else 'peft_weights=""',
+            "trust_remote_code=True",
+            f"batch_size={int(eval_bs)}",
+        ]
+        model_args = ",".join(parts)
+
+        device_arg = "cpu" if device == "cpu" else "cuda:0"
+
+        import sys
+        cmd = [
+            sys.executable,
+            str(script_path),
+            "--model",
+            "LAT",
+            "--model_args",
+            model_args,
+            "--tasks",
+            tasks_str,
+            "--output_path",
+            str(run_dir),
+            "--device",
+            device_arg,
+            "--batch_size",
+            str(int(eval_bs)),
+        ]
+        print(f"[LAT][lm_eval] running: {' '.join(cmd)}", flush=True)
+        try:
+            subprocess.run(cmd, check=True)
+        except FileNotFoundError as e:
+            raise RuntimeError(
+                "Failed to launch lm_eval wrapper. "
+                "Make sure python is available in PATH and lm-evaluation-harness is installed "
+                "(pip install lm-eval)."
+            ) from e
+        print(f"[LAT][lm_eval] Done. Results saved to: {run_dir}")
+        return
 
     all_metrics: Dict[str, Any] = {
         "model_type": model_type,

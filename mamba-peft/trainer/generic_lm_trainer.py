@@ -252,9 +252,17 @@ class GenericLMTrainer(Trainer):
     def save_model(self, output_dir, _internal_call):
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
-        if not getattr(self.args, "save_full_model", False):
+
+        if getattr(self.args, "save_full_model", False):
+            torch.save(self.model, f"{output_dir}/model.pt")
             return
-        torch.save(self.model, f"{output_dir}/model.pt")
+
+        super().save_model(output_dir, _internal_call=_internal_call)
+
+        torch.save(
+            self.model.state_dict(),
+            os.path.join(output_dir, "pytorch_model.bin")
+        )
 
     def _maybe_log_save_evaluate(self, tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval):
         if self.train_loss_early_stop.should_stop:

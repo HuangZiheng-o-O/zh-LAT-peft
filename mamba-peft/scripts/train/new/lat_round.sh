@@ -597,8 +597,16 @@ run_round () {
       echo "[GPU ${GPU}] delaying launch by ${_delay_sec}s (stagger=${_stagger_min}min)"
       sleep "${_delay_sec}"
     fi
-    # Pass MODEL_TYPE and optional model/precision overrides to the unified launcher
-    local -a _cmd=(python "$LAUNCHER_PY" --cfg "$CFG_INJ" --model-type "${MODEL_TYPE}" --overwrite)
+    # Pass MODEL_TYPE and optional model/precision overrides to the unified launcher.
+    # Training mode:
+    # - default: overwrite (fresh run) to match historical behavior
+    # - resume: set LAT_TRAIN_RESUME=1 (or use lat_batch_tmux.sh --resume)
+    local -a _cmd=(python "$LAUNCHER_PY" --cfg "$CFG_INJ" --model-type "${MODEL_TYPE}")
+    if [[ "${LAT_TRAIN_RESUME:-0}" == "1" ]]; then
+      _cmd+=("--resume")
+    elif [[ "${LAT_TRAIN_OVERWRITE:-1}" == "1" ]]; then
+      _cmd+=("--overwrite")
+    fi
     if [[ -n "${LAT_MODEL:-}" ]]; then
       _cmd+=("--model" "${LAT_MODEL}")
     fi
@@ -608,6 +616,9 @@ run_round () {
 
     # Eval command (reuses same cfg, uses env/overrides to locate output + adapter)
     local -a _eval_cmd=(python "$EVAL_PY" --cfg "$CFG_INJ" --model-type "${MODEL_TYPE}")
+    if [[ -n "${EVAL_BACKEND:-}" ]]; then
+      _eval_cmd+=("--backend" "${EVAL_BACKEND}")
+    fi
     if [[ -n "${EVAL_TASKS:-}" ]]; then
       _eval_cmd+=("--tasks" "${EVAL_TASKS}")
     fi

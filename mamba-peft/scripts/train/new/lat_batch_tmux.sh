@@ -43,6 +43,12 @@ EVAL_ONLY="${EVAL_ONLY:-0}"
 EVAL_TASKS="${EVAL_TASKS:-}"
 EVAL_BATCH_SIZE="${EVAL_BATCH_SIZE:-}"
 EVAL_OUTPUT_ROOT="${EVAL_OUTPUT_ROOT:-}"
+EVAL_BACKEND="${EVAL_BACKEND:-}"   # lat | lm_eval (handled in eval_lat.py)
+
+# Train controls (propagated to train_lat.py via lat_round.sh)
+# - default behavior historically was overwrite (always start fresh)
+TRAIN_OVERWRITE="${LAT_TRAIN_OVERWRITE:-1}"
+TRAIN_RESUME="${LAT_TRAIN_RESUME:-0}"
 
 # NEW: Parallelize across --pairs (datasets) for quick smoke-testing.
 # - LAT_BATCH_PAIR_CONCURRENCY=1 (default): sequential
@@ -71,9 +77,12 @@ Options:
   --pissa-fast  Enable fast PiSSA init
   --eval-after-train  Run eval after each training job (calls eval_lat.py)
   --eval-only   Only run eval_lat.py (no training)
+  --eval-backend Eval backend: lat|lm_eval (default: lat)
   --eval-tasks  Comma-separated tasks for eval_lat.py (default handled in eval_lat.py)
   --eval-batch-size  Eval batch size override
   --eval-output-root Where to write eval outputs (default: mamba-peft/outputs/lm_eval/)
+  --resume      Resume training if output_dir exists (train_lat.py --resume). Disables overwrite.
+  --overwrite   Force overwrite training output_dir (default behavior). Disables resume.
   --pairs-parallel <N|auto>  Run multiple SEED:DATA pairs concurrently (default: 1 / sequential)
   --pair-gpu-plan <N>        Per-dataset GPU_PLAN when pairs-parallel is enabled (default: infer or 1)
   -h, --help    Show this help
@@ -112,9 +121,12 @@ while [[ $# -gt 0 ]]; do
     --pissa-fast) PISSA_FAST=1; shift 1;;
     --eval-after-train) EVAL_AFTER_TRAIN=1; shift 1;;
     --eval-only)  EVAL_ONLY=1; shift 1;;
+    --eval-backend) EVAL_BACKEND="$2"; shift 2;;
     --eval-tasks) EVAL_TASKS="$2"; shift 2;;
     --eval-batch-size) EVAL_BATCH_SIZE="$2"; shift 2;;
     --eval-output-root) EVAL_OUTPUT_ROOT="$2"; shift 2;;
+    --resume)     TRAIN_RESUME=1; TRAIN_OVERWRITE=0; shift 1;;
+    --overwrite)  TRAIN_OVERWRITE=1; TRAIN_RESUME=0; shift 1;;
     --pairs-parallel) PAIR_CONCURRENCY="$2"; shift 2;;
     --pair-gpu-plan)  PAIR_GPU_PLAN="$2"; shift 2;;
     -h|--help)    print_help; exit 0;;
@@ -180,6 +192,9 @@ HDR
   printf 'export EVAL_TASKS=%q\n' "${EVAL_TASKS:-}"
   printf 'export EVAL_BATCH_SIZE=%q\n' "${EVAL_BATCH_SIZE:-}"
   printf 'export EVAL_OUTPUT_ROOT=%q\n' "${EVAL_OUTPUT_ROOT:-}"
+  printf 'export EVAL_BACKEND=%q\n' "${EVAL_BACKEND:-}"
+  printf 'export LAT_TRAIN_OVERWRITE=%q\n' "${TRAIN_OVERWRITE:-1}"
+  printf 'export LAT_TRAIN_RESUME=%q\n' "${TRAIN_RESUME:-0}"
   printf 'export GPU_IDS=%q\n' "${GPU_IDS:-}"
   printf 'export GPU_PLAN=%q\n' "${GPU_PLAN:-}"
   printf 'export LAT_BATCH_PAIR_CONCURRENCY=%q\n' "${PAIR_CONCURRENCY:-1}"
