@@ -44,6 +44,14 @@ EVAL_TASKS="${EVAL_TASKS:-}"
 EVAL_BATCH_SIZE="${EVAL_BATCH_SIZE:-}"
 EVAL_OUTPUT_ROOT="${EVAL_OUTPUT_ROOT:-}"
 
+# NEW: Parallelize across --pairs (datasets) for quick smoke-testing.
+# - LAT_BATCH_PAIR_CONCURRENCY=1 (default): sequential
+# - LAT_BATCH_PAIR_CONCURRENCY=auto: run up to one dataset per GPU (from --gpus / GPU_IDS)
+# - LAT_BATCH_PAIR_CONCURRENCY=N: run up to N datasets concurrently
+# Each dataset job will be pinned to a single GPU from the GPU list (round-robin).
+PAIR_CONCURRENCY="${LAT_BATCH_PAIR_CONCURRENCY:-${BATCH_PAIR_CONCURRENCY:-1}}"
+PAIR_GPU_PLAN="${LAT_BATCH_PAIR_GPU_PLAN:-${BATCH_PAIR_GPU_PLAN:-}}"
+
 print_help() {
   cat <<'EOF'
 Usage:
@@ -66,10 +74,14 @@ Options:
   --eval-tasks  Comma-separated tasks for eval_lat.py (default handled in eval_lat.py)
   --eval-batch-size  Eval batch size override
   --eval-output-root Where to write eval outputs (default: mamba-peft/outputs/lm_eval/)
+  --pairs-parallel <N|auto>  Run multiple SEED:DATA pairs concurrently (default: 1 / sequential)
+  --pair-gpu-plan <N>        Per-dataset GPU_PLAN when pairs-parallel is enabled (default: infer or 1)
   -h, --help    Show this help
 
 Environment:
   MODEL_TYPE    Can also be set via environment variable
+  LAT_BATCH_PAIR_CONCURRENCY  1|auto|N (parallelize across --pairs)
+  LAT_BATCH_PAIR_GPU_PLAN     Per-pair GPU_PLAN when pairs-parallel is enabled
 
 Example:
   # GLA training (default)
@@ -103,6 +115,8 @@ while [[ $# -gt 0 ]]; do
     --eval-tasks) EVAL_TASKS="$2"; shift 2;;
     --eval-batch-size) EVAL_BATCH_SIZE="$2"; shift 2;;
     --eval-output-root) EVAL_OUTPUT_ROOT="$2"; shift 2;;
+    --pairs-parallel) PAIR_CONCURRENCY="$2"; shift 2;;
+    --pair-gpu-plan)  PAIR_GPU_PLAN="$2"; shift 2;;
     -h|--help)    print_help; exit 0;;
     *)            echo "Unknown arg: $1" >&2; print_help; exit 2;;
   esac
@@ -168,6 +182,8 @@ HDR
   printf 'export EVAL_OUTPUT_ROOT=%q\n' "${EVAL_OUTPUT_ROOT:-}"
   printf 'export GPU_IDS=%q\n' "${GPU_IDS:-}"
   printf 'export GPU_PLAN=%q\n' "${GPU_PLAN:-}"
+  printf 'export LAT_BATCH_PAIR_CONCURRENCY=%q\n' "${PAIR_CONCURRENCY:-1}"
+  printf 'export LAT_BATCH_PAIR_GPU_PLAN=%q\n' "${PAIR_GPU_PLAN:-}"
   printf 'export PISSA_FAST=%q\n' "${PISSA_FAST:-0}"
   printf 'export LAT_MODEL=%q\n' "${LAT_MODEL:-}"
   printf 'export LAT_PREC=%q\n' "${LAT_PREC:-}"
@@ -246,6 +262,75 @@ for j in "${JOBS[@]}"; do echo "  - $j"; done
 echo ""
 
 idx=0
+# pairs-parallel settings
+pair_conc="${LAT_BATCH_PAIR_CONCURRENCY:-1}"
+pair_gpu_plan="${LAT_BATCH_PAIR_GPU_PLAN:-}"
+
+# Normalize GPU list for assignment (when pinning one dataset per GPU)
+gpu_list_str="${GPU_IDS:-}"
+gpu_list_str="${gpu_list_str//,/ }"
+declare -a GPU_LIST=()
+for tok in $gpu_list_str; do
+  [[ -n "$tok" ]] && GPU_LIST+=("$tok")
+done
+num_gpus="${#GPU_LIST[@]}"
+
+if [[ "$pair_conc" == "auto" ]]; then
+  if (( num_gpus > 0 )); then
+    pair_conc="$num_gpus"
+  else
+    pair_conc="1"
+  fi
+fi
+if ! [[ "$pair_conc" =~ ^[0-9]+$ ]]; then
+  pair_conc="1"
+fi
+if (( pair_conc < 1 )); then
+  pair_conc="1"
+fi
+
+# Infer a single-int GPU_PLAN for per-pair pinning
+if [[ -z "$pair_gpu_plan" ]]; then
+  plan_str="${GPU_PLAN:-}"
+  plan_str="${plan_str//,/ }"
+  declare -a _plan_arr=()
+  if [[ -n "$plan_str" ]]; then
+    read -r -a _plan_arr <<<"$plan_str"
+  fi
+  if (( ${#_plan_arr[@]} == 0 )); then
+    pair_gpu_plan="1"
+  elif (( ${#_plan_arr[@]} == 1 )); then
+    pair_gpu_plan="${_plan_arr[0]}"
+  else
+    all_eq=1
+    first="${_plan_arr[0]}"
+    for v in "${_plan_arr[@]}"; do
+      if [[ "$v" != "$first" ]]; then all_eq=0; break; fi
+    done
+    if (( all_eq )); then
+      pair_gpu_plan="$first"
+    else
+      pair_gpu_plan="1"
+      echo "[lat_batch_tmux][warn] GPU_PLAN varies per GPU; set LAT_BATCH_PAIR_GPU_PLAN=<N> for pairs-parallel pinning."
+    fi
+  fi
+fi
+
+supports_wait_n=0
+if [[ -n "${BASH_VERSINFO[0]:-}" ]]; then
+  if (( BASH_VERSINFO[0] > 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] >= 3) )); then
+    supports_wait_n=1
+  fi
+fi
+
+declare -a PAIR_PIDS=()
+
+echo "[lat_batch_tmux] pairs-parallel concurrency=${pair_conc} (num_gpus=${num_gpus}, per_pair_gpu_plan=${pair_gpu_plan})"
+if (( pair_conc > 1 )) && (( num_gpus == 0 )); then
+  echo "[lat_batch_tmux][warn] pairs-parallel requested but no --gpus/GPU_IDS provided; falling back to sequential."
+  pair_conc=1
+fi
+
 for item in "${JOBS[@]}"; do
   idx=$((idx+1))
   seed="${item%%:*}"
@@ -263,31 +348,102 @@ for item in "${JOBS[@]}"; do
   chmod +x "$tmp_launcher"
   cleanup_tmpfiles+=("$tmp_launcher")
 
-  echo "[$(date +%F_%T)] START idx=${idx} model=${MODEL_TYPE} seed=${seed} data=${data}  -> ${log_file}"
-  job_start_epoch="$(date +%s)"
-  (
-    cd "$SCRIPT_DIR"
-    GPU_IDS="$GPU_IDS" GPU_PLAN="$GPU_PLAN" DATA="$data" MODEL_TYPE="$MODEL_TYPE" \
-      HP_PISSA_FAST="$PISSA_FAST" \
-      SWANLAB_ENABLE="$SWANLAB_ENABLE" SWANLAB_MODE="$SWANLAB_MODE" \
-      SWANLAB_PROJECT="$SWANLAB_PROJECT" SWANLAB_EXPERIMENT_PREFIX="$SWANLAB_EXPERIMENT_PREFIX" \
-      SWANLAB_LOGDIR="$SWANLAB_LOGDIR" SWANLAB_EMAIL_YAML="$SWANLAB_EMAIL_YAML" \
-      SPIDER_LOCAL_DIR="$SPIDER_LOCAL_DIR" NLTK_DATA="$NLTK_DATA" \
-      bash "$tmp_launcher" "$SUITE" "$ROUND" 2>&1 | tee "$log_file"
-  )
-  status=$?
-  job_end_epoch="$(date +%s)"
-  job_elapsed=$(( job_end_epoch - job_start_epoch ))
-  job_h=$(( job_elapsed / 3600 ))
-  job_m=$(( (job_elapsed % 3600) / 60 ))
-  job_s=$(( job_elapsed % 60 ))
-  printf '[%s] END   idx=%s model=%s seed=%s data=%s  status=%s  elapsed=%02d:%02d:%02d (%ds)\n' \
-    "$(date +%F_%T)" "$idx" "$MODEL_TYPE" "$seed" "$data" "$status" "$job_h" "$job_m" "$job_s" "$job_elapsed" | tee -a "$log_file"
-  if [[ $status -ne 0 ]]; then
-    echo "Job failed (idx=${idx}). Stopping the batch." | tee -a "$log_file"
-    exit $status
+  # Default: reuse global GPU_IDS/GPU_PLAN
+  job_gpu_ids="${GPU_IDS:-}"
+  job_gpu_plan="${GPU_PLAN:-}"
+
+  # In parallel mode, pin each pair to a single GPU (round-robin) + single-int GPU_PLAN
+  if (( pair_conc > 1 )); then
+    gi=$(( (idx - 1) % num_gpus ))
+    job_gpu_ids="${GPU_LIST[$gi]}"
+    job_gpu_plan="${pair_gpu_plan}"
   fi
+
+  echo "[$(date +%F_%T)] START idx=${idx} model=${MODEL_TYPE} seed=${seed} data=${data} gpus='${job_gpu_ids}' plan='${job_gpu_plan}' -> ${log_file}"
+  (
+    job_start_epoch="$(date +%s)"
+    (
+      cd "$SCRIPT_DIR"
+      GPU_IDS="$job_gpu_ids" GPU_PLAN="$job_gpu_plan" DATA="$data" MODEL_TYPE="$MODEL_TYPE" \
+        HP_PISSA_FAST="$PISSA_FAST" \
+        SWANLAB_ENABLE="$SWANLAB_ENABLE" SWANLAB_MODE="$SWANLAB_MODE" \
+        SWANLAB_PROJECT="$SWANLAB_PROJECT" SWANLAB_EXPERIMENT_PREFIX="$SWANLAB_EXPERIMENT_PREFIX" \
+        SWANLAB_LOGDIR="$SWANLAB_LOGDIR" SWANLAB_EMAIL_YAML="$SWANLAB_EMAIL_YAML" \
+        SPIDER_LOCAL_DIR="$SPIDER_LOCAL_DIR" NLTK_DATA="$NLTK_DATA" \
+        bash "$tmp_launcher" "$SUITE" "$ROUND" 2>&1 | sed -u "s/^/[${sess_step}] /" | tee "$log_file"
+    )
+    status=$?
+    job_end_epoch="$(date +%s)"
+    job_elapsed=$(( job_end_epoch - job_start_epoch ))
+    job_h=$(( job_elapsed / 3600 ))
+    job_m=$(( (job_elapsed % 3600) / 60 ))
+    job_s=$(( job_elapsed % 60 ))
+    printf '[%s] END   idx=%s model=%s seed=%s data=%s  status=%s  elapsed=%02d:%02d:%02d (%ds)\n' \
+      "$(date +%F_%T)" "$idx" "$MODEL_TYPE" "$seed" "$data" "$status" "$job_h" "$job_m" "$job_s" "$job_elapsed" | tee -a "$log_file"
+    exit "$status"
+  ) &
+  pid="$!"
+  PAIR_PIDS+=("$pid")
+
+  # Sequential mode: wait immediately to keep original fail-fast behavior
+  if (( pair_conc <= 1 )); then
+    if ! wait "$pid"; then
+      exit 1
+    fi
+    PAIR_PIDS=()
+    continue
+  fi
+
+  # Parallel mode: enforce concurrency with wait -n (or fallback)
+  while (( ${#PAIR_PIDS[@]} >= pair_conc )); do
+    if (( supports_wait_n )); then
+      if ! wait -n; then
+        echo "[lat_batch_tmux][error] One pair job failed. Stopping remaining jobs."
+        for p in "${PAIR_PIDS[@]}"; do kill -TERM "$p" 2>/dev/null || true; done
+        exit 1
+      fi
+    else
+      p0="${PAIR_PIDS[0]}"
+      if ! wait "$p0"; then
+        echo "[lat_batch_tmux][error] One pair job failed. Stopping remaining jobs."
+        for p in "${PAIR_PIDS[@]}"; do kill -TERM "$p" 2>/dev/null || true; done
+        exit 1
+      fi
+    fi
+    # Prune finished PIDs
+    new_pids=()
+    for p in "${PAIR_PIDS[@]}"; do
+      if kill -0 "$p" 2>/dev/null; then
+        new_pids+=("$p")
+      fi
+    done
+    PAIR_PIDS=("${new_pids[@]:-}")
+  done
 done
+
+# Wait remaining background jobs in parallel mode
+if (( pair_conc > 1 )); then
+  if (( supports_wait_n )); then
+    while (( ${#PAIR_PIDS[@]} > 0 )); do
+      if ! wait -n; then
+        echo "[lat_batch_tmux][error] One pair job failed. Stopping remaining jobs."
+        for p in "${PAIR_PIDS[@]}"; do kill -TERM "$p" 2>/dev/null || true; done
+        exit 1
+      fi
+      new_pids=()
+      for p in "${PAIR_PIDS[@]}"; do
+        if kill -0 "$p" 2>/dev/null; then
+          new_pids+=("$p")
+        fi
+      done
+      PAIR_PIDS=("${new_pids[@]:-}")
+    done
+  else
+    for p in "${PAIR_PIDS[@]}"; do
+      wait "$p"
+    done
+  fi
+fi
 
 echo "All jobs finished successfully (MODEL_TYPE=${MODEL_TYPE})."
 BODY
