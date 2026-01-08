@@ -640,7 +640,7 @@ def run_train(
 def get_output_path_for_cfg(cfg_path, cfg, model_type: str = "gla"):
     """
     Target path:
-      <NOW_OUTPUT_ROOT>/<model_type>/<DATASET_ROOT_NAME>/<data>_seed<seed>/<yaml_stem>
+      <NOW_OUTPUT_ROOT>/<model_type>/<data>_seed<seed>/<yaml_stem>
     Fallback (missing data/seed):
       <NOW_OUTPUT_ROOT>/<model_type>/<DATASET_ROOT_NAME>/cola_gla/<yaml_stem>
 
@@ -659,11 +659,13 @@ def get_output_path_for_cfg(cfg_path, cfg, model_type: str = "gla"):
     # Normalize model_type to lowercase for consistent path naming
     model_type = model_type.lower()
 
-    base_dir = NOW_OUTPUT_ROOT / model_type / DATASET_ROOT_NAME
-
     if data and seed is not None:
+        # For datasets with explicit data name: <model_type>/<data>_seed<seed>/<yaml_stem>
         folder = f"{data}_seed{seed}"
-        return base_dir / folder / yaml_stem
+        return NOW_OUTPUT_ROOT / model_type / folder / yaml_stem
+
+    # Fallback: use DATASET_ROOT_NAME (glue) for backward compatibility
+    base_dir = NOW_OUTPUT_ROOT / model_type / DATASET_ROOT_NAME
     return base_dir / "cola_gla" / yaml_stem
 
 
