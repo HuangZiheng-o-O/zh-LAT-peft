@@ -45,8 +45,22 @@ class DatasetBase(ABC):
     
     def __init__(self, tokenizer: transformers.AutoTokenizer, path: str, split="train", prompt_prefix=None,
                  use_cache=True, num_parallel_workers=16, subset_size=None, mode="lm", max_seqlen=None):
-        _debug_print(f"DatasetBase.__init__ START: path={path}, split={split}, use_cache={use_cache}, num_parallel_workers={num_parallel_workers}")
+        # Allow env override to fully utilize CPU during one-time cache building.
+        # This only affects the preprocessing stage (cache construction), not DataLoader workers.
+        env_workers = os.environ.get("LAT_DATA_PREPROC_WORKERS") or os.environ.get("DATA_PREPROC_WORKERS")
+        if env_workers is not None and str(env_workers).strip() != "":
+            s = str(env_workers).strip().lower()
+            if s == "auto":
+                num_parallel_workers = int(os.cpu_count() or num_parallel_workers)
+            else:
+                num_parallel_workers = int(env_workers)
+
+        _debug_print(
+            f"DatasetBase.__init__ START: path={path}, split={split}, use_cache={use_cache}, "
+            f"num_parallel_workers={num_parallel_workers}"
+        )
         super().__init__()
+
 
         self.path = path
         self.split = split
