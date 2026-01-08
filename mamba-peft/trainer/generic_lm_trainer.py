@@ -104,10 +104,7 @@ class GenericLMTrainer(Trainer):
 
         # Optional model-specific hook; safe no-op if absent
         if hasattr(model, "load_config"):
-            try:
-                model.load_config(self.args.output_dir)
-            except Exception:
-                pass
+            model.load_config(self.args.output_dir)
 
     def log_train_seq(self, input_ids, label_ids, lm_logits, idx=0):
         input_ids, label_ids, lm_logits = input_ids[idx], label_ids[idx], lm_logits[idx]
@@ -178,10 +175,8 @@ class GenericLMTrainer(Trainer):
         lm_loss = self.train_crit(lm_logits, label_ids)
         if getattr(model, "should_training_stop", False):
             if hasattr(model, "save_config"):
-                try:
-                    model.save_config(self.args.output_dir)
-                except Exception:
-                    pass
+                # Fail-fast: if model exposes save_config(), saving errors should surface.
+                model.save_config(self.args.output_dir)
                 self.control.should_training_stop = True
         self.train_loss_early_stop(self.control, lm_loss)
         return lm_loss
@@ -257,12 +252,9 @@ class GenericLMTrainer(Trainer):
             torch.save(self.model, f"{output_dir}/model.pt")
             return
 
-        super().save_model(output_dir, _internal_call=_internal_call)
-
-        torch.save(
-            self.model.state_dict(),
-            os.path.join(output_dir, "pytorch_model.bin")
-        )
+        # Fail-fast: rely on HF/PEFT save_pretrained() semantics.
+        # For PEFT models, this saves adapter weights (adapter_config.json + adapter_model.*).
+        return super().save_model(output_dir, _internal_call=_internal_call)
 
     def _maybe_log_save_evaluate(self, tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval):
         if self.train_loss_early_stop.should_stop:
@@ -271,23 +263,14 @@ class GenericLMTrainer(Trainer):
 
     def _save_optimizer_and_scheduler(self, output_dir: str):
         if not getattr(self.args, "save_optimizer_state", True):
-            try:
-                os.makedirs(output_dir, exist_ok=True)
-            except Exception:
-                pass
-            return
-        try:
             os.makedirs(output_dir, exist_ok=True)
-        except Exception:
-            pass
+            return
+        os.makedirs(output_dir, exist_ok=True)
         return super()._save_optimizer_and_scheduler(output_dir)
 
     def _save_rng_state(self, output_dir: str):
         if not getattr(self.args, "save_optimizer_state", True):
-            try:
-                os.makedirs(output_dir, exist_ok=True)
-            except Exception:
-                pass
+            os.makedirs(output_dir, exist_ok=True)
             return
         return super()._save_rng_state(output_dir)
 

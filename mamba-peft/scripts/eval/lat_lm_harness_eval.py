@@ -121,32 +121,18 @@ class LATEvalWrapper(HFLM):
         # Match common lm_eval expectations (and reference MambaPEFT wrapper):
         # - left padding for batched loglikelihood
         # - pad token set (prefer eos)
-        try:
+        if hasattr(tokenizer, "padding_side"):
             tokenizer.padding_side = "left"
-        except Exception:
-            pass
-        try:
-            if getattr(tokenizer, "pad_token_id", None) is None:
-                eos_id = getattr(tokenizer, "eos_token_id", None)
-                if eos_id is not None:
-                    tokenizer.pad_token_id = eos_id
-        except Exception:
-            pass
+        if getattr(tokenizer, "pad_token_id", None) is None:
+            eos_id = getattr(tokenizer, "eos_token_id", None)
+            if eos_id is not None:
+                tokenizer.pad_token_id = eos_id
 
-        try:
-            if hasattr(model, "config"):
-                model.config.use_cache = False
-        except Exception:
-            pass
+        if hasattr(model, "config") and hasattr(model.config, "use_cache"):
+            model.config.use_cache = False
 
-        try:
-            model.to(self._device)
-        except Exception:
-            pass
-        try:
-            model.eval()
-        except Exception:
-            pass
+        model.to(self._device)
+        model.eval()
 
         self._model = model
         self.tokenizer = tokenizer

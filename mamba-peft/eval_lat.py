@@ -119,10 +119,7 @@ def _apply_env_overrides(cfg: Dict[str, Any]) -> Dict[str, Any]:
     # Seed override (match train_lat.py)
     seed_env = env.get("HP_SEED")
     if seed_env and out.get("seed") is None:
-        try:
-            out["seed"] = int(seed_env)
-        except Exception:
-            pass
+        out["seed"] = int(seed_env)
     return out
 
 
@@ -152,12 +149,8 @@ def _compute_output_dir_from_train_lat(cfg_path: str, cfg: Dict[str, Any], model
     """
     Reuse train_lat.py's output_dir logic to locate adapter checkpoints for this config.
     """
-    try:
-        import train_lat  # local import (mamba-peft/train_lat.py)
-
-        return Path(train_lat.get_output_path_for_cfg(cfg_path, cfg, model_type=model_type))
-    except Exception:
-        return None
+    import train_lat  # local import (mamba-peft/train_lat.py)
+    return Path(train_lat.get_output_path_for_cfg(cfg_path, cfg, model_type=model_type))
 
 
 def main() -> None:
@@ -256,11 +249,8 @@ def main() -> None:
         model = attach_peft_weights(model, str(peft_dir), torch_dtype=dtype)
 
     # Safety: disable caching in eval (matches GenericLMTrainer logic)
-    try:
-        if hasattr(model, "config"):
-            model.config.use_cache = False
-    except Exception:
-        pass
+    if hasattr(model, "config") and hasattr(model.config, "use_cache"):
+        model.config.use_cache = False
 
     # Output root
     out_root = Path(args.output_root).expanduser() if args.output_root else DEFAULT_EVAL_OUT_ROOT

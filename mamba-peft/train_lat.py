@@ -168,16 +168,13 @@ def build_and_run_trainer_lat(
     print("Loaded model")
 
     # Force left padding for decoder-only generation
-    try:
-        _force_left = get_lat_env_bool("FORCE_LEFT_PAD", "1")
-        if _force_left and hasattr(tokenizer, "padding_side"):
-            tokenizer.padding_side = "left"
-            if getattr(tokenizer, "pad_token_id", None) is None and getattr(tokenizer, "eos_token", None) is not None:
-                tokenizer.pad_token = tokenizer.eos_token
-            if get_lat_env_bool("VERBOSE"):
-                print(f"[{log_tag}] Using left padding for decoder-only generation.")
-    except Exception as _e:
-        print(f"[{log_tag}][warn] Failed to enforce left padding policy early: {_e}")
+    _force_left = get_lat_env_bool("FORCE_LEFT_PAD", "1")
+    if _force_left and hasattr(tokenizer, "padding_side"):
+        tokenizer.padding_side = "left"
+        if getattr(tokenizer, "pad_token_id", None) is None and getattr(tokenizer, "eos_token", None) is not None:
+            tokenizer.pad_token = tokenizer.eos_token
+        if get_lat_env_bool("VERBOSE"):
+            print(f"[{log_tag}] Using left padding for decoder-only generation.")
 
     # Build train data module (reuse pre-built module when provided)
     if train_data_module is None:
@@ -231,11 +228,10 @@ def build_and_run_trainer_lat(
 
     # DataLoader configuration from env
     def _env_int(name: str, default: int) -> int:
-        try:
-            v = os.environ.get(name)
-            return int(v) if v is not None else default
-        except Exception:
+        v = os.environ.get(name)
+        if v is None or str(v).strip() == "":
             return default
+        return int(v)
 
     _prefetch = _env_int("DATALOADER_PREFETCH_FACTOR", 2)
     _pin_memory = _env_bool("DATALOADER_PIN_MEMORY", True)
@@ -319,10 +315,7 @@ def build_and_run_trainer_lat(
         v = env.get(name)
         if v is None or str(v).strip() == "":
             return None
-        try:
-            return int(v)
-        except Exception:
-            return None
+        return int(v)
 
     def _env_bool_opt(name: str) -> bool | None:
         v = env.get(name)
@@ -349,9 +342,32 @@ def build_and_run_trainer_lat(
     metric_for_best_model = env.get("HP_METRIC_FOR_BEST_MODEL") or env.get("LAT_METRIC_FOR_BEST_MODEL") or "eval_loss"
     greater_is_better_env = env.get("HP_GREATER_IS_BETTER") or env.get("LAT_GREATER_IS_BETTER")
     if greater_is_better_env is None or str(greater_is_better_env).strip() == "":
-        greater_is_better = False  # eval_loss: lower is better
+        # Infer direction to avoid accidental "pick worst checkpoint" bugs.
+        m = str(metric_for_best_model).lower()
+        greater_is_better = not any(k in m for k in ("loss", "ppl", "perplexity"))
     else:
         greater_is_better = str(greater_is_better_env).lower() in ("1", "true", "yes", "on")
+
+    # Compute step intervals once (and validate best-model constraints)
+    _steps_per_epoch = int(
+        len(train_data_module.dataset) // batch_size
+        + (len(train_data_module.dataset) % batch_size > 0)
+    )
+    if _steps_per_epoch <= 0:
+        raise ValueError(f"[{log_tag}] steps_per_epoch computed as {_steps_per_epoch} (dataset too small?)")
+    _default_interval = int(eval_epochs * _steps_per_epoch)
+    _save_steps = int(save_steps_override) if save_steps_override is not None else int(_default_interval)
+    _eval_steps = int(eval_steps_override) if eval_steps_override is not None else int(_default_interval)
+    if _save_steps <= 0 or _eval_steps <= 0:
+        raise ValueError(f"[{log_tag}] save_steps={_save_steps}, eval_steps={_eval_steps} must be > 0")
+    # HF Trainer requirement: when load_best_model_at_end and step-based, save_steps must be multiple of eval_steps.
+    if bool(load_best_model_at_end) and (not no_save) and (not skip_eval):
+        if _save_steps % _eval_steps != 0:
+            raise ValueError(
+                f"[{log_tag}] Invalid steps for load_best_model_at_end: save_steps({_save_steps}) "
+                f"must be a multiple of eval_steps({_eval_steps}). "
+                "Recommend setting HP_SAVE_STEPS == HP_EVAL_STEPS."
+            )
 
     trainer = GenericLMTrainer(
         model=model,
@@ -388,28 +404,8 @@ def build_and_run_trainer_lat(
             load_best_model_at_end=bool(load_best_model_at_end) if not (no_save or skip_eval) else False,
             metric_for_best_model=str(metric_for_best_model),
             greater_is_better=bool(greater_is_better),
-            save_steps=(
-                save_steps_override
-                if save_steps_override is not None
-                else int(
-                    eval_epochs
-                    * (
-                        len(train_data_module.dataset) // batch_size
-                        + (len(train_data_module.dataset) % batch_size > 0)
-                    )
-                )
-            ),
-            eval_steps=(
-                eval_steps_override
-                if eval_steps_override is not None
-                else int(
-                    eval_epochs
-                    * (
-                        len(train_data_module.dataset) // batch_size
-                        + (len(train_data_module.dataset) % batch_size > 0)
-                    )
-                )
-            ),
+            save_steps=_save_steps,
+            eval_steps=_eval_steps,
             dataloader_drop_last=True,
             report_to="none",
             seed=seed,
@@ -545,13 +541,10 @@ def run_train(
     # Force left padding
     force_left = get_lat_env_bool("FORCE_LEFT_PAD", "1")
     if force_left:
-        try:
-            tokenizer_obj.padding_side = "left"
-            if getattr(tokenizer_obj, "pad_token_id", None) is None and getattr(tokenizer_obj, "eos_token", None) is not None:
-                tokenizer_obj.pad_token = tokenizer_obj.eos_token
-            print(f"[{log_tag}] Using left padding for decoder-only generation.")
-        except Exception as e:
-            print(f"[{log_tag}][warn] Failed to enforce left padding policy: {e}")
+        tokenizer_obj.padding_side = "left"
+        if getattr(tokenizer_obj, "pad_token_id", None) is None and getattr(tokenizer_obj, "eos_token", None) is not None:
+            tokenizer_obj.pad_token = tokenizer_obj.eos_token
+        print(f"[{log_tag}] Using left padding for decoder-only generation.")
     else:
         print(f"[{log_tag}] Respecting tokenizer's original padding policy.")
     # Build train data module once (reuse for both length calc and trainer)
@@ -566,31 +559,19 @@ def run_train(
     # Logging and steps configuration with env overrides
     env = os.environ
     logging_steps = min(50, its_per_epoch)
-    try:
-        if env.get("HP_LOGGING_STEPS"):
-            logging_steps = int(env.get("HP_LOGGING_STEPS"))
-    except Exception:
-        pass
+    if env.get("HP_LOGGING_STEPS"):
+        logging_steps = int(env.get("HP_LOGGING_STEPS"))
 
     total_steps = int(num_epochs * its_per_epoch)
-    try:
-        if env.get("HP_MAX_STEPS"):
-            total_steps = int(env.get("HP_MAX_STEPS"))
-    except Exception:
-        pass
+    if env.get("HP_MAX_STEPS"):
+        total_steps = int(env.get("HP_MAX_STEPS"))
 
     eval_steps_override = None
     save_steps_override = None
-    try:
-        if env.get("HP_EVAL_STEPS"):
-            eval_steps_override = int(env.get("HP_EVAL_STEPS"))
-    except Exception:
-        pass
-    try:
-        if env.get("HP_SAVE_STEPS"):
-            save_steps_override = int(env.get("HP_SAVE_STEPS"))
-    except Exception:
-        pass
+    if env.get("HP_EVAL_STEPS"):
+        eval_steps_override = int(env.get("HP_EVAL_STEPS"))
+    if env.get("HP_SAVE_STEPS"):
+        save_steps_override = int(env.get("HP_SAVE_STEPS"))
 
     os.environ["WANDB_NAME"] = str(output_dir).replace("weights/", "")
 
@@ -683,19 +664,23 @@ def _find_last_checkpoint(root: Path) -> Optional[Path]:
     """
     if not root.exists():
         return None
-    try:
-        candidates = [p for p in root.glob("checkpoint-*") if p.is_dir()]
-        if not candidates:
-            return None
-        def step_of(p: Path) -> int:
-            try:
-                return int(p.name.split("-")[-1])
-            except Exception:
-                return -1
-        candidates.sort(key=step_of)
-        return candidates[-1] if candidates else None
-    except Exception:
+    candidates = [p for p in root.glob("checkpoint-*") if p.is_dir()]
+    if not candidates:
         return None
+    def step_of(p: Path) -> int:
+        # Expected format: checkpoint-<int>. Non-matching folders sort to -1.
+        parts = p.name.split("-")
+        if len(parts) != 2:
+            return -1
+        try:
+            return int(parts[1])
+        except ValueError:
+            return -1
+    candidates.sort(key=step_of)
+    best = candidates[-1] if candidates else None
+    if best is None or step_of(best) < 0:
+        return None
+    return best
 
 
 def main():
