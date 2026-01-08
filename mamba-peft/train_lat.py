@@ -167,6 +167,11 @@ def build_and_run_trainer_lat(
     print_trainable_parameter_names(model, output_dir=output_dir, cfg_path=cfg_path)
     print("Loaded model")
 
+    # Optional dataset-side max length filter (matches MambaPEFT cutoff_len behavior).
+    # If set, samples with (prompt+label) token length > max_seqlen are dropped at preprocessing time.
+    _max_seqlen_env = os.environ.get("HP_MAX_SEQLEN") or os.environ.get("LAT_MAX_SEQLEN")
+    max_seqlen = int(_max_seqlen_env) if _max_seqlen_env not in (None, "") else None
+
     # Force left padding for decoder-only generation
     _force_left = get_lat_env_bool("FORCE_LEFT_PAD", "1")
     if _force_left and hasattr(tokenizer, "padding_side"):
@@ -178,7 +183,7 @@ def build_and_run_trainer_lat(
 
     # Build train data module (reuse pre-built module when provided)
     if train_data_module is None:
-        train_data_module = load_dataset(data, tokenizer, "train", return_module=True)
+        train_data_module = load_dataset(data, tokenizer, "train", return_module=True, max_seqlen=max_seqlen)
 
     # Save cfg.yaml
     Path(output_dir).mkdir(parents=True, exist_ok=True)
@@ -207,6 +212,7 @@ def build_and_run_trainer_lat(
             val_data_split,
             mode="lm" if eval_generator is None else "gen",
             return_module=True,
+            max_seqlen=max_seqlen,
         )
     compute_metrics = val_data_module.dataset.compute_metrics
 
@@ -547,9 +553,12 @@ def run_train(
         print(f"[{log_tag}] Using left padding for decoder-only generation.")
     else:
         print(f"[{log_tag}] Respecting tokenizer's original padding policy.")
+    # Optional dataset-side max length filter (matches MambaPEFT cutoff_len behavior).
+    _max_seqlen_env = os.environ.get("HP_MAX_SEQLEN") or os.environ.get("LAT_MAX_SEQLEN")
+    max_seqlen = int(_max_seqlen_env) if _max_seqlen_env not in (None, "") else None
     # Build train data module once (reuse for both length calc and trainer)
     train_data_module = load_dataset(
-        data, tokenizer_obj, "train", return_module=True
+        data, tokenizer_obj, "train", return_module=True, max_seqlen=max_seqlen
     )
 
     its_per_epoch = int(
