@@ -76,7 +76,7 @@ export GRADIENT_CHECKPOINTING=true
 export LOGITS_TO_KEEP=1
 
 ./lat_batch_tmux.sh \
-  --suite E125 \
+  --suite E13 \
   --round all \
   --pairs "87:spider-tvt" \
   --gpus "0 1 3 4 6" \
@@ -129,7 +129,7 @@ export SAMSUM_LOCAL_DIR=/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/data/samsum
 
 ./lat_batch_tmux.sh \
   --suite E13 \
-  --round 1 \
+  --round all \
   --pairs "87:samsum" \
   --gpus "3 4 5 6" \
   --gpu-plan "2,2,2,2" \
@@ -608,7 +608,7 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 export LAT_LAUNCH_STAGGER_MINUTES=15
 
 ./lat_batch_tmux.sh \
-  --suite E251 \
+  --suite E13 \
   --round all \
   --pairs "87:glue-tvt_qqp" \
   --gpus "0 1 2 3 4 5 6" \

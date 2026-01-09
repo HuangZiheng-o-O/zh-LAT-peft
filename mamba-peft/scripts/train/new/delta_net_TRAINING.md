@@ -129,7 +129,7 @@ export SAMSUM_LOCAL_DIR=/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/data/samsum
 
 ./lat_batch_tmux.sh \
   --suite E14 \
-  --round 1 \
+  --round all \
   --pairs "87:samsum" \
   --gpus "3 4 5 6" \
   --gpu-plan "2,2,2,2" \
@@ -656,15 +656,15 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="delta_net-glue-tvt_qqp-3090-Jan1-v2"
+export SWANLAB_PROJECT="delta_net-glue-tvt_qqp-1-4090-Jan8"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
 
-export LAT_LAUNCH_STAGGER_MINUTES=15
+export LAT_LAUNCH_STAGGER_MINUTES=10
 
 ./lat_batch_tmux.sh \
-  --suite E251 \
+  --suite E14 \
   --round all \
   --pairs "87:glue-tvt_qqp" \
   --gpus "0 1 2 3 4 5 6" \

@@ -29,10 +29,10 @@ export LAT_COMMONSENSE_170K_VAL_SET_SIZE=2000
 export LAT_DATA_DIR=/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/data
 
 # cutoff_len 对齐（=256）
-export HP_MAX_SEQLEN=256
+# export HP_MAX_SEQLEN=256
 
 # ===== 预热加速：CPU 拉满（只影响“建 cache”，不影响训练 dataloader）=====
-export LAT_DATA_PREPROC_WORKERS=64   # 或者 64/96（看你机器核数）
+export LAT_DATA_PREPROC_WORKERS=35   # 或者 64/96（看你机器核数）
 
 # （可选）cache 写到更快的盘（默认写 mamba-peft/data/cache）
 # export LAT_DATA_CACHE_DIR=/path/to/fast_ssd/lat_data_cache
@@ -52,14 +52,17 @@ export MKL_NUM_THREADS=1
   --suite E14 \
   --round 1 \
   --pairs "87:commonsense_170k" \
-  --gpus "0" \
+  --gpus "2" \
   --gpu-plan "1" \
   --model-type delta_net
 ```
+
+## H2 delt
+
 ```bash
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
-
+export HP_NO_SAVE=0  
 # ===== model =====
 export MODEL_TYPE=delta_net
 export LAT_MODEL=/home/user/mzs_h/model/delta_net-1.3B-100B/
@@ -90,7 +93,7 @@ export HP_BATCH_SIZE=8              # 若显存允许，优先 16
 export HP_LR=0.0003
 
 # cutoff_len 对齐（=256）
-export HP_MAX_SEQLEN=256
+# export HP_MAX_SEQLEN=256
 
 # ===== eval / save 频率（样本数等价 25600）=====
 # 25600 / 8 = 3200
@@ -131,7 +134,7 @@ export TRANSFORMERS_VERBOSITY=error
 # ===== SwanLab =====
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="delta_net-commonsense170k-Jan7-7GPU-v4-2-4090"
+export SWANLAB_PROJECT="delta_net-commonsense170k-Jan7-7GPU-v8-2-4090"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -141,7 +144,7 @@ export EVAL_AFTER_TRAIN=1
 export EVAL_BACKEND=lm_eval
 export EVAL_TASKS='boolq,social_iqa,hellaswag,piqa,arc_easy,arc_challenge,winogrande,openbookqa'
 export EVAL_BATCH_SIZE=16
-export EVAL_OUTPUT_ROOT=/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/outputs/lm_eval
+export EVAL_OUTPUT_ROOT=/home/user/mzs_h/code/zh-LAT-peft/output/lm_eval
 
 # export LAT_CACHE_FORMAT_VERSION=fmt3
 
@@ -159,11 +162,12 @@ export EVAL_OUTPUT_ROOT=/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/outputs/lm_
   --eval-batch-size "$EVAL_BATCH_SIZE" \
   --eval-output-root "$EVAL_OUTPUT_ROOT"
 ```
-RetNet（MODEL_TYPE=retnet，用 --suite E13）
+## RetNet（MODEL_TYPE=retnet，用 --suite E13）
+
 ```bash
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
-
+export HP_NO_SAVE=0  
 # ===== model =====
 export MODEL_TYPE=retnet
 export LAT_MODEL=/home/user/mzs_h/model/retnet-1.3B-100B/
@@ -184,13 +188,13 @@ export TRANSFORMERS_OFFLINE=1
 export LAT_COMMONSENSE_170K_VAL_SET_SIZE=2000
 export LAT_DATA_DIR=/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/data
 
-# ===== train hparams（论文对齐）=====
+# ===== train hparams =====
 export EVAL_GEN=0
 export HP_VAL_SPLIT=val
 export HP_EPOCHS=3
 export HP_BATCH_SIZE=8
 export HP_LR=0.0003
-export HP_MAX_SEQLEN=256
+# export HP_MAX_SEQLEN=256
 
 # ===== eval / save 频率（样本数等价 25600）=====
 export HP_EVAL_BATCH_SIZE=8
@@ -230,7 +234,7 @@ export TRANSFORMERS_VERBOSITY=error
 # ===== SwanLab =====
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="retnet-commonsense170k-Jan7-7GPU-1-2090-v2"
+export SWANLAB_PROJECT="retnet-commonsense170k-Jan7-7GPU-1-4090-v8"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -240,7 +244,7 @@ export EVAL_AFTER_TRAIN=1
 export EVAL_BACKEND=lm_eval
 export EVAL_TASKS='boolq,social_iqa,hellaswag,piqa,arc_easy,arc_challenge,winogrande,openbookqa'
 export EVAL_BATCH_SIZE=16
-export EVAL_OUTPUT_ROOT=/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/outputs/lm_eval
+export EVAL_OUTPUT_ROOT=/home/user/mzs_h/code/zh-LAT-peft/output/lm_eval
 
 ./lat_batch_tmux.sh \
   --suite E13 \
@@ -257,12 +261,12 @@ export EVAL_OUTPUT_ROOT=/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/outputs/lm_
 
 ```
 
+## GLA（MODEL_TYPE=gla，当前建议用 --suite E12）
 
-GLA（MODEL_TYPE=gla，当前建议用 --suite E12）
 ```bash
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
- 
+export HP_NO_SAVE=0  
 # ===== model =====
 export MODEL_TYPE=gla
 export LAT_MODEL=/home/user/mzs_h/model/gla-1.3B-100B/
@@ -289,7 +293,7 @@ export HP_VAL_SPLIT=val
 export HP_EPOCHS=3
 export HP_BATCH_SIZE=8
 export HP_LR=0.0003
-export HP_MAX_SEQLEN=256
+# export HP_MAX_SEQLEN=256
 
 # ===== eval / save 频率（样本数等价 25600）=====
 export HP_EVAL_BATCH_SIZE=8
@@ -329,7 +333,7 @@ export TRANSFORMERS_VERBOSITY=error
 # ===== SwanLab =====
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="gla-commonsense170k-Jan7-7GPU-3090"
+export SWANLAB_PROJECT="gla-commonsense170k-Jan7-7GPU-3090-v8"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -339,14 +343,14 @@ export EVAL_AFTER_TRAIN=1
 export EVAL_BACKEND=lm_eval
 export EVAL_TASKS='boolq,social_iqa,hellaswag,piqa,arc_easy,arc_challenge,winogrande,openbookqa'
 export EVAL_BATCH_SIZE=16
-export EVAL_OUTPUT_ROOT=/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/outputs/lm_eval
+export EVAL_OUTPUT_ROOT=/home/user/mzs_h/code/zh-LAT-peft/output/lm_eval
 
 ./lat_batch_tmux.sh \
   --suite E12 \
   --round all \
   --pairs "87:commonsense_170k" \
   --gpus "0 1 2 3 4 5 6" \
-  --gpu-plan "2,2,2,2,1,1,1" \
+  --gpu-plan "2,2,2,2,2,2,2" \
   --model-type gla \
   --eval-after-train \
   --eval-backend lm_eval \
@@ -482,7 +486,7 @@ export HP_BATCH_SIZE=8            # 16 若不 OOM 优先用 16
 export HP_LR=0.0003
 
 # cutoff_len 对齐
-export HP_MAX_SEQLEN=256
+# export HP_MAX_SEQLEN=256
 
 # scheduler / warmup（严格对齐）
 export LR_SCHEDULER_TYPE=linear
