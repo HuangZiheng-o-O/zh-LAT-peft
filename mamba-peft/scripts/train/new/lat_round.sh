@@ -247,6 +247,13 @@ print_failure_summary() {
   fi
   if [[ -n "${FAILED_ROUND:-}" ]]; then
     echo "  Experiment ${FAILED_ROUND} failed. Stopping."
+    echo ""
+    echo "TROUBLESHOOTING:"
+    echo "  1. Check the [ERROR] and [DIAG] lines above for exit codes"
+    echo "  2. Exit code 137 = OOM killed by kernel (reduce batch size or use gradient checkpointing)"
+    echo "  3. Exit code 139 = Segfault in CUDA/Triton (try CUDA_LAUNCH_BLOCKING=1)"
+    echo "  4. Exit code 1   = Python exception (check full log for traceback)"
+    echo "  5. Run: dmesg | tail -50 | grep -i 'kill\\|oom\\|memory'"
   fi
 }
 
@@ -574,6 +581,7 @@ run_round () {
   echo "[${__round_start_iso}] ROUND=${r} START"
 
   PIDS=()
+  declare -a PID_INFO=()
   local i
   local TMP_CFG_DIR
   TMP_CFG_DIR="$(mktemp -d /tmp/lat_data_XXXXXX)"
@@ -639,15 +647,57 @@ run_round () {
       MODEL_TYPE="${MODEL_TYPE}" HP_SEED=${FORCE_SEED} CUDA_VISIBLE_DEVICES="$GPU" \
         "${_cmd[@]}" &
     fi
-    PIDS+=("$!")
+    local _pid="$!"
+    PIDS+=("$_pid")
+    PID_INFO+=("PID=${_pid}|GPU=${GPU}|CFG=$(basename "$CFG")|DATA=${DATA}")
+    echo "[DIAG] Launched PID=${_pid} on GPU=${GPU} for $(basename "$CFG")"
   done
 
+  echo ""
+  echo "[DIAG] All ${#PIDS[@]} jobs launched. Waiting for completion..."
+  echo "[DIAG] PIDs: ${PIDS[*]}"
+  echo ""
+
   local any_failed=0
+  declare -a FAILED_PIDS=()
+  declare -a FAILED_INFO=()
+  local idx=0
   for pid in "${PIDS[@]}"; do
-    if ! wait "$pid"; then
+    local info="${PID_INFO[$idx]:-unknown}"
+    wait "$pid"
+    local exit_code=$?
+    if (( exit_code != 0 )); then
       any_failed=1
+      FAILED_PIDS+=("$pid")
+      FAILED_INFO+=("$info")
+      echo "[ERROR] Process failed: ${info} | exit_code=${exit_code}"
+      case "$exit_code" in
+        1)   echo "[ERROR]   -> Generic error (Python exception or sys.exit(1))" ;;
+        2)   echo "[ERROR]   -> Misuse of shell command or Python syntax error" ;;
+        9)   echo "[ERROR]   -> SIGKILL - likely OOM killed by kernel" ;;
+        137) echo "[ERROR]   -> SIGKILL (128+9) - likely OOM killed by kernel" ;;
+        139) echo "[ERROR]   -> SIGSEGV (128+11) - segmentation fault in native code" ;;
+        134) echo "[ERROR]   -> SIGABRT (128+6) - aborted, possibly assertion failure" ;;
+        *)   echo "[ERROR]   -> Exit code ${exit_code} (signal $((exit_code-128)) if >128)" ;;
+      esac
+    else
+      echo "[OK] Process completed: ${info} | exit_code=0"
     fi
+    idx=$((idx+1))
   done
+
+  if (( any_failed )); then
+    echo ""
+    echo "[DIAG] ============ FAILURE SUMMARY ============"
+    echo "[DIAG] Total jobs: ${#PIDS[@]}, Failed: ${#FAILED_PIDS[@]}"
+    for finfo in "${FAILED_INFO[@]}"; do
+      echo "[DIAG]   FAILED: ${finfo}"
+    done
+    echo "[DIAG] Hint: Check dmesg for OOM: dmesg | grep -i 'killed process'"
+    echo "[DIAG] Hint: Check GPU memory: nvidia-smi"
+    echo "[DIAG] ==========================================="
+    echo ""
+  fi
 
   rm -rf "$TMP_CFG_DIR" || true
 
