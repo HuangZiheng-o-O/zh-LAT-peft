@@ -434,7 +434,8 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 ---
 
 ### tvt_mnli（3090 方案）
-
+正在跑
+https://swanlab.cn/@zh2701/retnet-glue-tvt_mnli-3090-Jan10/
 ```bash
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
@@ -478,7 +479,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="retnet-glue-tvt_mnli-3090-Dec27"
+export SWANLAB_PROJECT="retnet-glue-tvt_mnli-3090-Jan10"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -487,8 +488,8 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
   --suite E13 \
   --round all \
   --pairs "87:glue-tvt_mnli" \
-  --gpus "0 1 2 3 4 5 6" \
-  --gpu-plan "2,2,2,2,2,2,2" \
+  --gpus "0 1 2 3 4 5 6 7" \
+  --gpu-plan "1,1,2,2,2,2,2,2" \
   --model-type retnet
 ```
 
@@ -496,7 +497,7 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 ---
 
 ### tvt_sst2
-
+Jan 9 2-4090
 ```bash
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
@@ -540,7 +541,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="retnet-sst2-2-4090-Jan6"
+export SWANLAB_PROJECT="retnet-sst2-2-4090-Jan9"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -549,15 +550,17 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
   --suite E13 \
   --round all \
   --pairs "87:glue-tvt_sst2" \
-  --gpus "0 1 2 3 4 5 6" \
-  --gpu-plan "2,2,2,2,2,2,2" \
+  --gpus "1 2 4 5" \
+  --gpu-plan "1,1,1,1" \
   --model-type retnet
 ```
 
 ---
 
 ### tvt_qqp
-
+Jan 9 3090 失败 还没删除
+jan 10 2-4090 开始
+https://swanlab.cn/@zh2701/retnet-glue-tvt_qqp-2-4090-Jan10/overview
 ```bash
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
@@ -600,12 +603,12 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="retnet-glue-tvt_qqp-2-4090-Jan1-v2"
+export SWANLAB_PROJECT="retnet-glue-tvt_qqp-2-4090-Jan10"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
 
-export LAT_LAUNCH_STAGGER_MINUTES=15
+export LAT_LAUNCH_STAGGER_MINUTES=10
 
 ./lat_batch_tmux.sh \
   --suite E13 \

@@ -92,3 +92,22 @@ python -m aggregate_result.main \
   └── aggregate_summary.json  # 总汇总
 
   所以你的命令会一次性处理所有 GLUE 数据集的实验结果。
+  
+
+  聚合retnet下的所有数据集：
+  conda activate mzsz                                                                                                                                    
+  cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft    
+  python -m aggregate_result.main \
+    --base_dir /home/user/mzs_h/code/zh-LAT-peft/output/benchmark/retnet \
+    --output /home/user/mzs_h/code/zh-LAT-peft/output/benchmark/retnet_all_agg \
+    --workers 8
+    # 注意：不指定 --dataset，会聚合所有数据集
+
+  只聚合包含"commonsense"的数据集：
+  conda activate mzsz                                                                                                                                    
+  cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft    
+  python -m aggregate_result.main \
+    --base_dir /home/user/mzs_h/code/zh-LAT-peft/output/benchmark/retnet \
+    --dataset commonsense \
+    --output /home/user/mzs_h/code/zh-LAT-peft/output/benchmark/retnet_commonsense_agg \
+    --workers 8

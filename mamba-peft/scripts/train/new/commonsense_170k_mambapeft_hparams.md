@@ -1,6 +1,12 @@
 # Commonsense_170K 超参数对齐说明（MambaPEFT / zh-LAT-peft）
+H1
+/home/user/mzs_h/code/zh-LAT-peft/output/benchmark/retnet/commonsense_170k_seed87/
 
+H2
+/home/user/mzs_h/code/zh-LAT-peft/output/benchmark/delta_net/commonsense_170k_seed87/
 
+3090
+/home/user/mzs_h/code/zh-LAT-peft/output/benchmark/delta_net/commonsense_170k_seed87/
 第一次
 rm -rf /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/data/cache/commonsense_170k/*
 

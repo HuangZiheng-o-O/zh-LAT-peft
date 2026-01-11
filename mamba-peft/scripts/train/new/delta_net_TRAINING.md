@@ -613,7 +613,7 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 ---
 
 ### tvt_qqp
-
+Jan 9 1-4090
 ```bash
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
