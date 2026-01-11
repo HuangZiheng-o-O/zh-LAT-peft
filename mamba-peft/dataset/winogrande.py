@@ -20,7 +20,10 @@ class WinoGrandeDataset(NluDatasetBase):
         self.config_name = config_name
         self.hf_dataset = None
 
-        self.choice_labels = ["1", "2"]
+        # Use letter labels (A/B) instead of digits (1/2) because:
+        # - GLA and RetNet tokenizers encode "1"/"2" as multi-token
+        # - Letter labels are single-token across all model tokenizers (GLA, DeltaNet, RetNet)
+        self.choice_labels = ["A", "B"]
         self.choice_ids = []
         for c in self.choice_labels:
             ids = tokenizer.encode(c, add_special_tokens=False)
@@ -51,7 +54,10 @@ class WinoGrandeDataset(NluDatasetBase):
         sentence = self.hf_dataset["sentence"][idx]
         option1 = self.hf_dataset["option1"][idx]
         option2 = self.hf_dataset["option2"][idx]
-        answer = str(self.hf_dataset["answer"][idx])  # "1" or "2"
+        answer_raw = str(self.hf_dataset["answer"][idx])  # "1" or "2"
+
+        # Map numeric label to letter label
+        answer = {"1": "A", "2": "B", 1: "A", 2: "B"}[answer_raw]
         assert answer in self.choice_labels
 
         choices_txt = "\n".join([f"{l}. {opt}" for l, opt in zip(self.choice_labels, [option1, option2])])

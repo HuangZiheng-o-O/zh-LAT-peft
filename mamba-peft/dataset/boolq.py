@@ -16,8 +16,10 @@ class BoolQDataset(NluDatasetBase):
         self.hf_dataset = None
 
         # IMPORTANT: Labels must be single-token for our next-token classification metric.
-        # "true/false" may not be single-token under GPT-Neox BPE; use digits for robustness.
-        self.choice_labels = ["0", "1"]  # 0 = false/no, 1 = true/yes
+        # Use letter labels (A/B) instead of digits (0/1) because:
+        # - GLA and RetNet tokenizers encode "0"/"1" as multi-token
+        # - Letter labels are single-token across all model tokenizers (GLA, DeltaNet, RetNet)
+        self.choice_labels = ["A", "B"]  # A = false/no, B = true/yes
         self.choice_ids = []
         for c in self.choice_labels:
             ids = tokenizer.encode(c, add_special_tokens=False)
@@ -28,9 +30,10 @@ class BoolQDataset(NluDatasetBase):
         super().__init__(tokenizer, path, split, use_cache=use_cache, **kwargs)
 
     def get_cache_name(self):
-        # Bump cache name to invalidate legacy caches that stored "true/false" labels.
+        # Bump cache name to invalidate legacy caches.
+        # v2: digit labels (0/1), v3: letter labels (A/B) for tokenizer compatibility
         base = super().get_cache_name()
-        return f"{base}_single_token_v2"
+        return f"{base}_single_token_v3"
 
     def __len__(self):
         return len(self.data) if self.data is not None else len(self.get_hf_dataset())
@@ -51,13 +54,13 @@ class BoolQDataset(NluDatasetBase):
         passage = self.hf_dataset["passage"][idx]
         label = self.hf_dataset["answer"][idx]
 
-        # Map bool -> digit label (single token)
-        label = {False: "0", True: "1"}[label]
+        # Map bool -> letter label (single token across all tokenizers)
+        label = {False: "A", True: "B"}[label]
         assert label in self.choice_labels
-        
+
         input = (
             "Answer the question based on the passage. "
-            "Respond with '0' for No/False and '1' for Yes/True.\n"
+            "Respond with 'A' for No/False and 'B' for Yes/True.\n"
             f"Question: {question}\n"
             f"Passage: {passage}\n"
             "Answer: "

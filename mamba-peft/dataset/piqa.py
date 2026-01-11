@@ -16,7 +16,10 @@ class PiqaDataset(NluDatasetBase):
         path = "piqa"
         self.hf_dataset = None
 
-        self.choice_labels = ["0", "1"]
+        # Use letter labels (A/B) instead of digits (0/1) because:
+        # - GLA and RetNet tokenizers encode "0"/"1" as multi-token
+        # - Letter labels are single-token across all model tokenizers (GLA, DeltaNet, RetNet)
+        self.choice_labels = ["A", "B"]
         self.choice_ids = []
         for c in self.choice_labels:
             ids = tokenizer.encode(c, add_special_tokens=False)
@@ -45,8 +48,10 @@ class PiqaDataset(NluDatasetBase):
         goal = self.hf_dataset["goal"][idx]
         sol1 = self.hf_dataset["sol1"][idx]
         sol2 = self.hf_dataset["sol2"][idx]
-        label = str(self.hf_dataset["label"][idx])
+        label_raw = self.hf_dataset["label"][idx]  # 0 or 1
 
+        # Map numeric label to letter label
+        label = {0: "A", 1: "B", "0": "A", "1": "B"}[label_raw]
         assert label in self.choice_labels
 
         choices_txt = "\n".join([f"{l}. {c}" for l, c in zip(self.choice_labels, [sol1, sol2])])
