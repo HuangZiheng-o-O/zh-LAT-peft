@@ -10,6 +10,7 @@ BASE_OUTPUT_DIR="/home/user/mzs_h/code/zh-LAT-peft/output/benchmark/retnet/commo
 EVAL_OUTPUT_ROOT="/home/user/mzs_h/code/zh-LAT-peft/output/lm_eval"
 EVAL_TASKS="${EVAL_TASKS:-boolq,social_iqa,hellaswag,piqa,arc_easy,arc_challenge,winogrande,openbookqa}"
 EVAL_BATCH_SIZE="${EVAL_BATCH_SIZE:-64}"
+PROGRESS_INTERVAL="${PROGRESS_INTERVAL:-60}"
 
 # 并行配置
 NUM_GPUS="${NUM_GPUS:-8}"
@@ -52,59 +53,80 @@ mkdir -p "${TEMP_DIR}"
 echo "📁 临时目录: ${TEMP_DIR}"
 echo ""
 
+mkdir -p "${EVAL_OUTPUT_ROOT}/retnet/best" "${EVAL_OUTPUT_ROOT}/retnet/last"
+
 # 查找最佳checkpoint的函数
 find_best_checkpoint() {
     local exp_dir=$1
-    local best_ckpt=""
-    local best_step=-1
-    local best_metric=999999  # 用于eval_loss（越小越好）
+    local trainer_state="${exp_dir}/trainer_state.json"
 
-    # 遍历所有checkpoint目录
-    for ckpt_dir in "${exp_dir}"/checkpoint-*; do
-        if [[ ! -d "${ckpt_dir}" ]]; then
-            continue
-        fi
+    if [[ ! -f "${trainer_state}" ]]; then
+        for ckpt_state in "${exp_dir}"/checkpoint-*/trainer_state.json; do
+            if [[ -f "${ckpt_state}" ]]; then
+                trainer_state="${ckpt_state}"
+                break
+            fi
+        done
+    fi
 
-        local trainer_state="${ckpt_dir}/trainer_state.json"
-        if [[ ! -f "${trainer_state}" ]]; then
-            continue
-        fi
+    if [[ ! -f "${trainer_state}" ]]; then
+        echo ""
+        return
+    fi
 
-        # 提取step number
-        local step=$(basename "${ckpt_dir}" | sed 's/checkpoint-//')
+    python3 - "$exp_dir" "$trainer_state" <<'PY'
+import json
+import sys
+from pathlib import Path
 
-        # 提取best_metric (优先用eval_token_accuracy，fallback到eval_loss)
-        local metric=$(python3 -c "
-import json, sys
+exp_dir = Path(sys.argv[1])
+state_path = Path(sys.argv[2])
 try:
-    with open('${trainer_state}') as f:
-        data = json.load(f)
-    # 优先查找eval_token_accuracy（越大越好），否则用eval_loss（越小越好）
-    if 'best_metric' in data:
-        print(data['best_metric'])
-    else:
-        # 如果没有best_metric，从log_history找最后一次eval
-        for entry in reversed(data.get('log_history', [])):
-            if 'eval_token_accuracy' in entry:
-                # 用负值，这样仍然可以用min比较
-                print(-entry['eval_token_accuracy'])
-                break
-            elif 'eval_loss' in entry:
-                print(entry['eval_loss'])
-                break
-except:
-    print('999999')
-" 2>/dev/null)
+    data = json.loads(state_path.read_text())
+except Exception:
+    print("")
+    sys.exit(0)
 
-        # 比较（假设metric越小越好，如果是accuracy会取负值）
-        if (( $(echo "${metric} < ${best_metric}" | bc -l 2>/dev/null || echo 0) )); then
-            best_metric=${metric}
-            best_step=${step}
-            best_ckpt="${ckpt_dir}"
-        fi
-    done
+log_history = data.get("log_history") or []
+best_step = None
+best_metric = None
 
-    echo "${best_ckpt}"
+for entry in log_history:
+    step = entry.get("step")
+    if step is None:
+        continue
+    if "eval_token_accuracy" in entry:
+        value = entry["eval_token_accuracy"]
+        if best_step is None or value > best_metric:
+            best_metric = value
+            best_step = step
+
+if best_step is None:
+    for entry in log_history:
+        step = entry.get("step")
+        if step is None:
+            continue
+        if "eval_loss" in entry:
+            value = entry["eval_loss"]
+            if best_step is None or value < best_metric:
+                best_metric = value
+                best_step = step
+
+if best_step is not None:
+    ckpt_dir = exp_dir / f"checkpoint-{int(best_step)}"
+    if ckpt_dir.is_dir():
+        print(str(ckpt_dir))
+        sys.exit(0)
+
+best_model = data.get("best_model_checkpoint")
+if best_model:
+    best_path = Path(best_model)
+    if not best_path.is_absolute():
+        best_path = exp_dir / best_path
+    print(str(best_path))
+else:
+    print("")
+PY
 }
 
 # 查找最后checkpoint的函数
@@ -128,6 +150,51 @@ find_last_checkpoint() {
     echo "${last_ckpt}"
 }
 
+sync_dir_contents() {
+    local src_dir=$1
+    local dst_dir=$2
+
+    if command -v rsync >/dev/null 2>&1; then
+        mkdir -p "${dst_dir}"
+        rsync -a --delete "${src_dir}/" "${dst_dir}/"
+    else
+        python3 - "$src_dir" "$dst_dir" <<'PY'
+import shutil
+import sys
+from pathlib import Path
+
+src = Path(sys.argv[1])
+dst = Path(sys.argv[2])
+if not src.exists():
+    sys.exit(0)
+if dst.exists():
+    shutil.rmtree(dst)
+dst.parent.mkdir(parents=True, exist_ok=True)
+shutil.copytree(src, dst)
+PY
+    fi
+}
+
+wait_with_progress() {
+    local total=$1
+    local interval=$2
+    local completed
+
+    if (( total <= 0 )); then
+        return
+    fi
+
+    echo "⏳ 等待所有任务完成... (每${interval}s刷新进度)"
+    while true; do
+        completed=$(find "${TEMP_DIR}" -maxdepth 1 -name '*.status' -print | wc -l | tr -d ' ')
+        echo "[进度] $(date '+%H:%M:%S') 已完成 ${completed}/${total}"
+        if (( completed >= total )); then
+            break
+        fi
+        sleep "${interval}"
+    done
+}
+
 # 单个评估任务的函数
 run_eval() {
     local exp_name=$1
@@ -136,6 +203,7 @@ run_eval() {
     local gpu_id=$4
     local log_file="${TEMP_DIR}/${exp_name}_${ckpt_type}.log"
     local status_file="${TEMP_DIR}/${exp_name}_${ckpt_type}.status"
+    local eval_output="${EVAL_OUTPUT_ROOT}/retnet/${ckpt_type}/${exp_name}"
 
     {
         echo "=========================================="
@@ -154,15 +222,13 @@ run_eval() {
         export CUDA_VISIBLE_DEVICES="${gpu_id}"
         export TOKENIZERS_PARALLELISM=false
 
-        local eval_output="${EVAL_OUTPUT_ROOT}/retnet/${ckpt_type}/${exp_name}"
-
         if python eval_lat.py \
             --model-type "${MODEL_TYPE}" \
             --model "${BASE_MODEL}" \
             --peft-weights "${ckpt_path}" \
             --tasks "${EVAL_TASKS}" \
             --eval-batch-size "${EVAL_BATCH_SIZE}" \
-            --output-root "${EVAL_OUTPUT_ROOT}/retnet/${ckpt_type}"; then
+            --output-root "${eval_output}"; then
 
             echo ""
             echo "=========================================="
@@ -216,8 +282,18 @@ for exp_name in "${EXPERIMENTS[@]}"; do
     best_ckpt=$(find_best_checkpoint "${exp_dir}")
     last_ckpt=$(find_last_checkpoint "${exp_dir}")
 
-    if [[ -z "${best_ckpt}" ]] || [[ -z "${last_ckpt}" ]]; then
-        echo "   ⚠️  未找到有效checkpoint，跳过"
+    if [[ -z "${last_ckpt}" ]]; then
+        echo "   ⚠️  未找到 last checkpoint，跳过"
+        continue
+    fi
+
+    if [[ -z "${best_ckpt}" ]] || [[ ! -d "${best_ckpt}" ]]; then
+        echo "   ⚠️  best checkpoint 无效，退回到 last (${last_ckpt})"
+        best_ckpt="${last_ckpt}"
+    fi
+
+    if [[ ! -d "${best_ckpt}" ]]; then
+        echo "   ⚠️  best checkpoint 仍不存在，跳过"
         continue
     fi
 
@@ -228,7 +304,7 @@ for exp_name in "${EXPERIMENTS[@]}"; do
     echo "   Last: $(basename ${last_ckpt})"
 
     if [[ "${best_ckpt}" == "${last_ckpt}" ]]; then
-        echo "   ℹ️  Best == Last，只需评估一次"
+        echo "   ℹ️  Best == Last，只需评估一次，结果会复制到last目录"
         NEED_BOTH[$exp_name]="no"
     else
         echo "   ℹ️  Best != Last，需分别评估"
@@ -279,7 +355,7 @@ for exp_name in "${EXPERIMENTS[@]}"; do
     echo "   GPU: ${gpu_id}"
 
     run_eval "${exp_name}" "${best_ckpt}" "best" "${gpu_id}" &
-    local pid=$!
+    pid=$!
     running_jobs[$pid]="${exp_name} (best)"
 
     echo "   ✅ 已启动 (PID: ${pid})"
@@ -287,16 +363,6 @@ for exp_name in "${EXPERIMENTS[@]}"; do
 
     # 如果best != last，还需要评估last
     if [[ "${NEED_BOTH[$exp_name]:-no}" == "yes" ]]; then
-        # 等待有GPU空闲
-        if (( ${#running_jobs[@]} >= NUM_GPUS )); then
-            wait -n
-            for p in "${!running_jobs[@]}"; do
-                if ! kill -0 $p 2>/dev/null; then
-                    unset running_jobs[$p]
-                fi
-            done
-        fi
-
         gpu_idx=$((job_count % NUM_GPUS))
         gpu_id="${GPU_ARRAY[$gpu_idx]}"
 
@@ -307,34 +373,22 @@ for exp_name in "${EXPERIMENTS[@]}"; do
         echo "   GPU: ${gpu_id}"
 
         run_eval "${exp_name}" "${last_ckpt}" "last" "${gpu_id}" &
-        local pid=$!
+        pid=$!
         running_jobs[$pid]="${exp_name} (last)"
 
         echo "   ✅ 已启动 (PID: ${pid})"
         job_count=$((job_count + 1))
     else
-        # best == last，创建符号链接或复制结果
-        echo "   ℹ️  创建last目录的软链接（指向best）"
+        # best == last，评估一次后同步结果
+        echo "   ℹ️  best与last一致，后续会把结果同步到last目录"
         # 这个在评估完成后处理
     fi
 
     echo ""
 
-    # GPU已满，等待一个完成
-    if (( ${#running_jobs[@]} >= NUM_GPUS )); then
-        echo "⏸️  GPU已满，等待任务完成..."
-        wait -n
-        for p in "${!running_jobs[@]}"; do
-            if ! kill -0 $p 2>/dev/null; then
-                unset running_jobs[$p]
-            fi
-        done
-        echo "   ✅ 继续调度..."
-        echo ""
-    fi
 done
 
-echo "⏳ 等待所有任务完成..."
+wait_with_progress "${total_jobs}" "${PROGRESS_INTERVAL}"
 wait
 
 echo "✅ 所有评估任务已完成"
@@ -348,11 +402,8 @@ for exp_name in "${EXPERIMENTS[@]}"; do
         last_dir="${EVAL_OUTPUT_ROOT}/retnet/last/${exp_name}"
 
         if [[ -d "${best_dir}" ]]; then
-            mkdir -p "$(dirname ${last_dir})"
-            if [[ ! -e "${last_dir}" ]]; then
-                ln -s "${best_dir}" "${last_dir}"
-                echo "   ✅ ${exp_name}: last -> best (软链接)"
-            fi
+            sync_dir_contents "${best_dir}" "${last_dir}"
+            echo "   ✅ ${exp_name}: last目录同步自best"
         fi
     fi
 done
