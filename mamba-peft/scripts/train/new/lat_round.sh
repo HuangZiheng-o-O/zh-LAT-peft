@@ -86,7 +86,7 @@ ROUND_E15=(# 26 个 分组更清晰：FULL → 主轴 → Attn细粒度 → Head
 ROUND_E11=(
   "E1_QKVO_r8_alpha16.yaml"
 )
-ROUND_E12=(
+ROUND_E12=(#GLA
 
   "E1_QKVO_plus_G_plus_MLP_r8_alpha16.yaml"
   "E1_QKVO_plus_MLP_r8_alpha16.yaml"
@@ -174,6 +174,7 @@ ROUND_E14=(# ROUND_E12_DELTANET
   "E6_VOONLY_r8_alpha16.yaml"
 
 )
+
 
 # =============================================================================
   # ROUND_E15_BASED: Based 专用配置（无 g_proj, 无 gk_proj）
@@ -306,7 +307,12 @@ export NCCL_P2P_DISABLE=1
 export NCCL_IB_DISABLE=1
 export WANDB_MODE=disabled
 export WANDB_DISABLED=true
-rm -rf ~/.config/wandb ~/.triton ~/.cache/torch_extensions || true
+
+# CRITICAL FIX: Do NOT delete shared Triton cache here
+# Each process will use its own cache directory (set below)
+# Deleting the cache causes race conditions when multiple processes compile kernels simultaneously
+# rm -rf ~/.config/wandb ~/.triton ~/.cache/torch_extensions || true
+rm -rf ~/.config/wandb || true
 
 # Echo invocation & key env overrides
 echo "CMD: $0 $*"
