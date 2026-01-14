@@ -12,7 +12,8 @@ export MODEL_TYPE=retnet
 export LAT_MODEL=/home/user/mzs_h/model/retnet-1.3B-100B/
 export LAT_PREC=bf16
 ```
-
+  --gpus "0 1 2 3 4 5 6" \
+  --gpu-plan "1,2,1,1,2,2,2" \
 
 ### caches（原样保留）
 
@@ -264,7 +265,8 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 ---
 
 ### tvt_cola
-
+没跑 3090跑不起来
+2-4090正在
 ```bash
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
@@ -304,7 +306,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="retnet-cola-2-4090-E12-Jan5"
+export SWANLAB_PROJECT="retnet-cola-2-4090-E13-Jan13-v2"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -313,15 +315,15 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
   --suite E13 \
   --round all \
   --pairs "87:glue-tvt_cola" \
-  --gpus "0 1 2 3 4 5 6" \
-  --gpu-plan "2,2,2,2,2,2,2" \
+  --gpus "1 2 3 4 5 6" \
+  --gpu-plan "2,2,2,1,2,2" \
   --model-type retnet
 ```
 
 ---
 
 ### tvt_rte
-
+3090 Jan13
 ```bash
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
@@ -357,7 +359,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="retnet-rte-2-4090-Jan"
+export SWANLAB_PROJECT="retnet-rte-3090-Jan13"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -366,15 +368,17 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
   --suite E13 \
   --round all \
   --pairs "87:glue-tvt_rte" \
-  --gpus "4 5 6" \
-  --gpu-plan "2,2,1" \
+  --gpus "4 5 6 7" \
+  --gpu-plan "2,2,2,2" \
   --model-type retnet
 ```
 
 ---
 
-### tvt_qnli（严格离线版）
-
+### tvt_qnli（retnet）
+3090 Jan12
+https://swanlab.cn/@zh2701/retnet-tvt_qnli-3090-Jan12/overview
+jan13 ROUND_E1313
 ```bash
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
@@ -417,17 +421,17 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="retnet-tvt_qnli-2-4090-Jan"
+export SWANLAB_PROJECT="retnet-tvt_qnli-3090-Jan12-E1313-v3"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 ./lat_batch_tmux.sh \
-  --suite E13 \
+  --suite E1313 \
   --round all \
   --pairs "87:glue-tvt_qnli" \
-  --gpus "0 1 2 3 4 5 6" \
-  --gpu-plan "1,1,2,2,2,2,2" \
+  --gpus "6 7" \
+  --gpu-plan "1,1" \
   --model-type retnet
 ```
 
@@ -436,6 +440,9 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 ### tvt_mnli（3090 方案）
 正在跑
 https://swanlab.cn/@zh2701/retnet-glue-tvt_mnli-3090-Jan10/
+下面会跑一下错误的
+Jan11  版本  
+Jan12 版本 E13132
 ```bash
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
@@ -479,17 +486,17 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="retnet-glue-tvt_mnli-3090-Jan10"
+export SWANLAB_PROJECT="retnet-glue-tvt_mnli-3090-Jan12-E1312-v3-E13132"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 ./lat_batch_tmux.sh \
-  --suite E13 \
+  --suite E13132 \
   --round all \
   --pairs "87:glue-tvt_mnli" \
-  --gpus "0 1 2 3 4 5 6 7" \
-  --gpu-plan "1,1,2,2,2,2,2,2" \
+  --gpus "2 3" \
+  --gpu-plan "1,1" \
   --model-type retnet
 ```
 
@@ -659,7 +666,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="retnet-tvt_mrpc-2-4090-Jan6"
+export SWANLAB_PROJECT="retnet-tvt_mrpc-2-4090-Jan13-v3"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -669,7 +676,7 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
   --round all \
   --pairs "87:glue-tvt_mrpc" \
   --gpus "0 1 2 3 4 5 6" \
-  --gpu-plan "2,2,2,2,2,2,2" \
+  --gpu-plan "2,2,2,1,2,2,2" \
   --model-type retnet
 ```
 

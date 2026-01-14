@@ -264,7 +264,7 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 ---
 
 ### tvt_cola
-
+1-4090
 ```bash
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
@@ -304,7 +304,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="delta_net-cola-3090-Jan6-2"
+export SWANLAB_PROJECT="delta_net-cola-1-4090-Jan13-v2"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -313,14 +313,15 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
   --suite E14 \
   --round all \
   --pairs "87:glue-tvt_cola" \
-  --gpus "0 1 2 3 4 5 6" \
-  --gpu-plan "2,2,2,2,2,2,2" \
+  --gpus "0 1 2 3 4 5 6 7" \
+  --gpu-plan "1,1,1,1,2,2,2,2" \
   --model-type delta_net
 ```
 
 ---
 
 ### tvt_rte
+https://swanlab.cn/@zh2701/delta_net-rte-1-4090-Jan11/overview
 
 ```bash
 conda activate mzsz
@@ -357,7 +358,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="delta_net-rte-2-4090-Jan6"
+export SWANLAB_PROJECT="delta_net-rte-1-4090-Jan11"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -366,15 +367,16 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
   --suite E14 \
   --round all \
   --pairs "87:glue-tvt_rte" \
-  --gpus "4 5 6" \
-  --gpu-plan "2,2,1" \
+  --gpus "4 5 6 7" \
+  --gpu-plan "2,2,2,2" \
   --model-type delta_net
 ```
 
 ---
 
-### tvt_qnli（严格离线版）
-
+### tvt_qnli 
+finish
+https://swanlab.cn/@zh2701/delta_net-tvt_qnli-1-4090-Jan13/overview
 ```bash
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
@@ -417,7 +419,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="delta_net-tvt_qnli-2-4090-Jan6"
+export SWANLAB_PROJECT="delta_net-tvt_qnli-1-4090-Jan13"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -426,15 +428,15 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
   --suite E14 \
   --round all \
   --pairs "87:glue-tvt_qnli" \
-  --gpus "0 1 2 3 4 5 6" \
-  --gpu-plan "1,1,2,2,2,2,2" \
+  --gpus "0 1 2 3 4 5 6 7" \
+  --gpu-plan "1,1,1,1,2,2,2,2" \
   --model-type delta_net
 ```
 
 ---
 
-### tvt_mnli（3090 方案）
-
+### tvt_mnli
+ 1-4090  Jan13 正在
 ```bash
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
@@ -478,7 +480,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="delta_net-glue-tvt_mnli-3090-Dec27"
+export SWANLAB_PROJECT="delta_net-glue-tvt_mnli-1-4090-Jan13"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -487,8 +489,8 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
   --suite E14 \
   --round all \
   --pairs "87:glue-tvt_mnli" \
-  --gpus "0 1 2 3 4 5 6" \
-  --gpu-plan "2,2,2,2,2,2,2" \
+  --gpus "0 1 2 3 4 5" \
+  --gpu-plan "2,2,2,2,2,2" \
   --model-type delta_net
 ```
 
@@ -596,7 +598,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="delta_net-sst2-3090-Dec26"
+export SWANLAB_PROJECT="delta_net-sst2-1-4090-Jan13"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -605,8 +607,8 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
   --suite E14 \
   --round all \
   --pairs "87:glue-tvt_sst2" \
-  --gpus "1 2 3 4 5 6 7" \
-  --gpu-plan "2,2,2,2,2,2,2" \
+  --gpus "0 1 2 3 4 5 6 7" \
+  --gpu-plan "2,2,2,2,2,2,2,2" \
   --model-type delta_net
 ```
 
@@ -672,10 +674,70 @@ export LAT_LAUNCH_STAGGER_MINUTES=10
   --model-type delta_net
 ```
 
+
+### tvt_qqp
+Jan 11 1-4090
+```bash
+conda activate mzsz
+cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
+export MODEL_TYPE=delta_net
+export LAT_MODEL=/home/user/mzs_h/model/delta_net-1.3B-100B/
+export LAT_PREC=bf16
+
+export HF_HUB_OFFLINE=1
+export HF_EVALUATE_OFFLINE=1
+export TRANSFORMERS_OFFLINE=1
+export HF_HOME=/home/user/mzs_h/data/hf_cache
+export HF_DATASETS_CACHE="$HF_HOME"
+export HF_EVALUATE_CACHE="$HF_HOME"
+
+export EVAL_GEN=0
+export HP_VAL_SPLIT=test
+
+export HP_EPOCHS=5
+export HP_BATCH_SIZE=8
+export HP_LR=0.0003
+
+export HP_EVAL_BATCH_SIZE=64
+export HP_EVAL_STEPS=500
+export HP_SAVE_STEPS=1000
+export HP_LOGGING_STEPS=100
+
+export LR_SCHEDULER_TYPE=cosine
+export LR_WARMUP_RATIO=0.1
+
+export NUM_DATA_WORKERS=4
+export DATALOADER_PREFETCH_FACTOR=2
+export DATALOADER_PIN_MEMORY=1
+export DATALOADER_PERSISTENT_WORKERS=0
+export GRADIENT_CHECKPOINTING=true
+export TOKENIZERS_PARALLELISM=false
+export OMP_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export TRANSFORMERS_VERBOSITY=error
+
+export SWANLAB_ENABLE=1
+export SWANLAB_MODE=cloud
+export SWANLAB_PROJECT="delta_net-glue-tvt_qqp-1-4090-Jan11-v2"
+export SWANLAB_EMAIL_ON_START=0
+export SWANLAB_EMAIL_ON_FINISH=0
+export SWANLAB_EMAIL_ON_INTERRUPT=0
+
+export LAT_LAUNCH_STAGGER_MINUTES=10
+
+./lat_batch_tmux.sh \
+  --suite E1411 \
+  --round all \
+  --pairs "87:glue-tvt_qqp" \
+  --gpus "0 1 2 3" \
+  --gpu-plan "1,1,1,1" \
+  --model-type delta_net
+```
 ---
 
 ### tvt_mrpc
-
+trans 1 4090
 ```bash
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
@@ -710,17 +772,17 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="delta_net-tvt_mrpc-3090-Jan6"
+export SWANLAB_PROJECT="delta_net-tvt_mrpc-1-4090-Jan13-v3"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 ./lat_batch_tmux.sh \
-  --suite E14 \
+  --suite E99 \
   --round all \
   --pairs "87:glue-tvt_mrpc" \
-  --gpus "0 1 2 3" \
-  --gpu-plan "2,2,2,2" \
+  --gpus "7" \
+  --gpu-plan "1" \
   --model-type delta_net
 ```
 

@@ -86,6 +86,14 @@ ROUND_E15=(# 26 个 分组更清晰：FULL → 主轴 → Attn细粒度 → Head
 ROUND_E11=(
   "E1_QKVO_r8_alpha16.yaml"
 )
+ROUND_E1411=(#ROUND_E14_STOPPED
+
+  "E6_VOONLY_r8_alpha16.yaml"
+  "E6_QVONLY_r8_alpha16.yaml"
+  "E7_KVONLY_r8_alpha16.yaml"
+  "E11_OONLY_r8_alpha16.yaml"
+
+)
 ROUND_E12=(#GLA
 
   "E1_QKVO_plus_G_plus_MLP_r8_alpha16.yaml"
@@ -174,7 +182,9 @@ ROUND_E14=(# ROUND_E12_DELTANET
   "E6_VOONLY_r8_alpha16.yaml"
 
 )
-
+ROUND_E99=(# ROUND_E12_DELTANET
+  "E7_KVONLY_r8_alpha16.yaml"
+)
 
 # =============================================================================
   # ROUND_E15_BASED: Based 专用配置（无 g_proj, 无 gk_proj）
