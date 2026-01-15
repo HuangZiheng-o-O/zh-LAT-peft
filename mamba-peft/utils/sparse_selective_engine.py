@@ -335,7 +335,11 @@ def compute_gradient_salience_scores(
         if batch is None:
             continue
         input_ids = batch.get("input_ids")
-        label_ids = batch.get("label_ids") or batch.get("labels")
+        # IMPORTANT: don't use `or` on tensors (ambiguous truth value).
+        if "label_ids" in batch and batch["label_ids"] is not None:
+            label_ids = batch["label_ids"]
+        else:
+            label_ids = batch.get("labels")
         attention_mask = batch.get("attention_mask")
         if input_ids is None or label_ids is None:
             continue
