@@ -76,7 +76,23 @@ from mamba_ssm_peft.utils.lat_model_loader import get_lat_env, get_lat_env_bool
 from utils.sparse_selective_engine import maybe_run_sparse_selective_tuning
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_NOW_OUTPUT_ROOT = REPO_ROOT / "output" / "benchmark"
+
+
+def _is_sparse_run_enabled() -> bool:
+    flag = os.environ.get("HP_SPARSE_ENABLE") or os.environ.get("LAT_SPARSE_ENABLE")
+    if flag is None:
+        return False
+    return str(flag).strip().lower() in ("1", "true", "yes", "on")
+
+
+def _default_output_root(*suffix: str) -> Path:
+    root = REPO_ROOT / "output" / ("sparse" if _is_sparse_run_enabled() else "benchmark")
+    for part in suffix:
+        root /= part
+    return root
+
+
+DEFAULT_NOW_OUTPUT_ROOT = _default_output_root()
 NOW_OUTPUT_ROOT = Path(os.environ.get("LAT_OUTPUT_ROOT", DEFAULT_NOW_OUTPUT_ROOT)).expanduser()
 DATASET_ROOT_NAME = os.environ.get("LAT_DATASET_ROOT_NAME", "glue")
 
