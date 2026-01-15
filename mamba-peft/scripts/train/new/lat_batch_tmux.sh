@@ -233,6 +233,15 @@ HDR
   printf 'export HP_EVAL_BATCH_SIZE=%q\n' "${HP_EVAL_BATCH_SIZE:-}"
   printf 'export HP_NO_SAVE=%q\n' "${HP_NO_SAVE:-}"
 
+  # Sparse selective tuning (default disabled). These are consumed by train_lat.py.
+  printf 'export HP_SPARSE_ENABLE=%q\n' "${HP_SPARSE_ENABLE:-}"
+  printf 'export HP_SPARSE_SCOPE=%q\n' "${HP_SPARSE_SCOPE:-}"
+  printf 'export HP_SPARSE_BUDGET_MODE=%q\n' "${HP_SPARSE_BUDGET_MODE:-}"
+  printf 'export HP_SPARSE_RHO=%q\n' "${HP_SPARSE_RHO:-}"
+  printf 'export HP_SPARSE_K=%q\n' "${HP_SPARSE_K:-}"
+  printf 'export HP_SPARSE_REFERENCE_CFG=%q\n' "${HP_SPARSE_REFERENCE_CFG:-}"
+  printf 'export HP_SPARSE_SCORE_SAMPLES=%q\n' "${HP_SPARSE_SCORE_SAMPLES:-}"
+
   # LR scheduler
   printf 'export LR_SCHEDULER_TYPE=%q\n' "${LR_SCHEDULER_TYPE:-cosine}"
   printf 'export LR_WARMUP_STEPS=%q\n' "${LR_WARMUP_STEPS:-}"

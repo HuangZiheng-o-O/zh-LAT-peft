@@ -73,6 +73,7 @@ from utils.runtime_stats import gpu_memory_tracker
 from lat_adapter import prepare_lat_model_and_tokenizer
 from mamba_ssm_peft.utils.lat_decoder import create_lat_decoder
 from mamba_ssm_peft.utils.lat_model_loader import get_lat_env, get_lat_env_bool
+from utils.sparse_selective_engine import maybe_run_sparse_selective_tuning
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_NOW_OUTPUT_ROOT = REPO_ROOT / "output" / "benchmark"
@@ -189,6 +190,31 @@ def build_and_run_trainer_lat(
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     with open(Path(output_dir) / "cfg.yaml", "w") as f:
         yaml.safe_dump(cfg, f)
+
+    # ---------------------------------------------------------------------
+    # Sparse Selective Tuning (Gradient + Static + Global Top-K)
+    #
+    # Requirement constraints:
+    # - must not modify GenericLMTrainer training loop
+    # - must run after model/tokenizer exist and LoRA (if any) is injected
+    # - must run before optimizer is constructed (HF Trainer constructs optimizer later)
+    #
+    # We implement this by registering backward hooks: grad <- grad * mask
+    # and persisting mask+metadata under output_dir for resume/reuse.
+    # ---------------------------------------------------------------------
+    try:
+        maybe_run_sparse_selective_tuning(
+            model=model,
+            train_dataset=train_data_module.dataset,
+            data_collator=train_data_module.data_collator,
+            batch_size=batch_size,
+            output_dir=output_dir,
+            cfg_path=cfg_path,
+            model_type=model_type,
+        )
+    except Exception as _sparse_e:
+        # Fail-fast when explicitly enabled; otherwise never triggered.
+        raise
 
     # Build generation decoder
     eval_generator = None
