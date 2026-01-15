@@ -101,6 +101,30 @@ def _match_targets(name: str, targets: List[str]) -> bool:
     return any(name.endswith(t) for t in targets)
 
 
+def _is_peft_lora_linear(module: torch.nn.Module) -> bool:
+    # Avoid importing PEFT internals directly; check qualified name.
+    return (
+        module.__class__.__module__.startswith("peft.tuners.lora.layer")
+        and module.__class__.__name__ == "Linear"
+    )
+
+
+def _get_base_linear_from_peft_linear(module: torch.nn.Module) -> torch.nn.Linear:
+    """
+    PEFT LoRA wraps nn.Linear as peft.tuners.lora.layer.Linear and stores the original linear
+    as `base_layer` (PEFT>=0.7). Some variants may use `linear`.
+    """
+    base = getattr(module, "base_layer", None)
+    if isinstance(base, torch.nn.Linear):
+        return base
+    base2 = getattr(module, "linear", None)
+    if isinstance(base2, torch.nn.Linear):
+        return base2
+    raise TypeError(
+        f"PEFT Linear wrapper does not expose an nn.Linear base_layer/linear (got {type(module)})."
+    )
+
+
 def _iter_linear_weight_params(model: torch.nn.Module, targets: List[str]) -> Iterable[Tuple[str, torch.nn.Parameter]]:
     """
     Yield (param_name, param) for base weight parameters whose module names match targets.
@@ -110,16 +134,19 @@ def _iter_linear_weight_params(model: torch.nn.Module, targets: List[str]) -> It
     for module_name, module in model.named_modules():
         if not _match_targets(module_name, targets):
             continue
-        if not isinstance(module, torch.nn.Linear):
-            raise TypeError(
-                f"Target module '{module_name}' matched by target_modules={targets} is not nn.Linear "
-                f"(got {type(module)}). Sparse reparameterization requires nn.Linear."
-            )
-        w = getattr(module, "weight", None)
-        if isinstance(w, torch.nn.Parameter):
-            # Resolve full parameter name by scanning named_parameters once per module.
-            # Common: "<module_name>.weight"
-            yield f"{module_name}.weight", w
+        if isinstance(module, torch.nn.Linear):
+            yield f"{module_name}.weight", module.weight
+            continue
+        if _is_peft_lora_linear(module):
+            # When PEFT is enabled, target modules are wrapped; base sparsification should operate
+            # on the underlying base_layer weight.
+            base = _get_base_linear_from_peft_linear(module)
+            yield f"{module_name}.weight", base.weight
+            continue
+        raise TypeError(
+            f"Target module '{module_name}' matched by target_modules={targets} is not nn.Linear "
+            f"(got {type(module)}). Sparse reparameterization requires nn.Linear or PEFT LoRA Linear wrapper."
+        )
 
 
 def _iter_lora_linear_weight_params(model: torch.nn.Module) -> Iterable[Tuple[str, torch.nn.Parameter]]:
@@ -184,8 +211,13 @@ def estimate_lora_trainable_count(model: torch.nn.Module, targets: List[str], r:
     for module_name, module in model.named_modules():
         if not _match_targets(module_name, targets):
             continue
-        w = getattr(module, "weight", None)
-        if not isinstance(w, torch.nn.Parameter):
+        # Handle both bare nn.Linear and PEFT-wrapped linear.
+        if isinstance(module, torch.nn.Linear):
+            w = module.weight
+        elif _is_peft_lora_linear(module):
+            w = _get_base_linear_from_peft_linear(module).weight
+        else:
+            # Unknown module type matched by suffix; skip (fail-fast would be too strict for estimation).
             continue
         if w.dim() != 2:
             continue
@@ -573,16 +605,24 @@ def _replace_linear_weight_with_sparse_delta(
         raise ValueError(f"Expected a weight param name ending with '.weight', got: {param_full_name}")
     module_name = param_full_name.rsplit(".", 1)[0]
     module = _get_module_by_qualname(model, module_name)
-    if not isinstance(module, torch.nn.Linear):
+    if not (isinstance(module, torch.nn.Linear) or _is_peft_lora_linear(module)):
         raise TypeError(
-            f"Cannot sparsify non-nn.Linear module at '{module_name}' (type={type(module)}). "
-            "For optimizer-state-O(K), targeted modules must be nn.Linear."
+            f"Cannot sparsify non-linear module at '{module_name}' (type={type(module)}). "
+            "For optimizer-state-O(K), targeted modules must be nn.Linear or PEFT LoRA Linear wrapper."
         )
     if selected_idx_flat.numel() == 0:
         return 0
 
-    base_w = module.weight.detach()
-    base_b = module.bias.detach() if module.bias is not None else None
+    if isinstance(module, torch.nn.Linear):
+        base_linear = module
+        replace_mode = "replace_self"
+    else:
+        # PEFT wrapper: replace only its base_layer so LoRA path remains intact (needed for hybrid).
+        base_linear = _get_base_linear_from_peft_linear(module)
+        replace_mode = "replace_base_layer"
+
+    base_w = base_linear.weight.detach()
+    base_b = base_linear.bias.detach() if base_linear.bias is not None else None
     new_mod = SparseDeltaLinear(
         base_weight=base_w,
         base_bias=base_b,
@@ -590,8 +630,12 @@ def _replace_linear_weight_with_sparse_delta(
         alpha=alpha,
         dropout=dropout,
     )
-    new_mod.to(device=module.weight.device, dtype=module.weight.dtype)
-    _set_module_by_qualname(model, module_name, new_mod)
+    new_mod.to(device=base_linear.weight.device, dtype=base_linear.weight.dtype)
+    if replace_mode == "replace_self":
+        _set_module_by_qualname(model, module_name, new_mod)
+    else:
+        # Keep the PEFT wrapper module; only swap its base_layer.
+        setattr(module, "base_layer", new_mod)
     return int(selected_idx_flat.numel())
 
 
@@ -641,8 +685,12 @@ def maybe_run_sparse_selective_tuning(
         except Exception:
             targets = []
 
-    base_params = dict(_iter_linear_weight_params(model, targets)) if targets else {}
+    # IMPORTANT: Only build the candidate pools needed by the selected scope.
+    # In lora_only, we must not scan base target modules (they may be PEFT-wrapped).
     lora_params = dict(_iter_lora_linear_weight_params(model))
+    base_params: Dict[str, torch.nn.Parameter] = {}
+    if cfg.scope.lower() in ("base_only", "hybrid"):
+        base_params = dict(_iter_linear_weight_params(model, targets)) if targets else {}
 
     # Enforce scope for salience computation (only when enabled).
     # For base_only/hybrid we need base weights to have grads during scoring.
