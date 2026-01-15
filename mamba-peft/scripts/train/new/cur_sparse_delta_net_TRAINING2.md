@@ -14,7 +14,7 @@ export HP_SAVE_MODE=best_last
 
 
 
-### F1‑A：Sparse‑LoRA + fixed_ratio
+### F1‑A：Sparse‑LoRA + fixed_count
 
 ```bash
 conda activate mzsz
@@ -24,8 +24,8 @@ export HP_SAVE_FULL_MODEL=0
 
 export HP_SPARSE_ENABLE=1
 export HP_SPARSE_SCOPE=lora_only
-export HP_SPARSE_BUDGET_MODE=fixed_ratio
-export HP_SPARSE_RHO=0.3
+export HP_SPARSE_BUDGET_MODE=fixed_count
+export HP_SPARSE_K=7569408
 export HP_SPARSE_SCORE_SAMPLES=1024
 
 
@@ -63,7 +63,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="delta_net-rte-sparse-2-4090-Jan15-v3"
+export SWANLAB_PROJECT="delta_net-rte-sparse-2-4090-Jan15-v4"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -126,7 +126,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="delta_net-rte-sparse-2-4090-Jan15-v3"
+export SWANLAB_PROJECT="delta_net-rte-sparse-2-4090-Jan15-v4"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -142,7 +142,7 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 ---
 
-### F2‑A：Sparse‑Base + fixed_ratio
+### F2‑A：Sparse‑Base + fixed_count
 
 ```bash
 conda activate mzsz
@@ -152,8 +152,8 @@ export HP_SAVE_FULL_MODEL=0
 
 export HP_SPARSE_ENABLE=1
 export HP_SPARSE_SCOPE=base_only
-export HP_SPARSE_BUDGET_MODE=fixed_ratio
-export HP_SPARSE_RHO=0.3
+export HP_SPARSE_BUDGET_MODE=fixed_count
+export HP_SPARSE_K=7569408
 export HP_SPARSE_SCORE_SAMPLES=1024
 
 
@@ -191,7 +191,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="delta_net-rte-sparse-2-4090-Jan15-v3"
+export SWANLAB_PROJECT="delta_net-rte-sparse-2-4090-Jan15-v4"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -254,7 +254,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="delta_net-rte-sparse-2-4090-Jan15-v2"
+export SWANLAB_PROJECT="delta_net-rte-sparse-2-4090-Jan15-v4"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -270,7 +270,7 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 ---
 
-### F3‑A：Sparse‑Hybrid + fixed_ratio
+### F3‑A：Sparse‑Hybrid + fixed_count
 
 ```bash
 conda activate mzsz
@@ -280,8 +280,8 @@ export HP_SAVE_FULL_MODEL=0
 
 export HP_SPARSE_ENABLE=1
 export HP_SPARSE_SCOPE=hybrid
-export HP_SPARSE_BUDGET_MODE=fixed_ratio
-export HP_SPARSE_RHO=0.3
+export HP_SPARSE_BUDGET_MODE=fixed_count
+export HP_SPARSE_K=7569408
 export HP_SPARSE_SCORE_SAMPLES=1024
 
 
@@ -319,7 +319,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="delta_net-rte-sparse-2-4090-Jan15-v2"
+export SWANLAB_PROJECT="delta_net-rte-sparse-2-4090-Jan15-v4"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -382,7 +382,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="delta_net-rte-sparse-2-4090-Jan15-v3"
+export SWANLAB_PROJECT="delta_net-rte-sparse-2-4090-Jan15-v4"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
