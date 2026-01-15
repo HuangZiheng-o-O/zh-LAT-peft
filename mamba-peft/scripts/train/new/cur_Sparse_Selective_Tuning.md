@@ -78,12 +78,15 @@
 
 ---
 
-## 4) 六个模式怎么设置（只给“新增 / 修改的 export”片段）
+## 4) 六个模式怎么设置 
+ 
+> 说明：这套实现默认就是 Gradient + Static + Global，不需要你再配置指标 / 动态 / 局部等```bash
 
-下面每个小节都只列出**相对你原 dense LoRA bash 需要新增 / 修改的部分**。
+export HP_INIT=pissa   
+export HP_SAVE_MODE=best_last
+export HP_SAVE_FULL_MODEL=0
 
-> 说明：这套实现默认就是 Gradient + Static + Global，不需要你再配置指标 / 动态 / 局部等开关。
-
+```
 ### F1-A：Sparse-LoRA + 固定预算（fixed_ratio）
 ```bash
 export HP_SPARSE_ENABLE=1
@@ -178,6 +181,3 @@ export HP_SPARSE_SCORE_SAMPLES=1024
 [delta_net][sparse] candidate_elems=... budget_k=... realized_k=...
 saved: sparse_selective_mask.pt, sparse_selective_meta.json
 ```
-
----
-

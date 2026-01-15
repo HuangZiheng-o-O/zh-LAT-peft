@@ -63,7 +63,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="delta_net-rte-sparse-2-4090-Jan15-v4"
+export SWANLAB_PROJECT="delta_net-rte-sparse-2-4090-Jan15-v5"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -126,7 +126,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="delta_net-rte-sparse-2-4090-Jan15-v4"
+export SWANLAB_PROJECT="delta_net-rte-sparse-2-4090-Jan15-v5"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -191,7 +191,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="delta_net-rte-sparse-2-4090-Jan15-v4"
+export SWANLAB_PROJECT="delta_net-rte-sparse-2-4090-Jan15-v5"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -254,7 +254,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="delta_net-rte-sparse-2-4090-Jan15-v4"
+export SWANLAB_PROJECT="delta_net-rte-sparse-2-4090-Jan15-v5"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -319,7 +319,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="delta_net-rte-sparse-2-4090-Jan15-v4"
+export SWANLAB_PROJECT="delta_net-rte-sparse-2-4090-Jan15-v5"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -382,7 +382,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="delta_net-rte-sparse-2-4090-Jan15-v4"
+export SWANLAB_PROJECT="delta_net-rte-sparse-2-4090-Jan15-v5"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
