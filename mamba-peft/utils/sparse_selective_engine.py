@@ -734,17 +734,17 @@ def maybe_run_sparse_selective_tuning(
     else:
         raise ValueError(f"Unknown budget_mode: {cfg.budget_mode}")
 
-    # Optional: forbid base/hybrid on PeftModel unless user explicitly saves full model.
-    # Reason: PEFT save_pretrained saves adapter weights; base weight changes would be lost.
-    # LoRA-only is safe (changes are inside adapter modules).
+    # Saving semantics note (do NOT fail here):
+    # For base_only/hybrid under a PEFT-wrapped model, PEFT adapter saving will not include base sparse deltas.
+    # We address this by always writing a minimal O(K) snapshot `sparse_delta.pt` into each checkpoint
+    # directory (see GenericLMTrainer.save_model). Full model saving is optional.
     if isinstance(model, PeftModel) and cfg.scope.lower() in ("base_only", "hybrid"):
-        save_full = str(os.environ.get("HP_SAVE_FULL_MODEL", "")).lower() in ("1", "true", "yes", "on")
+        save_full = str(os.environ.get("HP_SAVE_FULL_MODEL", "") or os.environ.get("LAT_SAVE_FULL_MODEL", "")).lower() in ("1", "true", "yes", "on")
         if not save_full:
-            raise RuntimeError(
-                f"[{model_type}] Sparse scope={cfg.scope} modifies base weights under a PEFT-wrapped model. "
-                "PEFT adapter saving will NOT capture these changes. "
-                "Set HP_SAVE_FULL_MODEL=1 (and ensure your training config enables save_full_model) "
-                "or run base-only without PEFT wrapping."
+            print(
+                f"[{model_type}][sparse][warn] scope={cfg.scope} under PeftModel: adapter-only save_pretrained() will NOT include base sparse deltas. "
+                "Resume/restore requires checkpoint/<...>/sparse_delta.pt + sparse_selective_selection.pt. "
+                "If you need a standalone full-weight artifact, set HP_SAVE_FULL_MODEL=1."
             )
 
     # Distributed safety:
