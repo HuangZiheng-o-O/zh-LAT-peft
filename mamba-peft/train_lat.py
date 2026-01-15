@@ -673,12 +673,26 @@ def run_train(
     # Load model using unified adapter
     print(f"Loading {log_tag} model: {model}")
     model_id = model
+
+    # Sparse Selective Tuning: base_only should NOT inject LoRA adapters.
+    # Reason: even if LoRA params are frozen, some inits (e.g., PiSSA) are non-zero and would
+    # change the forward pass, violating the intended semantics of base-only sparse tuning.
+    # We still keep `peft` in cfg/yaml so sparse engine can read target_modules as the candidate pool.
+    peft_for_load = peft
+    try:
+        scope_env = os.environ.get("HP_SPARSE_SCOPE") or os.environ.get("LAT_SPARSE_SCOPE") or ""
+        if _is_sparse_run_enabled() and scope_env.strip().lower() == "base_only":
+            peft_for_load = None
+            print(f"[{log_tag}][sparse] scope=base_only: skipping PEFT/LoRA injection (peft_json_path=None).")
+    except Exception:
+        pass
+
     model, tokenizer_obj, _ = prepare_lat_model_and_tokenizer(
         model_type=model_type,
         model_id=model_id,
         prec=prec,
         debug=debug,
-        peft_json_path=peft,
+        peft_json_path=peft_for_load,
     )
 
     # Force left padding
