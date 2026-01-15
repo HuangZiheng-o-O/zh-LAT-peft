@@ -18,6 +18,7 @@ export HP_SAVE_MODE=best_last
 
 ```bash
 conda activate mzsz
+export HP_INIT=pissa   
 export HP_SAVE_MODE=best_last
 export HP_SAVE_FULL_MODEL=0
 
@@ -62,7 +63,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="delta_net-rte-sparse-2-4090-Jan15"
+export SWANLAB_PROJECT="delta_net-rte-sparse-2-4090-Jan15-v3"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -80,6 +81,7 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 ```bash
 conda activate mzsz
+export HP_INIT=pissa   
 export HP_SAVE_MODE=best_last
 export HP_SAVE_FULL_MODEL=0
 
@@ -124,7 +126,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="delta_net-rte-sparse-2-4090-Jan15"
+export SWANLAB_PROJECT="delta_net-rte-sparse-2-4090-Jan15-v3"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -144,6 +146,7 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 ```bash
 conda activate mzsz
+export HP_INIT=pissa   
 export HP_SAVE_MODE=best_last
 export HP_SAVE_FULL_MODEL=0
 
@@ -188,7 +191,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="delta_net-rte-sparse-2-4090-Jan15"
+export SWANLAB_PROJECT="delta_net-rte-sparse-2-4090-Jan15-v3"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -197,7 +200,7 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
   --suite E1414 \
   --round all \
   --pairs "87:glue-tvt_rte" \
-  --gpus "2" \
+  --gpus "6" \
   --gpu-plan "1" \
   --model-type delta_net
 ```
@@ -206,6 +209,7 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 ```bash
 conda activate mzsz
+export HP_INIT=pissa   
 export HP_SAVE_MODE=best_last
 export HP_SAVE_FULL_MODEL=0
 
@@ -250,7 +254,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="delta_net-rte-sparse-2-4090-Jan15"
+export SWANLAB_PROJECT="delta_net-rte-sparse-2-4090-Jan15-v2"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -270,6 +274,7 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 ```bash
 conda activate mzsz
+export HP_INIT=pissa   
 export HP_SAVE_MODE=best_last
 export HP_SAVE_FULL_MODEL=0
 
@@ -314,7 +319,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="delta_net-rte-sparse-2-4090-Jan15"
+export SWANLAB_PROJECT="delta_net-rte-sparse-2-4090-Jan15-v2"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -332,6 +337,7 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 ```bash
 conda activate mzsz
+export HP_INIT=pissa   
 export HP_SAVE_MODE=best_last
 export HP_SAVE_FULL_MODEL=0
 
@@ -376,7 +382,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="delta_net-rte-sparse-2-4090-Jan15"
+export SWANLAB_PROJECT="delta_net-rte-sparse-2-4090-Jan15-v3"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -430,7 +436,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="delta_net-rte-sparse-2-4090-Jan15"
+export SWANLAB_PROJECT="delta_net-rte-sparse-2-4090-Jan15-v2"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -443,4 +449,3 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
   --gpu-plan "1" \
   --model-type delta_net
 ```
- 

@@ -283,30 +283,28 @@ def _dist_barrier() -> None:
         dist.barrier()
 
 
-def _assert_peft_adapter_saving_captures_sparse_params(model: PeftModel) -> None:
+def _maybe_warn_sparse_not_in_adapter_state(model: PeftModel, *, model_type: str, scope: str) -> None:
     """
-    Fail-fast guard: if user is saving adapter-only (save_full_model=False),
-    ensure PEFT's adapter state dict includes our SparseDeltaLinear trainables.
+    In reparam_v1 we always save a minimal O(K) snapshot (sparse_delta.pt) at each checkpoint via GenericLMTrainer.
+    Therefore, adapter-only saving NOT including SparseDeltaLinear parameters is no longer a hard error.
+
+    We keep a warning because:
+      - adapter-only artifacts alone are not sufficient to reproduce sparse base/hybrid changes
+      - a standalone full-weight artifact requires HP_SAVE_FULL_MODEL=1
     """
     try:
         from peft.utils.save_and_load import get_peft_model_state_dict  # type: ignore
-    except Exception as e:
-        raise RuntimeError(
-            "Cannot import peft.utils.save_and_load.get_peft_model_state_dict to validate adapter-only saving. "
-            "Refuse to proceed because sparse params might not be saved. "
-            "Set HP_SAVE_FULL_MODEL=1 to save full model.pt. "
-            f"Import error: {e}"
-        ) from e
+        sd = get_peft_model_state_dict(model)
+        has_delta = any(k.endswith(".delta") for k in sd.keys())
+    except Exception:
+        has_delta = False
 
-    sd = get_peft_model_state_dict(model)
-    # Our trainables are named like "...SparseDeltaLinear.delta" under modules that were lora_A/lora_B or base targets.
-    # We check presence of any '.delta' key as minimal guarantee.
-    has_delta = any(k.endswith(".delta") for k in sd.keys())
     if not has_delta:
-        raise RuntimeError(
-            "PEFT adapter-only state_dict does not include any SparseDeltaLinear '.delta' parameters. "
-            "This means your sparse trainable params would NOT be saved by adapter saving. "
-            "Set HP_SAVE_FULL_MODEL=1 (and keep save_total_limit=2) to save full weights safely."
+        print(
+            f"[{model_type}][sparse][warn] scope={scope} under PeftModel: adapter-only save_pretrained() does not include "
+            "SparseDeltaLinear '.delta' parameters. This is OK if you rely on checkpoint/<...>/sparse_delta.pt for resume "
+            "(saved automatically when checkpoints are enabled). If you need a standalone full-weight artifact, set "
+            "HP_SAVE_FULL_MODEL=1."
         )
 
 
@@ -853,11 +851,11 @@ def maybe_run_sparse_selective_tuning(
 
     realized_k = trainable_after
 
-    # If this is a PEFT-wrapped model and user is NOT saving full model, verify adapter-only
-    # saving actually captures SparseDeltaLinear trainables (fail-fast).
+    # If this is a PEFT-wrapped model and user is NOT saving full model, warn that adapter-only artifacts
+    # may not include sparse deltas (resume should use sparse_delta.pt saved in checkpoints).
     save_full = str(os.environ.get("HP_SAVE_FULL_MODEL", "") or os.environ.get("LAT_SAVE_FULL_MODEL", "")).lower() in ("1", "true", "yes", "on")
     if isinstance(model, PeftModel) and not save_full:
-        _assert_peft_adapter_saving_captures_sparse_params(model)
+        _maybe_warn_sparse_not_in_adapter_state(model, model_type=model_type, scope=cfg.scope)
 
     meta = {
         "enabled": True,
