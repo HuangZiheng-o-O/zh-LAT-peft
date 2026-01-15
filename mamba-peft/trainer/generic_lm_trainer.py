@@ -248,6 +248,21 @@ class GenericLMTrainer(Trainer):
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
 
+        # Always save sparse delta snapshot if present (O(K)), regardless of full/adapter saving.
+        # This enables minimal checkpointing for SparseDeltaLinear re-parameterization.
+        try:
+            from utils.sparse_selective_engine import save_sparse_delta_snapshot_if_present
+            save_sparse_delta_snapshot_if_present(self.model, output_dir)
+        except Exception as _e:
+            # Fail-fast only if sparse appears to be enabled (delta modules exist).
+            try:
+                from utils.sparse_selective_engine import SparseDeltaLinear
+                has_sparse = any(isinstance(m, SparseDeltaLinear) for m in self.model.modules())
+            except Exception:
+                has_sparse = False
+            if has_sparse:
+                raise RuntimeError(f"Failed to save sparse_delta.pt into {output_dir}: {_e}") from _e
+
         if getattr(self.args, "save_full_model", False):
             torch.save(self.model, f"{output_dir}/model.pt")
             return

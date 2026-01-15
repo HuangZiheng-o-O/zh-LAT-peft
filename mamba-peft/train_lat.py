@@ -203,7 +203,7 @@ def build_and_run_trainer_lat(
     # and persisting mask+metadata under output_dir for resume/reuse.
     # ---------------------------------------------------------------------
     try:
-        maybe_run_sparse_selective_tuning(
+        sparse_meta = maybe_run_sparse_selective_tuning(
             model=model,
             train_dataset=train_data_module.dataset,
             data_collator=train_data_module.data_collator,
@@ -212,6 +212,12 @@ def build_and_run_trainer_lat(
             cfg_path=cfg_path,
             model_type=model_type,
         )
+        # If resuming and sparse is enabled, load sparse delta snapshot from checkpoint unless full model is saved.
+        _sfm_env = str(os.environ.get("HP_SAVE_FULL_MODEL", "") or os.environ.get("LAT_SAVE_FULL_MODEL", "")).lower()
+        _save_full_model = _sfm_env in ("1", "true", "yes", "on")
+        if (sparse_meta is not None) and resume_from_checkpoint and (not _save_full_model):
+            from utils.sparse_selective_engine import load_sparse_delta_snapshot_strict
+            load_sparse_delta_snapshot_strict(model, resume_from_checkpoint)
     except Exception as _sparse_e:
         # Fail-fast when explicitly enabled; otherwise never triggered.
         raise
@@ -360,13 +366,35 @@ def build_and_run_trainer_lat(
             return None
         return str(v).lower() in ("1", "true", "yes", "on")
 
+    # Unified save mode (optional, overrides defaults; keeps backward compatibility if unset):
+    #   HP_SAVE_MODE=none|last|best_last
+    # - none: no checkpoints, no final snapshot
+    # - last: keep last checkpoint only
+    # - best_last: keep best+last (default behavior today)
+    save_mode = (env.get("HP_SAVE_MODE") or env.get("LAT_SAVE_MODE") or "").strip().lower()
+    if save_mode:
+        if save_mode in ("none", "no", "off", "0"):
+            no_save = True
+        elif save_mode in ("last",):
+            no_save = False
+        elif save_mode in ("best_last", "best+last", "bestlast"):
+            no_save = False
+        else:
+            raise ValueError(f"[{log_tag}] Unknown HP_SAVE_MODE='{save_mode}' (use none|last|best_last)")
+
     save_total_limit = (
         _env_int_opt("HP_SAVE_TOTAL_LIMIT")
         or _env_int_opt("LAT_SAVE_TOTAL_LIMIT")
         or _env_int_opt("SAVE_TOTAL_LIMIT")
     )
     if save_total_limit is None:
-        save_total_limit = 2 if not no_save else None
+        if no_save:
+            save_total_limit = None
+        elif save_mode == "last":
+            save_total_limit = 1
+        else:
+            # default & best_last
+            save_total_limit = 2
 
     load_best_model_at_end = (
         _env_bool_opt("HP_LOAD_BEST_MODEL_AT_END")
@@ -374,7 +402,13 @@ def build_and_run_trainer_lat(
         else _env_bool_opt("LAT_LOAD_BEST_MODEL_AT_END")
     )
     if load_best_model_at_end is None:
-        load_best_model_at_end = (not no_save) and (not skip_eval)
+        if no_save:
+            load_best_model_at_end = False
+        elif save_mode == "last":
+            load_best_model_at_end = False
+        else:
+            # default & best_last
+            load_best_model_at_end = (not skip_eval)
 
     metric_for_best_model = env.get("HP_METRIC_FOR_BEST_MODEL") or env.get("LAT_METRIC_FOR_BEST_MODEL") or "eval_loss"
     greater_is_better_env = env.get("HP_GREATER_IS_BETTER") or env.get("LAT_GREATER_IS_BETTER")
@@ -462,7 +496,15 @@ def build_and_run_trainer_lat(
             trainer.train(resume_from_checkpoint=resume_from_checkpoint)
         # Write a stable "final" snapshot into output_dir root.
         # If load_best_model_at_end=True, this is the best checkpoint on validation.
-        if not no_save:
+        save_final_env = env.get("HP_SAVE_FINAL_SNAPSHOT") or env.get("LAT_SAVE_FINAL_SNAPSHOT")
+        save_final = True
+        if save_final_env is not None and str(save_final_env).strip() != "":
+            save_final = str(save_final_env).lower() in ("1", "true", "yes", "on")
+        # In save_mode=none, default to NOT writing final snapshot (disk-minimal).
+        if save_mode in ("none", "no", "off", "0"):
+            save_final = False
+
+        if (not no_save) and save_final:
             try:
                 # GenericLMTrainer.save_model uses HF/PEFT save_pretrained semantics.
                 trainer.save_model(output_dir, _internal_call=True)

@@ -453,6 +453,76 @@ class SparseDeltaLinear(torch.nn.Module):
         return out.to(prev_dtype)
 
 
+def save_sparse_delta_snapshot_if_present(model: torch.nn.Module, output_dir: str) -> Optional[str]:
+    """
+    Save a lightweight snapshot of all SparseDeltaLinear trainables (delta vectors + selected indices).
+    This enables minimal checkpointing (O(K)) even when not saving full model weights.
+
+    Writes: <output_dir>/sparse_delta.pt
+    Returns the written path string if any SparseDeltaLinear exists, else None.
+    """
+    deltas: Dict[str, torch.Tensor] = {}
+    indices: Dict[str, torch.Tensor] = {}
+    for name, mod in model.named_modules():
+        if isinstance(mod, SparseDeltaLinear):
+            deltas[name] = mod.delta.detach().to("cpu")
+            indices[name] = mod.selected_idx.detach().to("cpu")
+    if not deltas:
+        return None
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    p = out / "sparse_delta.pt"
+    torch.save({"impl": "reparam_v1", "deltas": deltas, "indices": indices}, p)
+    return str(p)
+
+
+def load_sparse_delta_snapshot_strict(model: torch.nn.Module, checkpoint_dir: str) -> None:
+    """
+    Load <checkpoint_dir>/sparse_delta.pt into existing SparseDeltaLinear modules.
+    Fail-fast if:
+      - file missing
+      - module keys mismatch
+      - selected_idx mismatch
+      - dtype/shape mismatch
+    """
+    p = Path(checkpoint_dir) / "sparse_delta.pt"
+    if not p.exists():
+        raise FileNotFoundError(f"sparse enabled resume requires sparse_delta.pt, missing: {p}")
+    saved = torch.load(p, map_location="cpu")
+    if saved.get("impl") != "reparam_v1":
+        raise RuntimeError(f"Unsupported sparse_delta.pt impl={saved.get('impl')} at {p}")
+    deltas: Dict[str, torch.Tensor] = saved.get("deltas") or {}
+    indices: Dict[str, torch.Tensor] = saved.get("indices") or {}
+    if not deltas:
+        raise RuntimeError(f"Invalid sparse_delta.pt (no deltas) at {p}")
+
+    # Build current module map.
+    cur: Dict[str, SparseDeltaLinear] = {n: m for n, m in model.named_modules() if isinstance(m, SparseDeltaLinear)}
+    if set(cur.keys()) != set(deltas.keys()):
+        missing = sorted(set(cur.keys()) - set(deltas.keys()))
+        extra = sorted(set(deltas.keys()) - set(cur.keys()))
+        raise RuntimeError(
+            f"sparse_delta.pt module key mismatch at {p}. missing={missing[:10]} extra={extra[:10]} "
+            f"(missing_count={len(missing)} extra_count={len(extra)})"
+        )
+
+    for name, mod in cur.items():
+        d = deltas[name]
+        idx = indices.get(name)
+        if idx is None:
+            raise RuntimeError(f"sparse_delta.pt missing indices for module '{name}'")
+        if idx.dtype != torch.int64:
+            idx = idx.to(torch.int64)
+        if idx.shape != mod.selected_idx.detach().cpu().shape:
+            raise RuntimeError(f"indices shape mismatch for '{name}': saved={tuple(idx.shape)} cur={tuple(mod.selected_idx.shape)}")
+        if not torch.equal(idx, mod.selected_idx.detach().cpu()):
+            raise RuntimeError(f"indices value mismatch for '{name}' (selection differs); refuse to resume.")
+        if d.numel() != mod.delta.numel():
+            raise RuntimeError(f"delta numel mismatch for '{name}': saved={d.numel()} cur={mod.delta.numel()}")
+        # Copy into module param (preserve device/dtype)
+        mod.delta.data.copy_(d.to(device=mod.delta.device, dtype=mod.delta.dtype))
+
+
 def _get_module_by_qualname(model: torch.nn.Module, qualname: str) -> torch.nn.Module:
     modules = dict(model.named_modules())
     if qualname not in modules:
