@@ -225,7 +225,10 @@ def build_and_run_trainer_lat(
     # Log tag based on model type
     log_tag = model_type.upper() if model_type != "auto" else "LAT"
 
-    print_trainable_parameter_names(model, output_dir=output_dir, cfg_path=cfg_path)
+    # NOTE: We intentionally DO NOT write parameter_counts.json here.
+    # For sparse selective tuning, trainable parameters are finalized only after
+    # maybe_run_sparse_selective_tuning() finishes (post-sparse).
+    # To make parameter_counts.json a trustworthy "post-sparse" artifact, we write it later.
     print("Loaded model")
 
     # Optional dataset-side max length filter (matches MambaPEFT cutoff_len behavior).
@@ -281,6 +284,14 @@ def build_and_run_trainer_lat(
     except Exception as _sparse_e:
         # Fail-fast when explicitly enabled; otherwise never triggered.
         raise
+
+    # ------------------------------------------------------------
+    # Post-sparse parameter accounting (authoritative)
+    #
+    # Hard requirement: parameter_counts.json must reflect the FINAL trainable
+    # parameters used in training (post-sparse / post-resume restore).
+    # ------------------------------------------------------------
+    print_trainable_parameter_names(model, output_dir=output_dir, cfg_path=cfg_path)
 
     # Build generation decoder
     eval_generator = None
