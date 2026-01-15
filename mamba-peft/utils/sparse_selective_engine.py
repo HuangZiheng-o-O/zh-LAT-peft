@@ -1,5 +1,5 @@
 """
-Sparse Selective Tuning Engine (Gradient + Static + Global Top-K).
+Sparse Selective Tuning Engine (Gradient + Static + Global Top-K) - Reparameterized.
 
 This module implements the minimal, reusable pieces needed to add:
   - Sparse-LoRA  (mask within LoRA parameters)
@@ -10,7 +10,12 @@ Design goals:
   - Backward compatible by default (disabled unless env enables).
   - Static mask only: compute once at init, save to output_dir, reuse on resume.
   - Global top-K over the candidate pool (no per-layer budget splitting).
-  - Works without modifying GenericLMTrainer: we apply grad hooks before trainer construction.
+  - Works without modifying GenericLMTrainer: we replace modules before trainer construction.
+
+IMPORTANT DIFFERENCE VS grad-mask:
+  - This implementation performs *sparse re-parameterization* so optimizer state scales with K.
+  - We do NOT keep dense trainable tensors and mask gradients; instead we replace each selected
+    nn.Linear with a SparseDeltaLinear that has ONLY a length-K trainable vector and an index buffer.
 
 NOTE: This is unstructured (parameter-level) sparsity; it does not change inference structure.
 """
@@ -24,8 +29,10 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
 import torch
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
+from peft import PeftModel
 from trainer.loss import CrossEntropy
 
 
@@ -199,6 +206,11 @@ def _set_requires_grad_for_scope(
     raise ValueError(f"Unknown sparse scope: {scope}")
 
 
+def _freeze_all_params(model: torch.nn.Module) -> None:
+    for _, p in model.named_parameters():
+        p.requires_grad = False
+
+
 def compute_gradient_salience_scores(
     *,
     model: torch.nn.Module,
@@ -253,12 +265,14 @@ def compute_gradient_salience_scores(
     return scores
 
 
-def global_topk_mask_from_scores(
+def global_topk_indices_from_scores(
     scores: Dict[str, torch.Tensor],
     k: int,
 ) -> Dict[str, torch.Tensor]:
     """
-    Build per-parameter boolean masks (CPU) from per-parameter score tensors (CPU).
+    Build per-parameter 1D index tensors (flattened positions, CPU int64) from per-parameter
+    score tensors (CPU float32), using global top-k across the candidate pool.
+
     Uses a two-level topk:
       - per-tensor topk with k (global) to reduce work for huge tensors
       - then global topk over the union
@@ -293,8 +307,8 @@ def global_topk_mask_from_scores(
     else:
         _, global_sel = torch.topk(all_vals, k, sorted=False)
 
-    # Build masks per tensor.
-    mask_dict: Dict[str, torch.Tensor] = {}
+    # Build selected indices per tensor.
+    index_dict: Dict[str, torch.Tensor] = {}
     global_sel = global_sel.to(torch.int64)
     for name, start, end, local_idx, _local_vals in parts:
         # indices into union that fall into [start,end)
@@ -302,49 +316,146 @@ def global_topk_mask_from_scores(
         sel = global_sel[in_chunk] - start
         # map union positions -> local indices
         chosen_local_idx = local_idx[sel]
+        index_dict[name] = chosen_local_idx.to(torch.int64).cpu()
 
-        # create flat mask
-        flat_mask = torch.zeros(int(scores[name].numel()), dtype=torch.bool)
-        if int(chosen_local_idx.numel()) > 0:
-            flat_mask[chosen_local_idx] = True
-        mask_dict[name] = flat_mask.view_as(scores[name])
-
-    return mask_dict
+    return index_dict
 
 
-def apply_gradient_mask_hooks(model: torch.nn.Module, mask_dict: Dict[str, torch.Tensor]) -> None:
+class SparseDeltaLinear(torch.nn.Module):
     """
-    Apply param.register_hook(grad * mask) for each named parameter in mask_dict.
-    Mask tensors are registered as module buffers so they move with model.to(...).
+    A drop-in replacement for nn.Linear where the dense weight is frozen, and the only trainable
+    parameters are a 1D vector of length K (sparse delta) plus an index buffer of length K.
+
+    Forward computes:
+      W_eff = W_base + scatter_add(delta at selected indices)
+      y = x @ W_eff^T + b
+
+    This matches ACL-2025 SPEFT's core idea (LinearSparse), and guarantees optimizer state O(K).
     """
-    name_to_param = dict(model.named_parameters())
-    name_to_module = dict(model.named_modules())
-    for full_name, mask_cpu in mask_dict.items():
-        p = name_to_param.get(full_name)
-        if p is None:
-            continue
-        # Ensure mask on same device/dtype as grad for multiplication.
-        mask = mask_cpu.to(device=p.device)
-        module_name, param_name = full_name.rsplit(".", 1)
-        module = name_to_module.get(module_name)
-        if module is None:
-            continue
-        buf_name = f"{param_name}__sparse_mask"
-        # Avoid duplicate registration on resume.
-        if not hasattr(module, buf_name):
-            module.register_buffer(buf_name, mask)
+
+    def __init__(
+        self,
+        *,
+        base_weight: torch.Tensor,
+        base_bias: Optional[torch.Tensor],
+        selected_idx_flat: torch.Tensor,
+        alpha: float = 1.0,
+        dropout: float = 0.0,
+    ) -> None:
+        super().__init__()
+        if base_weight.dim() != 2:
+            raise ValueError(f"SparseDeltaLinear requires 2D weight, got {tuple(base_weight.shape)}")
+        if selected_idx_flat.dtype != torch.int64:
+            selected_idx_flat = selected_idx_flat.to(torch.int64)
+        if selected_idx_flat.dim() != 1:
+            raise ValueError("selected_idx_flat must be a 1D int64 tensor")
+
+        self.in_features = int(base_weight.shape[1])
+        self.out_features = int(base_weight.shape[0])
+        self.alpha = float(alpha)
+
+        # Frozen base weight/bias stored as buffers (saved in state_dict, not trainable).
+        self.register_buffer("base_weight", base_weight.detach().clone(), persistent=True)
+        if base_bias is not None:
+            self.register_buffer("base_bias", base_bias.detach().clone(), persistent=True)
         else:
-            setattr(module, buf_name, mask)
+            self.base_bias = None  # type: ignore[assignment]
 
-        def _hook(grad, _module=module, _buf_name=buf_name):
-            m = getattr(_module, _buf_name)
-            # Ensure mask is on grad device (should already be)
-            if m.device != grad.device:
-                m = m.to(grad.device)
-                setattr(_module, _buf_name, m)
-            return grad * m
+        # Selected indices (flattened into base_weight.view(-1))
+        self.register_buffer("selected_idx", selected_idx_flat.detach().clone(), persistent=True)
 
-        p.register_hook(_hook)
+        # Trainable sparse delta vector (optimizer state scales with its length).
+        delta = torch.zeros(int(selected_idx_flat.numel()), device=base_weight.device, dtype=base_weight.dtype)
+        self.delta = torch.nn.Parameter(delta, requires_grad=True)
+
+        self.dropout = torch.nn.Dropout(p=float(dropout)) if float(dropout) > 0 else torch.nn.Identity()
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        prev_dtype = x.dtype
+        x = x.to(self.base_weight.dtype)
+        x = self.dropout(x)
+
+        # Construct effective weight on-the-fly
+        flat = self.base_weight.flatten()
+        scaled = self.delta * self.alpha
+        flat2 = torch.scatter_add(flat, dim=0, index=self.selected_idx, src=scaled)
+        w_eff = flat2.view(self.out_features, self.in_features)
+
+        b = self.base_bias if hasattr(self, "base_bias") else None
+        out = F.linear(x, w_eff, b)
+        return out.to(prev_dtype)
+
+
+def _get_module_by_qualname(model: torch.nn.Module, qualname: str) -> torch.nn.Module:
+    modules = dict(model.named_modules())
+    if qualname not in modules:
+        raise KeyError(f"Module not found for qualname='{qualname}'")
+    return modules[qualname]
+
+
+def _set_module_by_qualname(model: torch.nn.Module, qualname: str, new_module: torch.nn.Module) -> None:
+    """
+    Replace a submodule by its dotted qualname.
+    Supports ModuleDict / ModuleList / regular attributes.
+    """
+    if qualname == "":
+        raise ValueError("Cannot replace root module")
+    parts = qualname.split(".")
+    parent = model
+    for p in parts[:-1]:
+        if isinstance(parent, torch.nn.ModuleDict):
+            parent = parent[p]
+        elif isinstance(parent, torch.nn.ModuleList):
+            parent = parent[int(p)]
+        else:
+            parent = getattr(parent, p)
+        if not isinstance(parent, torch.nn.Module):
+            raise TypeError(f"Traversal hit non-module at '{p}' while setting '{qualname}'")
+    last = parts[-1]
+    if isinstance(parent, torch.nn.ModuleDict):
+        parent[last] = new_module
+    elif isinstance(parent, torch.nn.ModuleList):
+        parent[int(last)] = new_module
+    else:
+        setattr(parent, last, new_module)
+
+
+def _replace_linear_weight_with_sparse_delta(
+    *,
+    model: torch.nn.Module,
+    param_full_name: str,
+    selected_idx_flat: torch.Tensor,
+    alpha: float = 1.0,
+    dropout: float = 0.0,
+) -> int:
+    """
+    Replace the nn.Linear module that owns '<module>.weight' with SparseDeltaLinear.
+    Returns number of trainable parameters introduced (K for this module).
+    """
+    if not param_full_name.endswith(".weight"):
+        raise ValueError(f"Expected a weight param name ending with '.weight', got: {param_full_name}")
+    module_name = param_full_name.rsplit(".", 1)[0]
+    module = _get_module_by_qualname(model, module_name)
+    if not isinstance(module, torch.nn.Linear):
+        raise TypeError(
+            f"Cannot sparsify non-nn.Linear module at '{module_name}' (type={type(module)}). "
+            "For optimizer-state-O(K), targeted modules must be nn.Linear."
+        )
+    if selected_idx_flat.numel() == 0:
+        return 0
+
+    base_w = module.weight.detach()
+    base_b = module.bias.detach() if module.bias is not None else None
+    new_mod = SparseDeltaLinear(
+        base_weight=base_w,
+        base_bias=base_b,
+        selected_idx_flat=selected_idx_flat.to(torch.int64),
+        alpha=alpha,
+        dropout=dropout,
+    )
+    new_mod.to(device=module.weight.device, dtype=module.weight.dtype)
+    _set_module_by_qualname(model, module_name, new_mod)
+    return int(selected_idx_flat.numel())
 
 
 def maybe_run_sparse_selective_tuning(
@@ -358,8 +469,13 @@ def maybe_run_sparse_selective_tuning(
     model_type: str,
 ) -> Optional[Dict]:
     """
-    Main entry: if enabled, compute/load mask, apply hooks, and persist metadata.
-    Returns metadata dict (also written to disk), or None if disabled.
+    Main entry: if enabled, compute/load selection indices, RE-PARAMETERIZE targeted linears so
+    optimizer state scales with K, and persist metadata. Returns metadata dict (also written to disk),
+    or None if disabled.
+
+    Fail-fast policy:
+      - If enabled and any expected module/param cannot be found or isn't nn.Linear, we raise.
+      - No silent fallbacks to dense LoRA or grad-masking.
     """
     cfg = SparseSelectiveConfig.from_env()
     if not cfg.enabled:
@@ -367,7 +483,8 @@ def maybe_run_sparse_selective_tuning(
 
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    mask_path = out_dir / "sparse_selective_mask.pt"
+    # Persisted selection + metadata for resume/repro.
+    sel_path = out_dir / "sparse_selective_selection.pt"
     meta_path = out_dir / "sparse_selective_meta.json"
 
     # Determine candidate set for base weights from PEFT config (current cfg yaml contains peft json path).
@@ -390,7 +507,8 @@ def maybe_run_sparse_selective_tuning(
     base_params = dict(_iter_linear_weight_params(model, targets)) if targets else {}
     lora_params = dict(_iter_lora_params(model))
 
-    # Enforce scope (only when enabled)
+    # Enforce scope for salience computation (only when enabled).
+    # For base_only/hybrid we need base weights to have grads during scoring.
     _set_requires_grad_for_scope(model, cfg.scope, base_params, lora_params)
 
     # Candidate pool is defined by scope.
@@ -427,15 +545,32 @@ def maybe_run_sparse_selective_tuning(
     else:
         raise ValueError(f"Unknown budget_mode: {cfg.budget_mode}")
 
-    # Load or compute mask
-    if mask_path.exists():
-        saved = torch.load(mask_path, map_location="cpu")
-        mask_dict = saved["mask_dict"]
-        # ensure requires_grad for masked params (base scope)
-        for n in mask_dict.keys():
-            p = dict(model.named_parameters()).get(n)
-            if p is not None:
-                p.requires_grad = True
+    # Optional: forbid base/hybrid on PeftModel unless user explicitly saves full model.
+    # Reason: PEFT save_pretrained saves adapter weights; base weight changes would be lost.
+    # LoRA-only is safe (changes are inside adapter modules).
+    if isinstance(model, PeftModel) and cfg.scope.lower() in ("base_only", "hybrid"):
+        save_full = str(os.environ.get("HP_SAVE_FULL_MODEL", "")).lower() in ("1", "true", "yes", "on")
+        if not save_full:
+            raise RuntimeError(
+                f"[{model_type}] Sparse scope={cfg.scope} modifies base weights under a PEFT-wrapped model. "
+                "PEFT adapter saving will NOT capture these changes. "
+                "Set HP_SAVE_FULL_MODEL=1 (and ensure your training config enables save_full_model) "
+                "or run base-only without PEFT wrapping."
+            )
+
+    # Load or compute selection indices (static).
+    if sel_path.exists():
+        saved = torch.load(sel_path, map_location="cpu")
+        sel_dict: Dict[str, torch.Tensor] = saved["selection"]
+        if int(saved.get("budget_k", -1)) <= 0:
+            raise RuntimeError(f"[{model_type}] Invalid saved selection file: {sel_path}")
+        budget_k = int(saved["budget_k"])
+        candidate_elems_saved = int(saved.get("candidate_elems", candidate_elems))
+        if candidate_elems_saved != candidate_elems:
+            raise RuntimeError(
+                f"[{model_type}] Candidate pool size mismatch on resume: saved={candidate_elems_saved}, now={candidate_elems}. "
+                f"Refuse to proceed to avoid silent behavior drift. Delete {sel_path} to recompute."
+            )
     else:
         # Build a small scoring dataloader (no workers, deterministic-ish)
         score_bs = max(1, min(batch_size, 4))
@@ -454,29 +589,57 @@ def maybe_run_sparse_selective_tuning(
             num_examples=cfg.score_samples,
             device=device,
         )
-        mask_dict = global_topk_mask_from_scores(scores, budget_k)
+        sel_dict = global_topk_indices_from_scores(scores, budget_k)
+        realized_k = int(sum(int(v.numel()) for v in sel_dict.values()))
+        if realized_k != int(budget_k):
+            raise RuntimeError(
+                f"[{model_type}] Internal error: realized_k({realized_k}) != budget_k({budget_k}). "
+                "Refusing to proceed."
+            )
         torch.save(
             {
-                "mask_dict": mask_dict,
-                "budget_k": budget_k,
-                "candidate_elems": candidate_elems,
+                "selection": sel_dict,
+                "budget_k": int(budget_k),
+                "candidate_elems": int(candidate_elems),
                 "scope": cfg.scope,
                 "budget_mode": cfg.budget_mode,
-                "rho": cfg.rho,
+                "rho": float(cfg.rho),
                 "reference_cfg": cfg.reference_cfg,
-                "score_samples": cfg.score_samples,
+                "score_samples": int(cfg.score_samples),
                 "salience": cfg.salience,
                 "ranking": cfg.ranking,
                 "cfg_path": cfg_path,
+                "impl": "reparam_v1",
             },
-            mask_path,
+            sel_path,
         )
 
-    # Apply hooks (grad *= mask)
-    apply_gradient_mask_hooks(model, mask_dict)
+    # Replace targeted linears with SparseDeltaLinear (optimizer state O(K))
+    # Also force all other params to requires_grad=False (train only sparse delta vectors),
+    # except for parameters not in candidate pool when scope demands.
+    alpha = float(os.environ.get("HP_SPARSE_ALPHA", "1.0"))
+    dropout = float(os.environ.get("HP_SPARSE_DROPOUT", "0.0"))
+    introduced = 0
+    _freeze_all_params(model)
+    for pname, idxs in sel_dict.items():
+        introduced += _replace_linear_weight_with_sparse_delta(
+            model=model,
+            param_full_name=pname,
+            selected_idx_flat=idxs,
+            alpha=alpha,
+            dropout=dropout,
+        )
 
-    # Compute realized K for logging
-    realized_k = int(sum(int(m.to(torch.int64).sum().item()) for m in mask_dict.values()))
+    # Strict sanity checks: trainable count must equal budget_k exactly.
+    trainable_after = int(sum(p.numel() for p in model.parameters() if p.requires_grad))
+    if trainable_after != int(budget_k):
+        raise RuntimeError(
+            f"[{model_type}] Trainable param mismatch after reparameterization: "
+            f"trainable_after={trainable_after} vs budget_k={budget_k}. "
+            "This would violate optimizer-state-O(K). Refusing to proceed."
+        )
+
+    realized_k = trainable_after
 
     meta = {
         "enabled": True,
@@ -491,13 +654,14 @@ def maybe_run_sparse_selective_tuning(
         "ranking": cfg.ranking,
         "reference_cfg": cfg.reference_cfg,
         "targets_from_current_peft": targets,
-        "mask_path": str(mask_path),
+        "selection_path": str(sel_path),
+        "impl": "reparam_v1",
     }
     meta_path.write_text(json.dumps(meta, indent=2, ensure_ascii=False))
 
     print(f"[{model_type}][sparse] enabled scope={cfg.scope} budget_mode={cfg.budget_mode} ranking=global salience=gradient")
     print(f"[{model_type}][sparse] candidate_elems={candidate_elems:,d} budget_k={budget_k:,d} realized_k={realized_k:,d}")
-    print(f"[{model_type}][sparse] saved: {mask_path.name}, {meta_path.name}")
+    print(f"[{model_type}][sparse] saved: {sel_path.name}, {meta_path.name}")
 
     return meta
 
