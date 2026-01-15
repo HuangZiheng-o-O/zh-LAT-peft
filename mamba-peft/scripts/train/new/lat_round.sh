@@ -182,6 +182,10 @@ ROUND_E14=(# ROUND_E12_DELTANET
   "E6_VOONLY_r8_alpha16.yaml"
 
 )
+ROUND_E1414=(# ROUND_E12_DELTANET
+  "E1_QKVO_plus_MLP_r8_alpha16.yaml"
+)
+
 ROUND_E99=(# ROUND_E12_DELTANET
   "E7_KVONLY_r8_alpha16.yaml"
 )
