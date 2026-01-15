@@ -685,14 +685,56 @@ def get_output_path_for_cfg(cfg_path, cfg, model_type: str = "gla"):
     # Normalize model_type to lowercase for consistent path naming
     model_type = model_type.lower()
 
+    # ------------------------------------------------------------------
+    # Sparse Selective Tuning: output dir suffix (backward compatible)
+    #
+    # Requirement: bash invocation still uses .../<data>_seed<seed>/,
+    # but when sparse is enabled we add a suffix to distinguish runs, e.g.:
+    #   glue-tvt_qqp_seed87_SPARSE_LoraOnly_R30
+    # ------------------------------------------------------------------
+    def _sparse_suffix() -> str:
+        try:
+            from utils.sparse_selective_engine import SparseSelectiveConfig  # local import for safety
+            s = SparseSelectiveConfig.from_env()
+        except Exception:
+            return ""
+        if not getattr(s, "enabled", False):
+            return ""
+
+        scope_map = {
+            "lora_only": "LoraOnly",
+            "base_only": "BaseOnly",
+            "hybrid": "Hybrid",
+        }
+        scope = scope_map.get(str(s.scope).lower().strip(), str(s.scope))
+
+        mode = str(s.budget_mode).lower().strip()
+        if mode == "fixed_ratio":
+            pct = int(round(float(s.rho) * 100))
+            budget = f"R{pct}"
+        elif mode == "fixed_count":
+            budget = f"K{int(s.k) if s.k is not None else 'NA'}"
+        elif mode == "match_reference":
+            ref = str(s.reference_cfg) if s.reference_cfg else "REF"
+            ref_stem = Path(ref).stem if ref else "REF"
+            # Keep it compact
+            budget = f"REF_{ref_stem}"
+        else:
+            budget = mode.upper()
+
+        # Stable, filesystem-safe
+        suffix = f"_SPARSE_{scope}_{budget}"
+        suffix = suffix.replace("/", "_").replace(" ", "_")
+        return suffix
+
     if data and seed is not None:
         # For datasets with explicit data name: <model_type>/<data>_seed<seed>/<yaml_stem>
-        folder = f"{data}_seed{seed}"
+        folder = f"{data}_seed{seed}{_sparse_suffix()}"
         return NOW_OUTPUT_ROOT / model_type / folder / yaml_stem
 
     # Fallback: use DATASET_ROOT_NAME (glue) for backward compatibility
     base_dir = NOW_OUTPUT_ROOT / model_type / DATASET_ROOT_NAME
-    return base_dir / "cola_gla" / yaml_stem
+    return base_dir / "cola_gla" / (yaml_stem + _sparse_suffix())
 
 
 def _find_last_checkpoint(root: Path) -> Optional[Path]:
