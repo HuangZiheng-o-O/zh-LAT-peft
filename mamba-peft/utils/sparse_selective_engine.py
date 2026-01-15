@@ -456,11 +456,16 @@ class SparseDeltaLinear(torch.nn.Module):
         self.alpha = float(alpha)
 
         # Frozen base weight/bias stored as buffers (saved in state_dict, not trainable).
-        self.register_buffer("base_weight", base_weight.detach().clone(), persistent=True)
+        #
+        # IMPORTANT (PEFT compatibility):
+        # PEFT LoRA layers expect lora_A/lora_B modules to have `.weight` (and optionally `.bias`)
+        # attributes (e.g., they do `x = x.to(lora_A.weight.dtype)`). We therefore expose buffers
+        # named exactly `weight` / `bias` to match nn.Linear's interface.
+        self.register_buffer("weight", base_weight.detach().clone(), persistent=True)
         if base_bias is not None:
-            self.register_buffer("base_bias", base_bias.detach().clone(), persistent=True)
+            self.register_buffer("bias", base_bias.detach().clone(), persistent=True)
         else:
-            self.base_bias = None  # type: ignore[assignment]
+            self.bias = None  # type: ignore[assignment]
 
         # Selected indices (flattened into base_weight.view(-1))
         self.register_buffer("selected_idx", selected_idx_flat.detach().clone(), persistent=True)
@@ -473,17 +478,16 @@ class SparseDeltaLinear(torch.nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         prev_dtype = x.dtype
-        x = x.to(self.base_weight.dtype)
+        x = x.to(self.weight.dtype)
         x = self.dropout(x)
 
         # Construct effective weight on-the-fly
-        flat = self.base_weight.flatten()
+        flat = self.weight.flatten()
         scaled = self.delta * self.alpha
         flat2 = torch.scatter_add(flat, dim=0, index=self.selected_idx, src=scaled)
         w_eff = flat2.view(self.out_features, self.in_features)
 
-        b = self.base_bias if hasattr(self, "base_bias") else None
-        out = F.linear(x, w_eff, b)
+        out = F.linear(x, w_eff, self.bias)
         return out.to(prev_dtype)
 
 
