@@ -233,6 +233,19 @@ HDR
   printf 'export HP_EVAL_BATCH_SIZE=%q\n' "${HP_EVAL_BATCH_SIZE:-}"
   printf 'export HP_NO_SAVE=%q\n' "${HP_NO_SAVE:-}"
 
+  # Sparse tuning env
+  printf 'export HP_SPARSE_ENABLED=%q\n' "${HP_SPARSE_ENABLED:-}"
+  printf 'export HP_SPARSE_SCOPE=%q\n' "${HP_SPARSE_SCOPE:-}"
+  printf 'export HP_SPARSE_BUDGET_MODE=%q\n' "${HP_SPARSE_BUDGET_MODE:-}"
+  printf 'export HP_SPARSE_FIXED_RATIO=%q\n' "${HP_SPARSE_FIXED_RATIO:-}"
+  printf 'export HP_SPARSE_FIXED_COUNT=%q\n' "${HP_SPARSE_FIXED_COUNT:-}"
+  printf 'export HP_SPARSE_MATCH_COUNT=%q\n' "${HP_SPARSE_MATCH_COUNT:-}"
+  printf 'export HP_SPARSE_MATCH_REFERENCE=%q\n' "${HP_SPARSE_MATCH_REFERENCE:-}"
+  printf 'export HP_SPARSE_SCORE_SAMPLES=%q\n' "${HP_SPARSE_SCORE_SAMPLES:-}"
+  printf 'export HP_SPARSE_SAMPLE_BATCH_SIZE=%q\n' "${HP_SPARSE_SAMPLE_BATCH_SIZE:-}"
+  printf 'export HP_SPARSE_BASE_INCLUDE=%q\n' "${HP_SPARSE_BASE_INCLUDE:-}"
+  printf 'export HP_SPARSE_BASE_EXCLUDE=%q\n' "${HP_SPARSE_BASE_EXCLUDE:-}"
+
   # LR scheduler
   printf 'export LR_SCHEDULER_TYPE=%q\n' "${LR_SCHEDULER_TYPE:-cosine}"
   printf 'export LR_WARMUP_STEPS=%q\n' "${LR_WARMUP_STEPS:-}"

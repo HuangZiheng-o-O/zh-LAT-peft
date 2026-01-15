@@ -73,6 +73,7 @@ from utils.runtime_stats import gpu_memory_tracker
 from lat_adapter import prepare_lat_model_and_tokenizer
 from mamba_ssm_peft.utils.lat_decoder import create_lat_decoder
 from mamba_ssm_peft.utils.lat_model_loader import get_lat_env, get_lat_env_bool
+from sparse_utils import SparsityConfig, apply_sparse_training
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_NOW_OUTPUT_ROOT = REPO_ROOT / "output" / "benchmark"
@@ -224,6 +225,18 @@ def build_and_run_trainer_lat(
         val_data_module.dataset = torch.utils.data.Subset(
             val_data_module.dataset, range(2)
         )
+
+    # Sparse selective tuning (optional)
+    sparse_cfg = SparsityConfig.from_env_and_cfg(cfg, os.environ)
+    sparse_meta = apply_sparse_training(
+        sparse_cfg,
+        model,
+        train_data_module.dataset,
+        getattr(train_data_module, "data_collator", None),
+        output_dir,
+    )
+    if sparse_meta:
+        print(f"[{log_tag}] Sparse selection summary: {sparse_meta}")
 
     # Gradient checkpointing kwargs
     _gc_kwargs = {"use_reentrant": False} if gradient_checkpointing else None
