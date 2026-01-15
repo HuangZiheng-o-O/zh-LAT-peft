@@ -260,6 +260,7 @@ HDR
   printf 'export GRADIENT_CHECKPOINTING=%q\n' "${GRADIENT_CHECKPOINTING:-}"
   printf 'export LOGITS_TO_KEEP=%q\n' "${LOGITS_TO_KEEP:-}"
   printf 'export NUM_DATA_WORKERS=%q\n' "${NUM_DATA_WORKERS:-}"
+  printf 'export HP_SAVE_FULL_MODEL=%q\n' "${HP_SAVE_FULL_MODEL:-}"
   printf 'export PYTORCH_CUDA_ALLOC_CONF=%q\n' "${PYTORCH_CUDA_ALLOC_CONF:-}"
   printf 'export TOKENIZERS_PARALLELISM=%q\n' "${TOKENIZERS_PARALLELISM:-}"
   printf 'export OMP_NUM_THREADS=%q\n' "${OMP_NUM_THREADS:-}"

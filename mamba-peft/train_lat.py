@@ -258,6 +258,11 @@ def build_and_run_trainer_lat(
     _sos_env = str(os.environ.get("SAVE_OPTIMIZER_STATE", "")).lower()
     _save_optimizer_state = _sos_env in ("1", "true", "yes", "on")
 
+    # Save full model weights (model.pt) instead of PEFT adapter-only save_pretrained.
+    # This is REQUIRED for sparse base-only / hybrid modes, because they modify base weights.
+    _sfm_env = str(os.environ.get("HP_SAVE_FULL_MODEL", "") or os.environ.get("LAT_SAVE_FULL_MODEL", "")).lower()
+    _save_full_model = _sfm_env in ("1", "true", "yes", "on")
+
     # DataLoader configuration from env
     def _env_int(name: str, default: int) -> int:
         v = os.environ.get(name)
@@ -429,6 +434,7 @@ def build_and_run_trainer_lat(
                 "logits_to_keep": logits_to_keep,
                 "model_type": model_type,
             },
+            save_full_model=_save_full_model,
             save_optimizer_state=_save_optimizer_state,
             save_strategy="steps" if not no_save else "no",
             evaluation_strategy="steps" if not skip_eval else "no",

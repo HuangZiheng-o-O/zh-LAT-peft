@@ -141,8 +141,22 @@ def _apply_peft_env_overrides(peft_json: Dict[str, Any]) -> Dict[str, Any]:
         try:
             if fast_pissa_env and str(fast_pissa_env).lower() not in ("0", "false", "no", "off"):
                 init_val = peft_json.get("init_lora_weights", None)
-                if isinstance(init_val, str) and init_val.lower() == "pissa":
+                # If user asked for PiSSA-fast but config doesn't specify init, default to fast PiSSA.
+                # This is opt-in via env, so it won't change legacy runs unless explicitly enabled.
+                if init_val is None:
                     peft_json["init_lora_weights"] = "pissa_niter_4"
+                elif isinstance(init_val, str) and init_val.lower() == "pissa":
+                    peft_json["init_lora_weights"] = "pissa_niter_4"
+        except Exception:
+            pass
+
+    # If lora_alpha is missing, default to 2 * r (matches FISH-Tuning impl detail; opt-in via "missing key").
+    # We DO NOT override if user already set lora_alpha in JSON or via HP_PEFT_ALPHA.
+    if ("lora_alpha" not in peft_json) or (peft_json.get("lora_alpha") is None):
+        try:
+            r_val = int(peft_json.get("r"))
+            if r_val > 0:
+                peft_json["lora_alpha"] = 2 * r_val
         except Exception:
             pass
 

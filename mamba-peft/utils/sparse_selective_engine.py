@@ -110,6 +110,11 @@ def _iter_linear_weight_params(model: torch.nn.Module, targets: List[str]) -> It
     for module_name, module in model.named_modules():
         if not _match_targets(module_name, targets):
             continue
+        if not isinstance(module, torch.nn.Linear):
+            raise TypeError(
+                f"Target module '{module_name}' matched by target_modules={targets} is not nn.Linear "
+                f"(got {type(module)}). Sparse reparameterization requires nn.Linear."
+            )
         w = getattr(module, "weight", None)
         if isinstance(w, torch.nn.Parameter):
             # Resolve full parameter name by scanning named_parameters once per module.
@@ -117,17 +122,31 @@ def _iter_linear_weight_params(model: torch.nn.Module, targets: List[str]) -> It
             yield f"{module_name}.weight", w
 
 
-def _iter_lora_params(model: torch.nn.Module) -> Iterable[Tuple[str, torch.nn.Parameter]]:
+def _iter_lora_linear_weight_params(model: torch.nn.Module) -> Iterable[Tuple[str, torch.nn.Parameter]]:
     """
-    Yield LoRA trainable tensors (A/B etc.) by name heuristic.
-    This project uses HF PEFT LoRA, so parameter names typically contain 'lora_'.
+    Yield LoRA A/B *linear weight* parameters.
+    We intentionally restrict to nn.Linear weights to support SparseDeltaLinear replacement.
     """
+    name_to_module = dict(model.named_modules())
     for name, p in model.named_parameters():
         if not p.requires_grad:
             continue
-        # HF PEFT LoRA params usually contain these substrings.
-        if "lora_" in name or ".lora_A" in name or ".lora_B" in name:
-            yield name, p
+        if not name.endswith(".weight"):
+            continue
+        # Typical PEFT structure: ...lora_A.<adapter>.weight / ...lora_B.<adapter>.weight
+        # Or module path includes 'lora_A'/'lora_B'.
+        if ("lora_A" not in name) and ("lora_B" not in name) and ("lora_" not in name):
+            continue
+        module_name = name.rsplit(".", 1)[0]
+        mod = name_to_module.get(module_name)
+        if mod is None:
+            continue
+        if not isinstance(mod, torch.nn.Linear):
+            raise TypeError(
+                f"LoRA parameter '{name}' is not owned by nn.Linear (owner={type(mod)}). "
+                "Sparse reparameterization requires nn.Linear for lora_A/lora_B."
+            )
+        yield name, p
 
 
 def _load_peft_targets_and_rank_from_yaml(yaml_path: str) -> Tuple[List[str], int]:
@@ -209,6 +228,54 @@ def _set_requires_grad_for_scope(
 def _freeze_all_params(model: torch.nn.Module) -> None:
     for _, p in model.named_parameters():
         p.requires_grad = False
+
+
+def _dist_available() -> bool:
+    try:
+        import torch.distributed as dist
+        return dist.is_available() and dist.is_initialized()
+    except Exception:
+        return False
+
+
+def _dist_rank() -> int:
+    if not _dist_available():
+        return 0
+    import torch.distributed as dist
+    return dist.get_rank()
+
+
+def _dist_barrier() -> None:
+    if _dist_available():
+        import torch.distributed as dist
+        dist.barrier()
+
+
+def _assert_peft_adapter_saving_captures_sparse_params(model: PeftModel) -> None:
+    """
+    Fail-fast guard: if user is saving adapter-only (save_full_model=False),
+    ensure PEFT's adapter state dict includes our SparseDeltaLinear trainables.
+    """
+    try:
+        from peft.utils.save_and_load import get_peft_model_state_dict  # type: ignore
+    except Exception as e:
+        raise RuntimeError(
+            "Cannot import peft.utils.save_and_load.get_peft_model_state_dict to validate adapter-only saving. "
+            "Refuse to proceed because sparse params might not be saved. "
+            "Set HP_SAVE_FULL_MODEL=1 to save full model.pt. "
+            f"Import error: {e}"
+        ) from e
+
+    sd = get_peft_model_state_dict(model)
+    # Our trainables are named like "...SparseDeltaLinear.delta" under modules that were lora_A/lora_B or base targets.
+    # We check presence of any '.delta' key as minimal guarantee.
+    has_delta = any(k.endswith(".delta") for k in sd.keys())
+    if not has_delta:
+        raise RuntimeError(
+            "PEFT adapter-only state_dict does not include any SparseDeltaLinear '.delta' parameters. "
+            "This means your sparse trainable params would NOT be saved by adapter saving. "
+            "Set HP_SAVE_FULL_MODEL=1 (and keep save_total_limit=2) to save full weights safely."
+        )
 
 
 def compute_gradient_salience_scores(
@@ -505,7 +572,7 @@ def maybe_run_sparse_selective_tuning(
             targets = []
 
     base_params = dict(_iter_linear_weight_params(model, targets)) if targets else {}
-    lora_params = dict(_iter_lora_params(model))
+    lora_params = dict(_iter_lora_linear_weight_params(model))
 
     # Enforce scope for salience computation (only when enabled).
     # For base_only/hybrid we need base weights to have grads during scoring.
@@ -558,8 +625,15 @@ def maybe_run_sparse_selective_tuning(
                 "or run base-only without PEFT wrapping."
             )
 
-    # Load or compute selection indices (static).
+    # Distributed safety:
+    # - rank0 computes and saves selection
+    # - other ranks wait then load the exact same selection
+    # This matches the spirit of other/speft (per-rank score accumulation + reduction),
+    # but we keep it simple and deterministic: compute once and share via filesystem.
+    is_rank0 = (_dist_rank() == 0)
     if sel_path.exists():
+        # If file exists, everyone loads it (after barrier to avoid partial reads).
+        _dist_barrier()
         saved = torch.load(sel_path, map_location="cpu")
         sel_dict: Dict[str, torch.Tensor] = saved["selection"]
         if int(saved.get("budget_k", -1)) <= 0:
@@ -571,7 +645,22 @@ def maybe_run_sparse_selective_tuning(
                 f"[{model_type}] Candidate pool size mismatch on resume: saved={candidate_elems_saved}, now={candidate_elems}. "
                 f"Refuse to proceed to avoid silent behavior drift. Delete {sel_path} to recompute."
             )
+    elif not is_rank0 and _dist_available():
+        # Non-rank0 waits for rank0 to compute.
+        _dist_barrier()
+        if not sel_path.exists():
+            raise RuntimeError(f"[{model_type}] Expected rank0 to create {sel_path}, but file is missing.")
+        saved = torch.load(sel_path, map_location="cpu")
+        sel_dict = saved["selection"]
+        budget_k = int(saved["budget_k"])
+        candidate_elems_saved = int(saved.get("candidate_elems", candidate_elems))
+        if candidate_elems_saved != candidate_elems:
+            raise RuntimeError(
+                f"[{model_type}] Candidate pool size mismatch on resume: saved={candidate_elems_saved}, now={candidate_elems}. "
+                f"Refuse to proceed to avoid silent behavior drift. Delete {sel_path} to recompute."
+            )
     else:
+        # rank0 (or single-process) computes selection.
         # Build a small scoring dataloader (no workers, deterministic-ish)
         score_bs = max(1, min(batch_size, 4))
         dl = DataLoader(
@@ -613,6 +702,7 @@ def maybe_run_sparse_selective_tuning(
             },
             sel_path,
         )
+        _dist_barrier()
 
     # Replace targeted linears with SparseDeltaLinear (optimizer state O(K))
     # Also force all other params to requires_grad=False (train only sparse delta vectors),
@@ -640,6 +730,12 @@ def maybe_run_sparse_selective_tuning(
         )
 
     realized_k = trainable_after
+
+    # If this is a PEFT-wrapped model and user is NOT saving full model, verify adapter-only
+    # saving actually captures SparseDeltaLinear trainables (fail-fast).
+    save_full = str(os.environ.get("HP_SAVE_FULL_MODEL", "") or os.environ.get("LAT_SAVE_FULL_MODEL", "")).lower() in ("1", "true", "yes", "on")
+    if isinstance(model, PeftModel) and not save_full:
+        _assert_peft_adapter_saving_captures_sparse_params(model)
 
     meta = {
         "enabled": True,
