@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Optional, Dict, Any
 
@@ -27,6 +28,8 @@ GLUE_TASK_METRICS: Dict[str, TaskMetricSpec] = {
     "sst2": TaskMetricSpec(primary="eval_accuracy", secondary=None, higher_is_better=True),
     # semantic textual similarity: Pearson primary, Spearman secondary
     "stsb": TaskMetricSpec(primary="eval_pearson", secondary="eval_spearman", higher_is_better=True),
+    # commonsense benchmark uses token accuracy as evaluation metric
+    "commonsense_170k": TaskMetricSpec(primary="eval_token_accuracy", secondary=None, higher_is_better=True),
 }
 
 
@@ -42,13 +45,15 @@ def normalize_dataset_name(dataset: str) -> str:
         parts = s.split("_")
         if len(parts) >= 2:
             return parts[1]
+    # Strip seed suffixes often appended to dataset folders (e.g., commonsense_170k_seed87).
+    s = re.sub(r"_seed\d+$", "", s)
     return s
 
 
 def get_task_spec(dataset: str) -> TaskMetricSpec:
     task = normalize_dataset_name(dataset)
     if task not in GLUE_TASK_METRICS:
-        raise KeyError(f"Unsupported GLUE task for aggregation: {dataset} (normalized: {task})")
+        raise KeyError(f"Unsupported dataset for aggregation: {dataset} (normalized: {task})")
     return GLUE_TASK_METRICS[task]
 
 
@@ -64,5 +69,3 @@ def select_score(row: Dict[str, Any], spec: TaskMetricSpec) -> Optional[float]:
         if (sec in row) and row[sec] is not None:
             return float(row[sec])
     return None
-
-
