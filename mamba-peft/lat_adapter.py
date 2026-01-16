@@ -315,35 +315,71 @@ def prepare_lat_model_and_tokenizer(
             if default_targets:
                 peft_json["target_modules"] = default_targets
 
-        # PEFT compatibility shim:
-        # Some environments ship an older `peft` that doesn't recognize init_lora_weights="pissa"
-        # (but may support "pissa_niter_4"), causing:
-        #   ValueError: Unknown initialization init_lora_weights='pissa'
-        #
-        # We prefer the user's requested init, but if PEFT rejects it, we retry with a safe fallback.
-        try:
-            peft_cfg = LoraConfig(**peft_json)
-        except ValueError as e:
-            init_v = peft_json.get("init_lora_weights", None)
-            msg = str(e).lower()
-            if isinstance(init_v, str) and init_v.lower() == "pissa" and ("unknown initialization" in msg or "init_lora_weights" in msg):
-                # Retry with fast PiSSA (more widely supported across PEFT versions)
-                peft_json2 = dict(peft_json)
+        def _is_unknown_pissa_init_error(err: Exception) -> bool:
+            msg = str(err).lower()
+            return ("unknown initialization" in msg) and ("pissa" in msg) and ("init_lora_weights" in msg)
+
+        def _build_cfg_with_fallbacks(peft_json_in: Dict[str, Any]) -> Tuple[Any, Dict[str, Any]]:
+            """
+            Build LoraConfig with safe PiSSA fallbacks:
+              pissa -> pissa_niter_4 -> default (drop init_lora_weights)
+            """
+            init_v = peft_json_in.get("init_lora_weights", None)
+            if isinstance(init_v, str) and init_v.lower() == "pissa":
+                # Try as-is first; some PEFT versions accept it.
+                try:
+                    return LoraConfig(**peft_json_in), peft_json_in
+                except Exception:
+                    pass
+                # Fallback 1: fast PiSSA
+                peft_json2 = dict(peft_json_in)
                 peft_json2["init_lora_weights"] = "pissa_niter_4"
                 try:
-                    peft_cfg = LoraConfig(**peft_json2)
-                    peft_json = peft_json2
-                    print("[lat_adapter][warn] PEFT rejected init_lora_weights='pissa'; using 'pissa_niter_4' fallback.")
+                    return LoraConfig(**peft_json2), peft_json2
                 except Exception:
-                    # Final fallback: drop init_lora_weights so PEFT uses its default init.
+                    # Fallback 2: default init
+                    peft_json3 = dict(peft_json_in)
+                    peft_json3.pop("init_lora_weights", None)
+                    return LoraConfig(**peft_json3), peft_json3
+            # Not a PiSSA request: just build normally
+            return LoraConfig(**peft_json_in), peft_json_in
+
+        # Build config (may fallback).
+        peft_cfg, peft_json = _build_cfg_with_fallbacks(peft_json)
+
+        # Inject adapter (may still fail in some PEFT versions that accept config but reject init at layer reset).
+        try:
+            model = get_peft_model(model, peft_cfg)
+        except ValueError as e:
+            if _is_unknown_pissa_init_error(e):
+                # Retry by forcing pissa_niter_4, then default init.
+                init_v = peft_json.get("init_lora_weights", None)
+                if isinstance(init_v, str) and init_v.lower() == "pissa":
+                    # Force fallback chain explicitly
+                    peft_json2 = dict(peft_json)
+                    peft_json2["init_lora_weights"] = "pissa_niter_4"
+                    try:
+                        peft_cfg2 = LoraConfig(**peft_json2)
+                        model = get_peft_model(model, peft_cfg2)
+                        peft_cfg, peft_json = peft_cfg2, peft_json2
+                        print("[lat_adapter][warn] PEFT rejected init_lora_weights='pissa' during injection; using 'pissa_niter_4' fallback.")
+                    except Exception:
+                        peft_json3 = dict(peft_json)
+                        peft_json3.pop("init_lora_weights", None)
+                        peft_cfg3 = LoraConfig(**peft_json3)
+                        model = get_peft_model(model, peft_cfg3)
+                        peft_cfg, peft_json = peft_cfg3, peft_json3
+                        print("[lat_adapter][warn] PEFT rejected PiSSA init during injection; falling back to default LoRA init (no init_lora_weights).")
+                else:
+                    # Config may have been mutated already; drop init_lora_weights and retry once.
                     peft_json3 = dict(peft_json)
                     peft_json3.pop("init_lora_weights", None)
-                    peft_cfg = LoraConfig(**peft_json3)
-                    peft_json = peft_json3
-                    print("[lat_adapter][warn] PEFT rejected PiSSA init; falling back to default LoRA init (no init_lora_weights).")
+                    peft_cfg3 = LoraConfig(**peft_json3)
+                    model = get_peft_model(model, peft_cfg3)
+                    peft_cfg, peft_json = peft_cfg3, peft_json3
+                    print("[lat_adapter][warn] PEFT rejected PiSSA init during injection; falling back to default LoRA init (no init_lora_weights).")
             else:
                 raise
-        model = get_peft_model(model, peft_cfg)
 
     return model, tokenizer, peft_cfg
 
