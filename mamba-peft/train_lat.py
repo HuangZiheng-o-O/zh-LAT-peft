@@ -881,23 +881,18 @@ def get_output_path_for_cfg(cfg_path, cfg, model_type: str = "gla"):
     # Normalize model_type to lowercase for consistent path naming
     model_type = model_type.lower()
 
-    # ------------------------------------------------------------------
-    # Sparse Selective Tuning: output dir suffix (backward compatible)
-    #
-    # Requirement: bash invocation still uses .../<data>_seed<seed>/,
-    # but when sparse is enabled we add a suffix to distinguish runs, e.g.:
-    #   glue-tvt_qqp_seed87_SPARSE_LoraOnly_R30
-    # ------------------------------------------------------------------
-    _sparse_suffix = _sparse_run_suffix()
-
     if data and seed is not None:
-        # For datasets with explicit data name: <model_type>/<data>_seed<seed>/<yaml_stem>
-        folder = f"{data}_seed{seed}{_sparse_suffix}"
-        return NOW_OUTPUT_ROOT / model_type / folder / (yaml_stem + _sparse_suffix)
+        # Canonical layout (requested):
+        #   sparse/<model_type>/<data>_seed<seed>/<yaml_stem>
+        #   benchmark/<model_type>/<data>_seed<seed>/<yaml_stem>
+        #
+        # Root selection (sparse vs benchmark) is handled by NOW_OUTPUT_ROOT.
+        folder = f"{data}_seed{seed}"
+        return NOW_OUTPUT_ROOT / model_type / folder / yaml_stem
 
     # Fallback: use DATASET_ROOT_NAME (glue) for backward compatibility
     base_dir = NOW_OUTPUT_ROOT / model_type / DATASET_ROOT_NAME
-    return base_dir / "cola_gla" / (yaml_stem + _sparse_suffix)
+    return base_dir / "Fallback" / yaml_stem
 
 
 def _find_last_checkpoint(root: Path) -> Optional[Path]:

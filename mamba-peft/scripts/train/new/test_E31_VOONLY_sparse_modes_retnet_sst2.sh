@@ -75,7 +75,7 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
   --suite E31 \
   --round all \
   --pairs "87:glue-tvt_sst2" \
-  --gpus "1 2 4 5" \
+  --gpus "0 1 2 3" \
   --gpu-plan "1,1,1,1" \
   --model-type retnet
 
