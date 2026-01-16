@@ -92,51 +92,6 @@ def _default_output_root(*suffix: str) -> Path:
     return root
 
 
-def _sparse_run_suffix() -> str:
-    """
-    Stable suffix to append to output folders / experiment names when sparse tuning is enabled.
-    """
-    try:
-        from utils.sparse_selective_engine import SparseSelectiveConfig  # local import to avoid cycles
-
-        cfg = SparseSelectiveConfig.from_env()
-    except Exception:
-        return ""
-
-    if not getattr(cfg, "enabled", False):
-        return ""
-
-    scope_map = {
-        "lora_only": "LoraOnly",
-        "base_only": "BaseOnly",
-        "hybrid": "Hybrid",
-        "lora_dense_base_sparse": "LoraDenseBaseSparse",
-    }
-    scope_raw = str(getattr(cfg, "scope", ""))
-    scope = scope_map.get(scope_raw.lower().strip(), scope_raw)
-
-    mode = str(getattr(cfg, "budget_mode", "")).lower().strip()
-    budget: str
-    if mode == "fixed_ratio":
-        try:
-            pct = int(round(float(getattr(cfg, "rho", 0.0)) * 100))
-            budget = f"R{pct}"
-        except Exception:
-            budget = "R?"
-    elif mode == "fixed_count":
-        k = getattr(cfg, "k", None)
-        budget = f"K{int(k)}" if k is not None else "KNA"
-    elif mode == "match_reference":
-        ref = getattr(cfg, "reference_cfg", "") or "REF"
-        ref_stem = Path(ref).stem if ref else "REF"
-        budget = f"REF_{ref_stem}"
-    else:
-        budget = mode.upper() if mode else "BUDGET"
-
-    suffix = f"_SPARSE_{scope}_{budget}"
-    return suffix.replace("/", "_").replace(" ", "_")
-
-
 DEFAULT_NOW_OUTPUT_ROOT = _default_output_root()
 NOW_OUTPUT_ROOT = Path(os.environ.get("LAT_OUTPUT_ROOT", DEFAULT_NOW_OUTPUT_ROOT)).expanduser()
 DATASET_ROOT_NAME = os.environ.get("LAT_DATASET_ROOT_NAME", "glue")
@@ -437,10 +392,14 @@ def build_and_run_trainer_lat(
             from swanlab.integration.transformers import SwanLabCallback
             sl_project = os.environ.get("SWANLAB_PROJECT", f"{model_type}-peft")
             exp_prefix = os.environ.get("SWANLAB_EXPERIMENT_PREFIX", "")
-            exp_name = Path(output_dir).name
-            _sparse_suffix = _sparse_run_suffix()
-            if _sparse_suffix and not exp_name.endswith(_sparse_suffix):
-                exp_name = f"{exp_name}{_sparse_suffix}"
+            exp_name = ""
+            if cfg_path:
+                try:
+                    exp_name = Path(cfg_path).stem
+                except Exception:
+                    exp_name = ""
+            if not exp_name:
+                exp_name = Path(output_dir).name
             if exp_prefix:
                 exp_name = f"{exp_prefix}_{exp_name}"
             sl_mode = os.environ.get("SWANLAB_MODE", "")
