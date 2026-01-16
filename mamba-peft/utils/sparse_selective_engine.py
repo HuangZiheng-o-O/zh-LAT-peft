@@ -1031,6 +1031,7 @@ def maybe_run_sparse_selective_tuning(
     output_dir: str,
     cfg_path: str,
     model_type: str,
+    reuse_selection: bool = False,
 ) -> Optional[Dict]:
     """
     Main entry: if enabled, compute/load selection indices, RE-PARAMETERIZE targeted linears so
@@ -1175,10 +1176,17 @@ def maybe_run_sparse_selective_tuning(
     # This matches the spirit of other/speft (per-rank score accumulation + reduction),
     # but we keep it simple and deterministic: compute once and share via filesystem.
     is_rank0 = (_dist_rank() == 0)
-    if sel_path.exists():
+    # IMPORTANT SEMANTICS:
+    # - We ONLY reuse an existing selection on explicit resume flows.
+    # - For fresh runs, always recompute and overwrite selection to avoid stale selections poisoning new runs.
+    # This matches the user's expectation and prevents cross-run contamination when output_dir is reused.
+    if reuse_selection and sel_path.exists():
         # If file exists, everyone loads it (after barrier to avoid partial reads).
         _dist_barrier()
-        saved = torch.load(sel_path, map_location="cpu")
+        try:
+            saved = torch.load(sel_path, map_location="cpu", weights_only=True)
+        except TypeError:
+            saved = torch.load(sel_path, map_location="cpu")
         sel_dict: Dict[str, torch.Tensor] = saved["selection"]
         if int(saved.get("budget_k", -1)) <= 0:
             raise RuntimeError(f"[{model_type}] Invalid saved selection file: {sel_path}")
@@ -1189,22 +1197,27 @@ def maybe_run_sparse_selective_tuning(
                 f"[{model_type}] Candidate pool size mismatch on resume: saved={candidate_elems_saved}, now={candidate_elems}. "
                 f"Refuse to proceed to avoid silent behavior drift. Delete {sel_path} to recompute."
             )
-    elif not is_rank0 and _dist_available():
-        # Non-rank0 waits for rank0 to compute.
-        _dist_barrier()
-        if not sel_path.exists():
-            raise RuntimeError(f"[{model_type}] Expected rank0 to create {sel_path}, but file is missing.")
-        saved = torch.load(sel_path, map_location="cpu")
-        sel_dict = saved["selection"]
-        budget_k = int(saved["budget_k"])
-        candidate_elems_saved = int(saved.get("candidate_elems", candidate_elems))
-        if candidate_elems_saved != candidate_elems:
-            raise RuntimeError(
-                f"[{model_type}] Candidate pool size mismatch on resume: saved={candidate_elems_saved}, now={candidate_elems}. "
-                f"Refuse to proceed to avoid silent behavior drift. Delete {sel_path} to recompute."
-            )
     else:
-        # rank0 (or single-process) computes selection.
+        # Fresh run (or no existing selection, or reuse_selection=False):
+        # rank0 (or single-process) computes selection; other ranks wait then load.
+        if (not is_rank0) and _dist_available():
+            _dist_barrier()
+            if not sel_path.exists():
+                raise RuntimeError(f"[{model_type}] Expected rank0 to create {sel_path}, but file is missing.")
+            try:
+                saved = torch.load(sel_path, map_location="cpu", weights_only=True)
+            except TypeError:
+                saved = torch.load(sel_path, map_location="cpu")
+            sel_dict = saved["selection"]
+            budget_k = int(saved["budget_k"])
+            candidate_elems_saved = int(saved.get("candidate_elems", candidate_elems))
+            if candidate_elems_saved != candidate_elems:
+                raise RuntimeError(
+                    f"[{model_type}] Candidate pool size mismatch after recompute sync: saved={candidate_elems_saved}, now={candidate_elems}. "
+                    "This indicates nondeterministic candidate pool construction; refusing to proceed."
+                )
+        else:
+            # rank0 (or single-process) computes selection.
         # Build a small scoring dataloader (no workers, deterministic-ish)
         score_bs = max(1, min(batch_size, 4))
         dl = DataLoader(

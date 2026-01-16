@@ -295,6 +295,8 @@ def build_and_run_trainer_lat(
             output_dir=output_dir,
             cfg_path=cfg_path,
             model_type=model_type,
+            # Only reuse selection indices when explicitly resuming.
+            reuse_selection=bool(resume_from_checkpoint),
         )
         # If resuming and sparse is enabled, load sparse delta snapshot from checkpoint unless full model is saved.
         _sfm_env = str(os.environ.get("HP_SAVE_FULL_MODEL", "") or os.environ.get("LAT_SAVE_FULL_MODEL", "")).lower()
