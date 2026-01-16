@@ -240,7 +240,7 @@ export TRANSFORMERS_VERBOSITY=error
 # ===== SwanLab =====
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="retnet-commonsense170k-1-4090-sparse"
+export SWANLAB_PROJECT="retnet-commonsense170k-H3-mysparse"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -256,7 +256,7 @@ export EVAL_OUTPUT_ROOT=/home/user/mzs_h/code/zh-LAT-peft/output/lm_eval
   --suite E31 \
   --round all \
   --pairs "87:commonsense_170k" \
-  --gpus "2 3 4 5" \
+  --gpus "0 1 2 3" \
   --gpu-plan "1,1,1,1" \
   --model-type retnet \
   --eval-after-train \

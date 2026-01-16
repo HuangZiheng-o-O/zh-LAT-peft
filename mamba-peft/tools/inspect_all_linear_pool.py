@@ -8,11 +8,26 @@ This script loads a LAT model (optionally with PEFT/LoRA injected) and prints:
   - omission hints (linear-like 2D weights that are NOT collected, excluding embeddings)
 
 Usage (run from repo root or mamba-peft/):
-  python mamba-peft/tools/inspect_all_linear_pool.py \
-    --model /home/user/mzs_h/model/retnet-1.3B-100B/ \
-    --model-type retnet \
-    --prec bf16 \
-    --out-dir /tmp/pool_dump
+
+python /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/tools/inspect_all_linear_pool.py \
+  --model /home/user/mzs_h/model/retnet-1.3B-100B/ \
+  --model-type retnet \
+  --prec bf16 \
+  --peft-json /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/cfg/my_lora_exp/peft/lora_vo_r8_alpha16.json \
+  --base-pool all_linear \
+  --out-dir /tmp/pool_all_linear
+
+
+python /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/tools/inspect_all_linear_pool.py \
+  --model /home/user/mzs_h/model/retnet-1.3B-100B/ \
+  --model-type retnet \
+  --prec bf16 \
+  --peft-json /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/cfg/my_lora_exp/peft/lora_vo_r8_alpha16.json \
+  --base-pool from_peft_json \
+  --base-pool-peft-json /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/cfg/my_lora_exp/peft/lora_qkvo_plus_mlp_r8_alpha16.json \
+  --out-dir /tmp/pool_qkvomlp
+
+
 """
 
 from __future__ import annotations
@@ -155,6 +170,19 @@ def _is_shadow_base_layer(name: str, name_to_mod: Dict[str, torch.nn.Module]) ->
     parent = _parent_name(name)
     pm = name_to_mod.get(parent)
     return pm is not None and _is_peft_lora_linear(pm)
+
+def _is_lora_internal_name(name: str) -> bool:
+    """
+    Exclude LoRA internal modules from the BASE pool expectation.
+
+    PEFT typically creates module paths containing:
+      - lora_A / lora_B
+      - lora_dropout
+      - lora_embedding_A / lora_embedding_B
+
+    These are NOT part of the backbone/base-weight pool and should never be expected there.
+    """
+    return "lora_" in name
 
 
 def main() -> None:
@@ -338,6 +366,8 @@ def main() -> None:
     #   - PEFT LoRA Linear wrapper modules
     expected_linear_modules: List[str] = []
     for n, m in name_to_mod.items():
+        if _is_lora_internal_name(n):
+            continue
         if _is_peft_lora_linear(m):
             expected_linear_modules.append(n)
             continue
@@ -395,7 +425,7 @@ def main() -> None:
     # which may look like "linear-like" projections and thus be omissions by design.
     linear_like_omissions: List[Tuple[str, str, Tuple[int, int]]] = []
     for n, m in name_to_mod.items():
-        if "lora_" in n:
+        if _is_lora_internal_name(n):
             continue
         if isinstance(m, torch.nn.Embedding):
             continue

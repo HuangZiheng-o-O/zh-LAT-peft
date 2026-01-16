@@ -61,7 +61,7 @@ export HP_LOGGING_STEPS=100
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="retnet-spider-2-4090-E125-mail02-r4"
+export SWANLAB_PROJECT="retnet-spider-H2-E125-mail02-r4"
 export SWANLAB_LOGDIR="/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/my_swanlog/local_eval_logs"
 export SWANLAB_EMAIL_YAML="/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/dangerous/email_notify.yaml"
 export SWANLAB_EMAIL_ON_START=0
@@ -122,7 +122,7 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="retnet-samsum-E12-clean-decoder-r3-3090-t4"
+export SWANLAB_PROJECT="retnet-samsum-E12-clean-decoder-r3-H3-t4"
 export SWANLAB_EMAIL_ON_START=1
 export SWANLAB_EMAIL_ON_FINISH=1
 
@@ -194,7 +194,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=local
-export SWANLAB_PROJECT="retnet-dart-E12-2-4090-r11"
+export SWANLAB_PROJECT="retnet-dart-E12-H2-r11"
 export SWANLAB_EMAIL_YAML="/home/user/mzs_h/code/zh-LAT-peft/mamba-peft/dangerous/email_notify.yaml"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
@@ -305,7 +305,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="retnet-cola-1-4090-sparse"
+export SWANLAB_PROJECT="retnet-cola-H1-my_sparse3"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -314,7 +314,7 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
   --suite E31 \
   --round all \
   --pairs "87:glue-tvt_cola" \
-  --gpus "2 3 4 5" \
+  --gpus "0 1 2 3" \
   --gpu-plan "1,1,1,1" \
   --model-type retnet
 ```
@@ -358,17 +358,17 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="retnet-rte-H2-sparse"
+export SWANLAB_PROJECT="retnet-rte-H1-my_sparse3-v2"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 ./lat_batch_tmux.sh \
-  --suite E312 \
+  --suite E31 \
   --round all \
   --pairs "87:glue-tvt_rte" \
-  --gpus "0" \
-  --gpu-plan "1" \
+  --gpus "4 5 6 7" \
+  --gpu-plan "1,1,1,1" \
   --model-type retnet
 ```
 
@@ -418,23 +418,23 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="retnet-tvt_qnli-1-4090-sparse-v2"
+export SWANLAB_PROJECT="retnet-tvt_qnli-H2-my_sparse3-v2"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 ./lat_batch_tmux.sh \
-  --suite E312 \
+  --suite E31 \
   --round all \
   --pairs "87:glue-tvt_qnli" \
-  --gpus "1" \
-  --gpu-plan "1" \
+  --gpus "0 1 2 3" \
+  --gpu-plan "1,1,1,1" \
   --model-type retnet
 ```
 
 ---
 
-### tvt_mnli（3090 方案）
+### tvt_mnli（H3 方案）
  
 ```bash
 conda activate mzsz
@@ -479,7 +479,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="retnet-glue-tvt_mnli-3090-Jan12-E1312-v3-E13132"
+export SWANLAB_PROJECT="retnet-glue-tvt_mnli-H3-Jan12-E1312-v3-E13132"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -497,7 +497,7 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 ---
 
 ### tvt_sst2
-Jan 9 2-4090
+Jan 9 H2
 ```bash
  
 conda activate mzsz
@@ -548,18 +548,18 @@ export TRANSFORMERS_VERBOSITY=error
 # Logging (optional)
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="retnet-sst2-VOONLY-sparse-modes-E31-v2-H2"
+export SWANLAB_PROJECT="retnet-sst2-my_sparse3-H3"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
 
  
 ./lat_batch_tmux.sh \
-  --suite E312 \
+  --suite E31 \
   --round all \
   --pairs "87:glue-tvt_sst2" \
-  --gpus "1" \
-  --gpu-plan "1" \
+  --gpus "4 5 6 7" \
+  --gpu-plan "1,1,1,1" \
   --model-type retnet
 
  
@@ -568,9 +568,9 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 ---
 
 ### tvt_qqp
-Jan 9 3090 失败 还没删除
-jan 10 2-4090 开始
-https://swanlab.cn/@zh2701/retnet-glue-tvt_qqp-2-4090-Jan10/overview
+Jan 9 H3 失败 还没删除
+jan 10 H2 开始
+https://swanlab.cn/@zh2701/retnet-glue-tvt_qqp-H2-Jan10/overview
 ```bash
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
@@ -613,7 +613,7 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="retnet-glue-tvt_qqp-2-4090-Jan10"
+export SWANLAB_PROJECT="retnet-glue-tvt_qqp-H2-Jan10"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -667,17 +667,17 @@ export TRANSFORMERS_VERBOSITY=error
 
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="retnet-tvt_mrpc-1-4090-sparse"
+export SWANLAB_PROJECT="retnet-tvt_mrpc-H2-my_sparse3"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
 
 ./lat_batch_tmux.sh \
-  --suite E312 \
+  --suite E31 \
   --round all \
   --pairs "87:glue-tvt_mrpc" \
-  --gpus "0" \
-  --gpu-plan "1" \
+  --gpus "4 5" \
+  --gpu-plan "2,2" \
   --model-type retnet
 ```
  
