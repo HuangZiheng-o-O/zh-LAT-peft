@@ -98,9 +98,51 @@ python -m aggregate_result.main \
   conda activate mzsz                                                                                                                                    
   cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft    
   python -m aggregate_result.main \
-    --base_dir /home/user/mzs_h/code/zh-LAT-peft/output/benchmark/retnet \
-    --output /home/user/mzs_h/code/zh-LAT-peft/output/benchmark/retnet_all_agg \
+    --base_dir /home/user/mzs_h/code/zh-LAT-peft/output/resultJan15_transfer/delta_net/ \
+    --output /home/user/mzs_h/code/zh-LAT-peft/output/resultJan15_transfer/all_agg_results2/delta_net_all_agg \
     --workers 8
+ 
+ 
+conda activate mzsz
+cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft
+
+python -m aggregate_result.main \
+  --base_dir /home/user/mzs_h/code/zh-LAT-peft/output/resultJan15_transfer/retnet/ \
+  --output /home/user/mzs_h/code/zh-LAT-peft/output/resultJan15_transfer/all_agg_results2/retnet_all_agg \
+  --workers 8
+
+ 
+
+conda activate mzsz
+cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft
+
+python -m aggregate_result.main \
+  --base_dir /home/user/mzs_h/code/zh-LAT-peft/output/resultJan15_transfer/gla/ \
+  --output /home/user/mzs_h/code/zh-LAT-peft/output/resultJan15_transfer/all_agg_results2/gla_all_agg \
+  --workers 8
+
+
+
+SRC="/Users/huangziheng/Documents/zotero附件/transformer改造/research_trackers/all_agg_results"
+DST="/Users/huangziheng/Documents/zotero附件/transformer改造/research_trackers/dataset_summaries2"
+
+mkdir -p "$DST"
+
+find "$SRC" -type f -name "dataset_summary.csv" -print0 \
+| while IFS= read -r -d '' f; do
+  # f: .../all_agg_results/<model_all_agg>/<dataset>/dataset_summary.csv
+
+  dataset_dir="$(dirname "$f")"                    # .../<model_all_agg>/<dataset>
+  dataset="$(basename "$dataset_dir")"             # <dataset>
+  model_all_agg="$(basename "$(dirname "$dataset_dir")")"  # <model_all_agg>
+  model="${model_all_agg%_all_agg}"                # 去掉后缀 _all_agg
+
+  out="$DST/${model}_${dataset}.csv"
+
+  cp -f "$f" "$out"
+done
+
+
     # 注意：不指定 --dataset，会聚合所有数据集
 
   只聚合包含"commonsense"的数据集：
