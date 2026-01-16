@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
+import re
 from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
@@ -70,6 +71,11 @@ def _read_parameter_counts(exp_train_dir: Path, exp_out_dir: Path) -> Tuple[Opti
         except Exception:
             continue
     return None, None, None
+
+
+def _clean_experiment_name(name: str) -> str:
+    """Strip run index prefixes like E1_, E12_, etc."""
+    return re.sub(r"^E\d+_", "", name)
 
 
 def _best_for_cola(df: pd.DataFrame, exp_train_dir: Path) -> BestRow:
@@ -188,6 +194,22 @@ def _best_for_accuracy_tasks(df: pd.DataFrame, exp_train_dir: Path) -> BestRow:
     return BestRow(idx=int(row.name), step=step, checkpoint_path=ckpt, metrics=metrics)
 
 
+def _best_for_single_metric(df: pd.DataFrame, metric: str, exp_train_dir: Path, higher_is_better: bool = True) -> BestRow:
+    if metric not in df.columns:
+        raise ValueError(f"{metric} not found")
+    tmp = df.copy()
+    if "eval_loss" not in tmp.columns:
+        tmp["eval_loss"] = float("inf")
+    tmp = tmp.sort_values([metric, "eval_loss", "step"], ascending=[not higher_is_better, True, False])
+    row = tmp.iloc[0]
+    step = int(row["step"]) if "step" in row else -1
+    ckpt = _checkpoint_path_for(exp_train_dir, step)
+    metrics = {metric: float(row[metric])}
+    if "eval_loss" in row and pd.notna(row["eval_loss"]):
+        metrics["eval_loss"] = float(row["eval_loss"])
+    return BestRow(idx=int(row.name), step=step, checkpoint_path=ckpt, metrics=metrics)
+
+
 def choose_best_row_for_task(task: str, df: pd.DataFrame, exp_train_dir: Path) -> BestRow:
     t = normalize_dataset_name(task)
     if t == "cola":
@@ -198,14 +220,18 @@ def choose_best_row_for_task(task: str, df: pd.DataFrame, exp_train_dir: Path) -
         return _best_for_stsb(df, exp_train_dir)
     if t == "mnli":
         return _best_for_mnli(df, exp_train_dir)
+    if t == "commonsense_170k":
+        return _best_for_single_metric(df, "eval_token_accuracy", exp_train_dir, higher_is_better=True)
     # default accuracy tasks
     return _best_for_accuracy_tasks(df, exp_train_dir)
 
 
-def summarize_dataset(dataset_out_dir: Path, dataset_name: str, dataset_train_dir: Optional[Path] = None, small: bool = False) -> Path:
+def summarize_dataset(dataset_out_dir: Path, dataset_name: str, dataset_train_dir: Optional[Path] = None,
+                      include_paths: bool = False) -> Path:
     """Aggregate per-experiment best rows into a dataset-level summary table.
     dataset_out_dir: out_root/<dataset_dir>
     dataset_name: can be glue-tvt_cola_seed87 or cola
+    include_paths: include checkpoint/cfg columns when True
     """
     t = normalize_dataset_name(dataset_name)
     rows: List[Dict[str, object]] = []
@@ -220,13 +246,13 @@ def summarize_dataset(dataset_out_dir: Path, dataset_name: str, dataset_train_di
         # include native eval_* columns present in best.metrics
         for k, v in best.metrics.items():
             record[k] = v
-        record["experiment"] = exp_out.name
+        record["experiment"] = _clean_experiment_name(exp_out.name)
         record["step"] = best.step
         total_params, trainable_params, trainable_ratio = _read_parameter_counts(exp_train_dir, exp_out)
         record["total_params"] = total_params
         record["trainable_params"] = trainable_params
         record["trainable_ratio"] = trainable_ratio
-        if not small:
+        if include_paths:
             record["checkpoint_path"] = best.checkpoint_path
             cfgp = _cfg_path_for(exp_train_dir)
             if cfgp:
@@ -259,6 +285,8 @@ def summarize_dataset(dataset_out_dir: Path, dataset_name: str, dataset_train_di
             if len(mcols) >= 2:
                 df["_avg_mnli_acc"] = df[mcols].astype(float).mean(axis=1)
                 df = df.sort_values(["_avg_mnli_acc", "step"], ascending=[False, False]).drop(columns=["_avg_mnli_acc"])
+    elif t == "commonsense_170k" and "eval_token_accuracy" in df.columns:
+        df = df.sort_values(["eval_token_accuracy", "step"], ascending=[False, False])
     else:
         if "eval_accuracy" in df.columns:
             df = df.sort_values(["eval_accuracy", "step"], ascending=[False, False])
@@ -273,5 +301,3 @@ def summarize_dataset(dataset_out_dir: Path, dataset_name: str, dataset_train_di
     with open(out_md, "w") as f:
         f.write(df.to_markdown(index=False))
     return out_csv
-
-
