@@ -59,7 +59,7 @@ def _env_float(name: str, default: Optional[float]) -> Optional[float]:
 @dataclass(frozen=True)
 class SparseSelectiveConfig:
     enabled: bool = False
-    scope: str = "lora_only"  # lora_only | base_only | hybrid
+    scope: str = "lora_only"  # lora_only | base_only | hybrid | lora_dense_base_sparse
     budget_mode: str = "fixed_ratio"  # fixed_ratio | fixed_count | match_reference
     rho: float = 0.3  # used when fixed_ratio
     k: Optional[int] = None  # used when fixed_count
@@ -183,12 +183,16 @@ def _load_peft_targets_and_rank_from_yaml(yaml_path: str) -> Tuple[List[str], in
     import yaml as _yaml
 
     p = Path(yaml_path)
+    if not p.is_absolute():
+        # Interpret relative reference paths the same way YAML "peft:" paths are interpreted:
+        # relative to mamba-peft/ repository root.
+        p = (Path(__file__).resolve().parents[1] / p).resolve()
     if not p.exists():
-        raise FileNotFoundError(f"reference_cfg not found: {yaml_path}")
+        raise FileNotFoundError(f"reference_cfg not found: {p}")
     cfg = _yaml.safe_load(p.read_text())
     peft_path = cfg.get("peft")
     if not peft_path:
-        raise ValueError(f"reference_cfg has no 'peft' field: {yaml_path}")
+        raise ValueError(f"reference_cfg has no 'peft' field: {p}")
     peft_p = Path(peft_path)
     if not peft_p.is_absolute():
         # Interpret relative to mamba-peft/ (same as how YAML is typically written).
@@ -241,6 +245,17 @@ def _set_requires_grad_for_scope(
     scope = scope.lower().strip()
     if scope == "lora_only":
         return
+    if scope == "lora_dense_base_sparse":
+        # For scoring we may toggle base candidate grads on/off elsewhere.
+        # The semantic contract for this scope is:
+        #   - LoRA stays dense trainable
+        #   - base is sparse-selected later
+        # Here, keep LoRA trainable and allow base candidates to be enabled when needed.
+        for p in lora_params.values():
+            p.requires_grad = True
+        for p in base_params.values():
+            p.requires_grad = True
+        return
     if scope == "base_only":
         for _, p in model.named_parameters():
             p.requires_grad = False
@@ -255,6 +270,49 @@ def _set_requires_grad_for_scope(
             p.requires_grad = True
         return
     raise ValueError(f"Unknown sparse scope: {scope}")
+
+
+def _default_all_minus_gate_targets() -> List[str]:
+    """
+    "sparseAll (exclude G/GK gate)" pool used by the new scope:
+      - include Q/K/V/O projections and MLP projections
+      - exclude attention gates: g_proj / gk_proj
+
+    NOTE:
+      - We do NOT exclude MLP gate_proj; in this codebase "G/GK" refers to attention gating
+        projections (g_proj, gk_proj) as used in your ROUND_E12/E13 comments.
+    """
+    return [
+        # Attention projections (common across GLA/RetNet/DeltaNet)
+        "q_proj",
+        "k_proj",
+        "v_proj",
+        "o_proj",
+        # MLP projections (SwiGLU)
+        "gate_proj",
+        "up_proj",
+        "down_proj",
+        # Some HF models use these names (harmless if absent)
+        "query",
+        "key",
+        "value",
+    ]
+
+
+def _filter_out_gate_modules(param_dict: Dict[str, torch.nn.Parameter]) -> Dict[str, torch.nn.Parameter]:
+    """
+    Remove attention-gate projections from candidate pool by name.
+    We filter by module/param qualname containing '.g_proj' or '.gk_proj' (or ending with them).
+    """
+    out: Dict[str, torch.nn.Parameter] = {}
+    for n, p in param_dict.items():
+        nn = n.lower()
+        if ".g_proj" in nn or nn.endswith("g_proj.weight"):
+            continue
+        if ".gk_proj" in nn or nn.endswith("gk_proj.weight"):
+            continue
+        out[n] = p
+    return out
 
 
 def _freeze_all_params(model: torch.nn.Module) -> None:
@@ -667,6 +725,10 @@ def maybe_run_sparse_selective_tuning(
     cfg = SparseSelectiveConfig.from_env()
     if not cfg.enabled:
         return None
+    # Strict scope validation (fail-fast to avoid silent behavior drift)
+    _known_scopes = {"lora_only", "base_only", "hybrid", "lora_dense_base_sparse"}
+    if str(cfg.scope).lower().strip() not in _known_scopes:
+        raise ValueError(f"[{model_type}] Unknown HP_SPARSE_SCOPE='{cfg.scope}'. Expected one of: {sorted(_known_scopes)}")
 
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -695,8 +757,15 @@ def maybe_run_sparse_selective_tuning(
     # In lora_only, we must not scan base target modules (they may be PEFT-wrapped).
     lora_params = dict(_iter_lora_linear_weight_params(model))
     base_params: Dict[str, torch.nn.Parameter] = {}
-    if cfg.scope.lower() in ("base_only", "hybrid"):
+    scope_l = cfg.scope.lower().strip()
+    if scope_l in ("base_only", "hybrid"):
         base_params = dict(_iter_linear_weight_params(model, targets)) if targets else {}
+    elif scope_l == "lora_dense_base_sparse":
+        # New scope: sparse acts on base weights (pool=All minus gates), while LoRA remains dense trainable.
+        # Candidate pool should not be limited by current YAML's LoRA targets (KV-only etc.).
+        all_targets = _default_all_minus_gate_targets()
+        base_params = dict(_iter_linear_weight_params(model, all_targets))
+        base_params = _filter_out_gate_modules(base_params)
 
     # Enforce scope for salience computation (only when enabled).
     # For base_only/hybrid we need base weights to have grads during scoring.
@@ -704,12 +773,15 @@ def maybe_run_sparse_selective_tuning(
 
     # Candidate pool is defined by scope.
     candidate_params: Dict[str, torch.nn.Parameter] = {}
-    if cfg.scope.lower() == "lora_only":
+    if scope_l == "lora_only":
         candidate_params = dict(lora_params)
-    elif cfg.scope.lower() == "base_only":
+    elif scope_l == "base_only":
         candidate_params = dict(base_params)
-    elif cfg.scope.lower() == "hybrid":
+    elif scope_l == "hybrid":
         candidate_params = {**base_params, **lora_params}
+    elif scope_l == "lora_dense_base_sparse":
+        # Only sparsify base weights; LoRA stays dense and is NOT part of the sparse budget.
+        candidate_params = dict(base_params)
     else:
         raise ValueError(f"Unknown sparse scope: {cfg.scope}")
 
@@ -732,7 +804,33 @@ def maybe_run_sparse_selective_tuning(
         k_ref = estimate_lora_trainable_count(model, ref_targets, ref_r)
         if k_ref <= 0:
             raise RuntimeError(f"Computed K_ref=0 from reference_cfg={cfg.reference_cfg}")
-        budget_k = int(min(candidate_elems, k_ref))
+        if scope_l == "lora_dense_base_sparse":
+            # Contract: total_trainable = dense_LoRA_trainable(current) + sparse_base_k == K_ref(reference dense LoRA)
+            lora_dense_trainable_now = int(sum(p.numel() for p in model.parameters() if p.requires_grad))
+            base_budget = int(k_ref) - int(lora_dense_trainable_now)
+            if base_budget <= 0:
+                raise RuntimeError(
+                    f"[{model_type}] match_reference impossible for scope={cfg.scope}: "
+                    f"K_ref({k_ref}) <= current dense LoRA trainables({lora_dense_trainable_now}). "
+                    "Choose a larger reference (or reduce LoRA targets/rank) so base sparse budget is positive."
+                )
+            if base_budget > candidate_elems:
+                raise RuntimeError(
+                    f"[{model_type}] match_reference impossible for scope={cfg.scope}: "
+                    f"required base_budget({base_budget}) > base_candidate_elems({candidate_elems}). "
+                    "This would under-shoot the reference budget; refusing to proceed."
+                )
+            budget_k = int(base_budget)
+        else:
+            # Strict "match": the FINAL trainable count must equal K_ref.
+            # Therefore we refuse to silently clamp when candidate pool is too small.
+            if int(candidate_elems) < int(k_ref):
+                raise RuntimeError(
+                    f"[{model_type}] match_reference impossible for scope={cfg.scope}: "
+                    f"candidate_elems({candidate_elems}) < K_ref({k_ref}) from reference_cfg={cfg.reference_cfg}. "
+                    "Choose a smaller reference or enlarge the candidate pool."
+                )
+            budget_k = int(k_ref)
     else:
         raise ValueError(f"Unknown budget_mode: {cfg.budget_mode}")
 
@@ -834,6 +932,10 @@ def maybe_run_sparse_selective_tuning(
     alpha = float(os.environ.get("HP_SPARSE_ALPHA", "1.0"))
     dropout = float(os.environ.get("HP_SPARSE_DROPOUT", "0.0"))
     introduced = 0
+    # Snapshot current trainable parameters (e.g., dense LoRA) so we can preserve them in
+    # lora_dense_base_sparse after reparameterization.
+    trainable_before: Dict[str, int] = {n: int(p.numel()) for n, p in model.named_parameters() if p.requires_grad}
+
     _freeze_all_params(model)
     for pname, idxs in sel_dict.items():
         introduced += _replace_linear_weight_with_sparse_delta(
@@ -844,14 +946,51 @@ def maybe_run_sparse_selective_tuning(
             dropout=dropout,
         )
 
-    # Strict sanity checks: trainable count must equal budget_k exactly.
+    # Restore dense LoRA trainables for the new scope, while keeping all other params frozen.
+    if scope_l == "lora_dense_base_sparse":
+        # 1) restore whatever was trainable pre-sparse (usually LoRA A/B)
+        for n, p in model.named_parameters():
+            if n in trainable_before:
+                p.requires_grad = True
+        # 2) always enable SparseDeltaLinear.delta params
+        for _mn, mod in model.named_modules():
+            if isinstance(mod, SparseDeltaLinear):
+                mod.delta.requires_grad = True
+
+    # Sanity checks: trainable counts must match the scope contract.
     trainable_after = int(sum(p.numel() for p in model.parameters() if p.requires_grad))
-    if trainable_after != int(budget_k):
-        raise RuntimeError(
-            f"[{model_type}] Trainable param mismatch after reparameterization: "
-            f"trainable_after={trainable_after} vs budget_k={budget_k}. "
-            "This would violate optimizer-state-O(K). Refusing to proceed."
-        )
+    if scope_l == "lora_dense_base_sparse":
+        dense_lora = int(sum(trainable_before.values()))
+        expected_total = int(dense_lora) + int(budget_k)
+        if cfg.budget_mode == "match_reference":
+            ref_targets, ref_r = _load_peft_targets_and_rank_from_yaml(cfg.reference_cfg)  # type: ignore[arg-type]
+            k_ref = estimate_lora_trainable_count(model, ref_targets, ref_r)
+            expected_total = int(k_ref)
+        if trainable_after != int(expected_total):
+            raise RuntimeError(
+                f"[{model_type}] Trainable param mismatch for scope={cfg.scope}: "
+                f"trainable_after={trainable_after} expected_total={expected_total} "
+                f"(dense_lora_before={dense_lora}, sparse_base_k={budget_k}). Refusing to proceed."
+            )
+        # Additional invariants:
+        # - the sparse replacement must have introduced exactly budget_k delta params (O(K) guarantee for base part)
+        sparse_delta_total = 0
+        for _mn, mod in model.named_modules():
+            if isinstance(mod, SparseDeltaLinear):
+                sparse_delta_total += int(mod.delta.numel())
+        if sparse_delta_total != int(budget_k):
+            raise RuntimeError(
+                f"[{model_type}] Internal error: total SparseDeltaLinear.delta numel={sparse_delta_total} "
+                f"!= base sparse budget_k={budget_k} for scope={cfg.scope}. Refusing to proceed."
+            )
+    else:
+        # Legacy scopes keep optimizer-state-O(K) guarantee: trainable == budget_k
+        if trainable_after != int(budget_k):
+            raise RuntimeError(
+                f"[{model_type}] Trainable param mismatch after reparameterization: "
+                f"trainable_after={trainable_after} vs budget_k={budget_k}. "
+                "This would violate optimizer-state-O(K). Refusing to proceed."
+            )
 
     realized_k = trainable_after
 
@@ -874,6 +1013,8 @@ def maybe_run_sparse_selective_tuning(
         "ranking": cfg.ranking,
         "reference_cfg": cfg.reference_cfg,
         "targets_from_current_peft": targets,
+        "base_pool": "all_minus_gate" if scope_l == "lora_dense_base_sparse" else "from_current_peft",
+        "dense_trainable_before": int(sum(trainable_before.values())),
         "selection_path": str(sel_path),
         "impl": "reparam_v1",
     }

@@ -1,0 +1,14 @@
+peft: cfg/my_lora_exp/peft/lora_vo_r8_alpha16.json
+
+env_defaults:
+  HP_INIT: pissa
+  HP_SAVE_MODE: best_last
+  HP_SAVE_FULL_MODEL: 0
+
+sparse_selective:
+  enable: true
+  scope: hybrid
+  budget_mode: match_reference
+  reference_cfg: cfg/my_lora_exp/yaml/E1_QKVO_plus_MLP_r8_alpha16.yaml
+  score_samples: 1024
+

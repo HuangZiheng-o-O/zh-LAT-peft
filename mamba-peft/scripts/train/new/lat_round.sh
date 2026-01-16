@@ -16,6 +16,12 @@ LAT_PREC="${LAT_PREC:-${HP_PREC:-}}"
 LAUNCHER_PY="train_lat.py"
 EVAL_PY="eval_lat.py"
 
+# Python binary (portable): prefer "python" (conda), else "python3".
+PY_BIN="${PY_BIN:-python}"
+if ! command -v "$PY_BIN" >/dev/null 2>&1; then
+  PY_BIN="python3"
+fi
+
 # Eval controls (optional)
 # - EVAL_AFTER_TRAIN=1: run eval_lat.py after each training job (same GPU)
 # - EVAL_ONLY=1: skip training and only run eval_lat.py for each config
@@ -222,6 +228,72 @@ ROUND_E99=(# ROUND_E12_DELTANET
   )
 
 
+# =============================================================================
+# ROUND_E30_SPARSE_MODES: 8-mode batch suite for Sparse Selective Tuning
+# =============================================================================
+# Goal:
+#   - Provide exactly 8 YAML configs to batch-run the 4 sparse functions × 2 budget modes,
+#     without exploding into "a bunch of YAMLs".
+#   - Each YAML carries a `sparse_selective:` block, which train_lat.py converts into HP_SPARSE_*
+#     env defaults (ENV still wins).
+# Usage:
+#   - RetNet example:
+#       ./lat_batch_tmux.sh --suite E30 --round all --pairs "87:glue-tvt_sst2" ... --model-type retnet
+# Notes:
+#   - match_reference YAMLs intentionally omit reference_cfg; set HP_SPARSE_REFERENCE_CFG in ENV.
+#   - Pure LoRA suites (e.g., E13) are unchanged.
+# =============================================================================
+#ROUND_E30=(
+#  "sparse_modes/KVONLY__SPARSE_LoraOnly_FIXEDK.yaml"
+#  "sparse_modes/KVONLY__SPARSE_BaseOnly_FIXEDK.yaml"
+#  "sparse_modes/KVONLY__SPARSE_Hybrid_FIXEDK.yaml"
+#  "sparse_modes/KVONLY__SPARSE_LoraDenseBaseSparse_FIXEDK.yaml"
+#
+#  "sparse_modes/KVONLY__SPARSE_LoraOnly_REF_QKVOMLP.yaml"
+#  "sparse_modes/KVONLY__SPARSE_BaseOnly_REF_QKVOMLP.yaml"
+#  "sparse_modes/KVONLY__SPARSE_Hybrid_REF_QKVOMLP.yaml"
+#  "sparse_modes/KVONLY__SPARSE_LoraDenseBaseSparse_REF_QKVOMLP.yaml"
+#
+#  "sparse_modes/VOONLY__SPARSE_LoraOnly_FIXEDK.yaml"
+#  "sparse_modes/VOONLY__SPARSE_BaseOnly_FIXEDK.yaml"
+#  "sparse_modes/VOONLY__SPARSE_Hybrid_FIXEDK.yaml"
+#  "sparse_modes/VOONLY__SPARSE_LoraDenseBaseSparse_FIXEDK.yaml"
+#
+#  "sparse_modes/VOONLY__SPARSE_LoraOnly_REF_QKVOMLP.yaml"
+#  "sparse_modes/VOONLY__SPARSE_BaseOnly_REF_QKVOMLP.yaml"
+#  "sparse_modes/VOONLY__SPARSE_Hybrid_REF_QKVOMLP.yaml"
+#  "sparse_modes/VOONLY__SPARSE_LoraDenseBaseSparse_REF_QKVOMLP.yaml"
+#)
+
+# Convenience suites (same 8 modes, single base LoRA target set)
+ROUND_E31=( #use this
+#  "sparse_modes/VOONLY__SPARSE_LoraOnly_FIXEDK.yaml"
+#  "sparse_modes/VOONLY__SPARSE_BaseOnly_FIXEDK.yaml"
+#  "sparse_modes/VOONLY__SPARSE_Hybrid_FIXEDK.yaml"
+#  "sparse_modes/VOONLY__SPARSE_LoraDenseBaseSparse_FIXEDK.yaml"
+
+  "sparse_modes/QKVOMLP__SPARSE_LoraOnly_REF_VO.yaml"
+  "sparse_modes/QKVOMLP__SPARSE_BaseOnly_REF_VO.yaml"
+  "sparse_modes/VOONLY__SPARSE_Hybrid_REF_QKVOMLP.yaml"
+  "sparse_modes/VOONLY__SPARSE_LoraDenseBaseSparse_REF_QKVOMLP.yaml"
+)
+
+ROUND_E32=(
+#  "sparse_modes/KVONLY__SPARSE_LoraOnly_FIXEDK.yaml"
+#  "sparse_modes/KVONLY__SPARSE_BaseOnly_FIXEDK.yaml"
+#  "sparse_modes/KVONLY__SPARSE_Hybrid_FIXEDK.yaml"
+#  "sparse_modes/KVONLY__SPARSE_LoraDenseBaseSparse_FIXEDK.yaml"
+
+  # Mirror design of E31:
+  # - sparsify larger QKVOMLP to match smaller KV reference (for lora_only/base_only)
+  # - keep KVONLY for hybrid / lora_dense_base_sparse to match QKVOMLP (budget is achievable via base pool)
+  "sparse_modes/QKVOMLP__SPARSE_LoraOnly_REF_KV.yaml"
+  "sparse_modes/QKVOMLP__SPARSE_BaseOnly_REF_KV.yaml"
+  "sparse_modes/KVONLY__SPARSE_Hybrid_REF_QKVOMLP.yaml"
+  "sparse_modes/KVONLY__SPARSE_LoraDenseBaseSparse_REF_QKVOMLP.yaml"
+)
+
+
 #####################################################################
 #                           Core Logic                               #
 #####################################################################
@@ -236,7 +308,8 @@ CURRENT_ROUND=""
 FAILED_ROUND=""
 
 # Log tag based on model type
-LOG_TAG="${MODEL_TYPE^^}"
+# Bash 3.2 compatibility: avoid ${VAR^^} (bash4+).
+LOG_TAG="$(printf '%s' "$MODEL_TYPE" | tr '[:lower:]' '[:upper:]')"
 [[ "$LOG_TAG" == "AUTO" ]] && LOG_TAG="LAT"
 
 print_interruption_summary() {
@@ -285,10 +358,10 @@ cleanup() {
 
   # Best-effort email notification for interruption
   _email_interrupt="${SWANLAB_EMAIL_ON_INTERRUPT:-1}"
-  if [[ "${_email_interrupt}" == "1" ]] && command -v python >/dev/null 2>&1; then
+  if [[ "${_email_interrupt}" == "1" ]] && command -v "$PY_BIN" >/dev/null 2>&1; then
     (
       cd "$(dirname "$0")/.." || true
-      python -m scripts.utils.email_notify \
+      "$PY_BIN" -m scripts.utils.email_notify \
         --event INTERRUPTED \
         --group "suite=${SELECT_SUITE} round=${CURRENT_ROUND} data=${DATA} model=${MODEL_TYPE}" \
         --yaml "${SWANLAB_EMAIL_YAML:-}" >/dev/null 2>&1 || true
@@ -305,17 +378,24 @@ FORCE_SEED=87
 DATA="${DATA:-glue-tvt_cola}"
 
 # Remote workspace
-PEFT_ROOT="/home/user/mzs_h/code/zh-LAT-peft/mamba-peft"
+# Allow override for portability; default keeps existing behavior on your server.
+DEFAULT_PEFT_ROOT="/home/user/mzs_h/code/zh-LAT-peft/mamba-peft"
+# Fallback to repo-local path when default does not exist (useful for local dev).
+SCRIPT_PEFT_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+PEFT_ROOT="${PEFT_ROOT:-$DEFAULT_PEFT_ROOT}"
+if [[ ! -d "$PEFT_ROOT" ]]; then
+  PEFT_ROOT="$SCRIPT_PEFT_ROOT"
+fi
 cd "$PEFT_ROOT"
 
 # Environment setup
 export HF_ENDPOINT="https://hf-mirror.com"
-export HF_HOME="/home/user/mzs_h/data/hf_cache"
-export HF_HUB_CACHE="$HF_HOME"
-export HF_DATASETS_CACHE="$HF_HOME"
-export HF_EVALUATE_CACHE="$HF_HOME"
-export TRANSFORMERS_CACHE="$HF_HOME"
-export GLUE_METRIC_DIR="/home/user/mzs_h/data/hf_cache/eval_metrics/glue"
+if [[ -z "${HF_HOME:-}" ]]; then export HF_HOME="/home/user/mzs_h/data/hf_cache"; fi
+if [[ -z "${HF_HUB_CACHE:-}" ]]; then export HF_HUB_CACHE="$HF_HOME"; fi
+if [[ -z "${HF_DATASETS_CACHE:-}" ]]; then export HF_DATASETS_CACHE="$HF_HOME"; fi
+if [[ -z "${HF_EVALUATE_CACHE:-}" ]]; then export HF_EVALUATE_CACHE="$HF_HOME"; fi
+if [[ -z "${TRANSFORMERS_CACHE:-}" ]]; then export TRANSFORMERS_CACHE="$HF_HOME"; fi
+if [[ -z "${GLUE_METRIC_DIR:-}" ]]; then export GLUE_METRIC_DIR="/home/user/mzs_h/data/hf_cache/eval_metrics/glue"; fi
 export HF_HUB_ENABLE_HF_TRANSFER=1
 export NCCL_P2P_DISABLE=1
 export NCCL_IB_DISABLE=1
@@ -453,24 +533,31 @@ SELECT_SUITE="ALL"
 
 append_suite_into_master() {
   local var="$1"
-  if eval "[[ -v ${var} && \${#${var}[@]} -gt 0 ]]"; then
-    local tmp=( $(eval "printf '%q ' \"\${${var}[@]}\"") )
-    if ((${#tmp[@]} > 0)); then
-      read -r -a tmp <<<"$(eval "printf '%s ' \"\${${var}[@]}\"")"
-      Round_all+=("${tmp[@]}")
-    fi
+  # Bash 3.2 compatibility: avoid [[ -v VAR ]] (bash4+), and avoid nounset failures.
+  local __len=0
+  if declare -p "$var" >/dev/null 2>&1; then
+    eval "__len=\${#${var}[@]}"
+  fi
+  if (( __len > 0 )); then
+    eval "Round_all+=(\"\${${var}[@]}\")"
   fi
 }
 
 if [[ "${1:-}" =~ ^([Ee][0-9]+)$ ]]; then
   suite="${BASH_REMATCH[1]}"
-  suite="${suite^^}"
+  # Bash 3.2 compatibility: avoid ${VAR^^} (bash4+).
+  suite="$(printf '%s' "$suite" | tr '[:lower:]' '[:upper:]')"
   SELECT_SUITE="$suite"
   shift
 
   varname="ROUND_${suite}"
 
-  if ! eval "[[ -v ${varname} && \${#${varname}[@]} -gt 0 ]]"; then
+  # Bash 3.2 compatibility: avoid [[ -v VAR ]] (bash4+).
+  __suite_len=0
+  if declare -p "$varname" >/dev/null 2>&1; then
+    eval "__suite_len=\${#${varname}[@]}"
+  fi
+  if (( __suite_len <= 0 )); then
     echo "ERROR: Suite '${suite}' is not defined." >&2
     exit 1
   fi
@@ -550,7 +637,9 @@ make_tmp_cfg_with_data() {
   ndw="${NUM_DATA_WORKERS:-8}"
   printf 'num_data_workers: %s\n' "$ndw" >>"$out"
   if [[ -n "${GRADIENT_CHECKPOINTING:-}" ]]; then
-    case "${GRADIENT_CHECKPOINTING,,}" in
+    # Bash 3.2 compatibility: avoid ${VAR,,} (bash4+).
+    _gc_lc="$(printf '%s' "${GRADIENT_CHECKPOINTING}" | tr '[:upper:]' '[:lower:]')"
+    case "${_gc_lc}" in
       1|true|yes|on)
         printf 'gradient_checkpointing: true\n' >>"$out"
         ;;
@@ -631,7 +720,7 @@ run_round () {
     # Training mode:
     # - default: overwrite (fresh run) to match historical behavior
     # - resume: set LAT_TRAIN_RESUME=1 (or use lat_batch_tmux.sh --resume)
-    local -a _cmd=(python "$LAUNCHER_PY" --cfg "$CFG_INJ" --model-type "${MODEL_TYPE}")
+    local -a _cmd=("$PY_BIN" "$LAUNCHER_PY" --cfg "$CFG_INJ" --model-type "${MODEL_TYPE}")
     if [[ "${LAT_TRAIN_RESUME:-0}" == "1" ]]; then
       _cmd+=("--resume")
     elif [[ "${LAT_TRAIN_OVERWRITE:-1}" == "1" ]]; then
@@ -645,7 +734,7 @@ run_round () {
     fi
 
     # Eval command (reuses same cfg, uses env/overrides to locate output + adapter)
-    local -a _eval_cmd=(python "$EVAL_PY" --cfg "$CFG_INJ" --model-type "${MODEL_TYPE}")
+    local -a _eval_cmd=("$PY_BIN" "$EVAL_PY" --cfg "$CFG_INJ" --model-type "${MODEL_TYPE}")
     if [[ -n "${EVAL_BACKEND:-}" ]]; then
       _eval_cmd+=("--backend" "${EVAL_BACKEND}")
     fi

@@ -110,6 +110,7 @@ def _sparse_run_suffix() -> str:
         "lora_only": "LoraOnly",
         "base_only": "BaseOnly",
         "hybrid": "Hybrid",
+        "lora_dense_base_sparse": "LoraDenseBaseSparse",
     }
     scope_raw = str(getattr(cfg, "scope", ""))
     scope = scope_map.get(scope_raw.lower().strip(), scope_raw)
@@ -159,6 +160,65 @@ def _env_float(name: str, default: float) -> float:
         raise ValueError(
             f"Environment variable '{name}' must be a float, got '{v}'"
         )
+
+
+def _apply_sparse_env_defaults_from_cfg(cfg: Dict) -> None:
+    """
+    YAML-driven defaults for sparse selective tuning.
+
+    Contract (per your requirement):
+    - ENV has higher priority than YAML.
+    - Therefore we only set HP_SPARSE_* if that env var is currently unset/empty.
+    - Pure LoRA YAMLs do not contain this block, so behavior is unchanged.
+
+    Supported YAML shape:
+      sparse_selective:
+        enable: true|false
+        scope: lora_only|base_only|hybrid|lora_dense_base_sparse
+        budget_mode: fixed_ratio|fixed_count|match_reference
+        rho: 0.3
+        k: 7569408
+        score_samples: 1024
+        reference_cfg: /abs/or/relative/path.yaml   # optional; env still overrides
+    """
+    def _set_default_env(k: str, v) -> None:
+        if v is None:
+            return
+        cur = os.environ.get(k)
+        if cur is None or str(cur).strip() == "":
+            os.environ[k] = str(v)
+
+    # Optional generic env defaults block (useful for batch YAMLs):
+    #   env_defaults:
+    #     HP_INIT: pissa
+    #     HP_SAVE_MODE: best_last
+    #     HP_SAVE_FULL_MODEL: 0
+    env_defaults = cfg.get("env_defaults")
+    if isinstance(env_defaults, dict):
+        for k, v in env_defaults.items():
+            if not isinstance(k, str):
+                continue
+            _set_default_env(k, v)
+
+    node = cfg.get("sparse_selective")
+    if not isinstance(node, dict):
+        return
+
+    # Only set defaults (env remains authoritative).
+    if "enable" in node:
+        _set_default_env("HP_SPARSE_ENABLE", "1" if bool(node.get("enable")) else "0")
+    if "scope" in node:
+        _set_default_env("HP_SPARSE_SCOPE", str(node.get("scope")))
+    if "budget_mode" in node:
+        _set_default_env("HP_SPARSE_BUDGET_MODE", str(node.get("budget_mode")))
+    if "rho" in node:
+        _set_default_env("HP_SPARSE_RHO", node.get("rho"))
+    if "k" in node:
+        _set_default_env("HP_SPARSE_K", node.get("k"))
+    if "score_samples" in node:
+        _set_default_env("HP_SPARSE_SCORE_SAMPLES", node.get("score_samples"))
+    if "reference_cfg" in node:
+        _set_default_env("HP_SPARSE_REFERENCE_CFG", node.get("reference_cfg"))
 
 
 def _lock_share(name: str, model_type: str = "LAT") -> bool:
@@ -888,6 +948,18 @@ def main():
 
     # Apply environment overrides
     env = os.environ
+
+    # ------------------------------------------------------------------
+    # Sparse Selective Tuning: allow YAML to provide defaults (ENV wins)
+    #
+    # This enables "batch run via 8 YAMLs" without requiring per-job env exports,
+    # while preserving strict backward compatibility for existing pure-LoRA YAMLs.
+    # ------------------------------------------------------------------
+    try:
+        _apply_sparse_env_defaults_from_cfg(cfg)
+    except Exception as _sparse_cfg_e:
+        # Fail-fast: invalid sparse YAML defaults should be surfaced immediately.
+        raise
 
     model_env = env.get("LAT_MODEL") or env.get("GLA_MODEL")
     if model_env and not args.model:

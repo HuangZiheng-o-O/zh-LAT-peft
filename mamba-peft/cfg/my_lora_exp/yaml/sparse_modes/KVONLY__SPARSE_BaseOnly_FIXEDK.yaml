@@ -1,0 +1,14 @@
+peft: cfg/my_lora_exp/peft/lora_kv_r8_alpha16.json
+
+env_defaults:
+  HP_INIT: pissa
+  HP_SAVE_MODE: best_last
+  HP_SAVE_FULL_MODEL: 0
+
+sparse_selective:
+  enable: true
+  scope: base_only
+  budget_mode: fixed_count
+  k: 7569408
+  score_samples: 1024
+
