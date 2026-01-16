@@ -109,6 +109,22 @@ def _is_peft_lora_linear(module: torch.nn.Module) -> bool:
     )
 
 
+def _get_linear_like_weight_2d(module: torch.nn.Module) -> Optional[torch.Tensor]:
+    """
+    Return a 2D weight tensor for "linear-like" modules.
+
+    We intentionally do NOT require isinstance(module, nn.Linear) because:
+      - FLA/RetNet may use custom projection modules
+      - PEFT may wrap non-nn.Linear backends (quantized/custom)
+
+    The only requirement for counting LoRA trainables is that a 2D `.weight` exists.
+    """
+    w = getattr(module, "weight", None)
+    if isinstance(w, (torch.nn.Parameter, torch.Tensor)) and w.dim() == 2:
+        return w
+    return None
+
+
 def _get_base_linear_from_peft_linear(module: torch.nn.Module) -> torch.nn.Module:
     """
     PEFT LoRA wraps a base "linear-like" module as peft.tuners.lora.layer.Linear.
@@ -240,17 +256,15 @@ def estimate_lora_trainable_count(model: torch.nn.Module, targets: List[str], r:
     for module_name, module in model.named_modules():
         if not _match_targets(module_name, targets):
             continue
-        # Handle both bare nn.Linear and PEFT-wrapped linear.
-        if isinstance(module, torch.nn.Linear):
-            w = module.weight
-        elif _is_peft_lora_linear(module):
-            w = getattr(_get_base_linear_from_peft_linear(module), "weight", None)
-            if w is None:
-                continue
+        # Handle PEFT-wrapped linear: count based on its base layer's 2D weight.
+        if _is_peft_lora_linear(module):
+            base = _get_base_linear_from_peft_linear(module)
+            w = _get_linear_like_weight_2d(base)
         else:
-            # Unknown module type matched by suffix; skip (fail-fast would be too strict for estimation).
-            continue
-        if w.dim() != 2:
+            # Handle bare nn.Linear or any linear-like module with a 2D weight.
+            w = _get_linear_like_weight_2d(module)
+
+        if w is None:
             continue
         out, in_ = int(w.shape[0]), int(w.shape[1])
         total += r * (in_ + out)
