@@ -277,6 +277,10 @@ ROUND_E31=( #use this
   "sparse_modes/VOONLY__SPARSE_Hybrid_REF_QKVOMLP.yaml"
   "sparse_modes/VOONLY__SPARSE_LoraDenseBaseSparse_REF_QKVOMLP.yaml"
 )
+ROUND_E312=(
+  "sparse_modes/VOONLY__SPARSE_LoraDenseBaseSparse_REF_QKVOMLP.yaml"
+)
+
 
 ROUND_E32=(
 #  "sparse_modes/KVONLY__SPARSE_LoraOnly_FIXEDK.yaml"
