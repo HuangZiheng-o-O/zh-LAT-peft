@@ -109,19 +109,44 @@ def _is_peft_lora_linear(module: torch.nn.Module) -> bool:
     )
 
 
-def _get_base_linear_from_peft_linear(module: torch.nn.Module) -> torch.nn.Linear:
+def _get_base_linear_from_peft_linear(module: torch.nn.Module) -> torch.nn.Module:
     """
-    PEFT LoRA wraps nn.Linear as peft.tuners.lora.layer.Linear and stores the original linear
-    as `base_layer` (PEFT>=0.7). Some variants may use `linear`.
+    PEFT LoRA wraps a base "linear-like" module as peft.tuners.lora.layer.Linear.
+
+    IMPORTANT:
+    - Across PEFT versions / quantization backends, the wrapped base module may NOT be an instance
+      of torch.nn.Linear (e.g., bitsandbytes linear, custom FLA projections), but it should still
+      expose a 2D `.weight` tensor (and optionally `.bias`).
+    - We therefore return a generic nn.Module whose `.weight` is usable (2D) rather than requiring
+      torch.nn.Linear specifically.
     """
-    base = getattr(module, "base_layer", None)
-    if isinstance(base, torch.nn.Linear):
-        return base
-    base2 = getattr(module, "linear", None)
-    if isinstance(base2, torch.nn.Linear):
-        return base2
+    # Common PEFT attribute names
+    candidates = []
+    candidates.append(getattr(module, "base_layer", None))
+    candidates.append(getattr(module, "linear", None))
+    # Some PEFT versions expose a helper
+    if hasattr(module, "get_base_layer") and callable(getattr(module, "get_base_layer")):
+        try:
+            candidates.append(module.get_base_layer())  # type: ignore[attr-defined]
+        except Exception:
+            pass
+
+    for base in candidates:
+        if base is None:
+            continue
+        w = getattr(base, "weight", None)
+        if w is None:
+            continue
+        # Accept Parameter or Tensor
+        if isinstance(w, (torch.nn.Parameter, torch.Tensor)) and getattr(w, "dim", lambda: -1)() == 2:
+            return base
+
+    # As a last resort, some wrappers proxy `.weight` directly; accept that shape for counting,
+    # but sparse replacement requires a real base module, so we still fail here.
     raise TypeError(
-        f"PEFT Linear wrapper does not expose an nn.Linear base_layer/linear (got {type(module)})."
+        "PEFT Linear wrapper does not expose a usable base layer with 2D `.weight`. "
+        f"type={type(module)} has base_layer={hasattr(module,'base_layer')} linear={hasattr(module,'linear')} "
+        f"get_base_layer={hasattr(module,'get_base_layer')}"
     )
 
 
@@ -219,7 +244,9 @@ def estimate_lora_trainable_count(model: torch.nn.Module, targets: List[str], r:
         if isinstance(module, torch.nn.Linear):
             w = module.weight
         elif _is_peft_lora_linear(module):
-            w = _get_base_linear_from_peft_linear(module).weight
+            w = getattr(_get_base_linear_from_peft_linear(module), "weight", None)
+            if w is None:
+                continue
         else:
             # Unknown module type matched by suffix; skip (fail-fast would be too strict for estimation).
             continue
@@ -685,8 +712,14 @@ def _replace_linear_weight_with_sparse_delta(
         base_linear = _get_base_linear_from_peft_linear(module)
         replace_mode = "replace_base_layer"
 
-    base_w = base_linear.weight.detach()
-    base_b = base_linear.bias.detach() if base_linear.bias is not None else None
+    base_w = getattr(base_linear, "weight", None)
+    if base_w is None or not isinstance(base_w, (torch.nn.Parameter, torch.Tensor)) or base_w.dim() != 2:
+        raise TypeError(
+            f"Cannot sparsify '{module_name}': base layer has no usable 2D weight (type={type(base_linear)})."
+        )
+    base_w = base_w.detach()
+    base_bias = getattr(base_linear, "bias", None)
+    base_b = base_bias.detach() if isinstance(base_bias, (torch.nn.Parameter, torch.Tensor)) else None
     new_mod = SparseDeltaLinear(
         base_weight=base_w,
         base_bias=base_b,
@@ -694,7 +727,7 @@ def _replace_linear_weight_with_sparse_delta(
         alpha=alpha,
         dropout=dropout,
     )
-    new_mod.to(device=base_linear.weight.device, dtype=base_linear.weight.dtype)
+    new_mod.to(device=base_w.device, dtype=base_w.dtype)
     if replace_mode == "replace_self":
         _set_module_by_qualname(model, module_name, new_mod)
     else:
