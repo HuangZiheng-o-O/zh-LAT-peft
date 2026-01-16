@@ -1,0 +1,19 @@
+peft: cfg/my_lora_exp/peft/lora_vo_r8_alpha16.json
+
+env_defaults:
+  HP_INIT: pissa
+  HP_PISSA_FAST: 1
+  HP_SAVE_MODE: best_last
+  HP_SAVE_FULL_MODEL: 0
+
+# Dense LoRA on VO, sparse only on VO base weights (v_proj/o_proj).
+# Total trainables matched to QKVOMLP reference LoRA budget.
+sparse_selective:
+  enable: true
+  scope: lora_dense_base_sparse
+  budget_mode: match_reference
+  reference_cfg: cfg/my_lora_exp/yaml/E1_QKVO_plus_MLP_r8_alpha16.yaml
+  base_pool: from_peft_json
+  base_pool_peft_json: cfg/my_lora_exp/peft/lora_vo_r8_alpha16.json
+  score_samples: 1024
+

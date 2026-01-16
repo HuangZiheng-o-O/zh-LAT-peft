@@ -267,18 +267,12 @@ ROUND_E99=(# ROUND_E12_DELTANET
 
 # Convenience suites (same 8 modes, single base LoRA target set)
 ROUND_E31=( #use this
-#  "sparse_modes/VOONLY__SPARSE_LoraOnly_FIXEDK.yaml"
-#  "sparse_modes/VOONLY__SPARSE_BaseOnly_FIXEDK.yaml"
-#  "sparse_modes/VOONLY__SPARSE_Hybrid_FIXEDK.yaml"
-#  "sparse_modes/VOONLY__SPARSE_LoraDenseBaseSparse_FIXEDK.yaml"
-
-  "sparse_modes/QKVOMLP__SPARSE_LoraOnly_REF_VO.yaml"
-  "sparse_modes/QKVOMLP__SPARSE_BaseOnly_REF_VO.yaml"
-  "sparse_modes/VOONLY__SPARSE_Hybrid_REF_QKVOMLP.yaml"
-  "sparse_modes/VOONLY__SPARSE_LoraDenseBaseSparse_REF_QKVOMLP.yaml"
-)
-ROUND_E312=(
-  "sparse_modes/VOONLY__SPARSE_LoraDenseBaseSparse_REF_QKVOMLP.yaml"
+  # Core ablations (all match QKVOMLP budget):
+  "sparse_modes/VO_lora__VO_sparse_REF_QKVOMLP.yaml"
+  "sparse_modes/VO_lora__QKVOMLP_sparse_REF_QKVOMLP.yaml"
+  "sparse_modes/VO_lora__Base_sparse_REF_QKVOMLP.yaml"
+  # Control: no LoRA, budget spent fully on base sparse
+  "sparse_modes/Base_only__Base_sparse_REF_QKVOMLP.yaml"
 )
 
 

@@ -86,7 +86,7 @@ def _is_sparse_run_enabled() -> bool:
 
 
 def _default_output_root(*suffix: str) -> Path:
-    root = REPO_ROOT / "output" / ("sparse" if _is_sparse_run_enabled() else "benchmark")
+    root = REPO_ROOT / "output" / ("my_sparse" if _is_sparse_run_enabled() else "benchmark")
     for part in suffix:
         root /= part
     return root
@@ -180,6 +180,8 @@ def _apply_sparse_env_defaults_from_cfg(cfg: Dict) -> None:
         k: 7569408
         score_samples: 1024
         reference_cfg: /abs/or/relative/path.yaml   # optional; env still overrides
+        base_pool: from_current_peft|from_peft_json|all_linear
+        base_pool_peft_json: cfg/.../peft.json      # required when base_pool=from_peft_json
     """
     def _set_default_env(k: str, v) -> None:
         if v is None:
@@ -219,6 +221,10 @@ def _apply_sparse_env_defaults_from_cfg(cfg: Dict) -> None:
         _set_default_env("HP_SPARSE_SCORE_SAMPLES", node.get("score_samples"))
     if "reference_cfg" in node:
         _set_default_env("HP_SPARSE_REFERENCE_CFG", node.get("reference_cfg"))
+    if "base_pool" in node:
+        _set_default_env("HP_SPARSE_BASE_POOL", node.get("base_pool"))
+    if "base_pool_peft_json" in node:
+        _set_default_env("HP_SPARSE_BASE_POOL_PEFT_JSON", node.get("base_pool_peft_json"))
 
 
 def _lock_share(name: str, model_type: str = "LAT") -> bool:

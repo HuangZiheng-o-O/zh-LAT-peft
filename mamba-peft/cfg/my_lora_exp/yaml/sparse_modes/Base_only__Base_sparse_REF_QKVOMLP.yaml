@@ -1,0 +1,18 @@
+peft: cfg/my_lora_exp/peft/lora_qkvo_plus_mlp_r8_alpha16.json
+
+env_defaults:
+  HP_INIT: pissa
+  HP_PISSA_FAST: 1
+  HP_SAVE_MODE: best_last
+  HP_SAVE_FULL_MODEL: 0
+
+# Control: NO LoRA injection (base_only), sparse on FULL backbone base (all linear weights).
+# Trainables are exactly K_ref (QKVOMLP dense LoRA budget), but entirely spent on base sparse deltas.
+sparse_selective:
+  enable: true
+  scope: base_only
+  budget_mode: match_reference
+  reference_cfg: cfg/my_lora_exp/yaml/E1_QKVO_plus_MLP_r8_alpha16.yaml
+  base_pool: all_linear
+  score_samples: 1024
+

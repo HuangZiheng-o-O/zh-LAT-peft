@@ -65,7 +65,7 @@ export TRANSFORMERS_VERBOSITY=error
 # Logging (optional)
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="retnet-sst2-VOONLY-sparse-modes-E31"
+export SWANLAB_PROJECT="retnet-sst2-VOONLY-sparse-E31"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0
@@ -75,7 +75,7 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
   --suite E31 \
   --round all \
   --pairs "87:glue-tvt_sst2" \
-  --gpus "0 1 2 3" \
+  --gpus "1 2 4 5" \
   --gpu-plan "1,1,1,1" \
   --model-type retnet
 

@@ -28,12 +28,14 @@ Recommended usage on server (RetNet example):
     --e31-suite
 
 
-python tools/audit_sparse_trainables.py \
-        --model-type retnet \
-        --model-id /home/user/mzs_h/model/retnet-1.3B-100B/ \
-        --prec bf16 \
-        --current-yaml /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/cfg/my_lora_exp/yaml/sparse_modes/VOONLY__SPARSE_LoraDenseBaseSparse_REF_QKVOMLP.yaml \
-        --e31-suite
+Absolute-path variant:
+
+  python tools/audit_sparse_trainables.py \
+    --model-type retnet \
+    --model-id /home/user/mzs_h/model/retnet-1.3B-100B/ \
+    --prec bf16 \
+    --current-yaml /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/cfg/my_lora_exp/yaml/sparse_modes/VOONLY__SPARSE_LoraDenseBaseSparse_REF_QKVOMLP.yaml \
+    --e31-suite
 
 Notes:
   - If PEFT init (PiSSA) causes injection issues in your environment, this script does NOT need

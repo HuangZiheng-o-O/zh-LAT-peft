@@ -65,6 +65,12 @@ class SparseSelectiveConfig:
     k: Optional[int] = None  # used when fixed_count
     reference_cfg: Optional[str] = None  # used when match_reference (YAML path)
     score_samples: int = 1024
+    # Base candidate pool configuration (only affects scopes that touch base weights)
+    # - from_current_peft: base pool from CURRENT YAML's peft.target_modules (legacy behavior)
+    # - from_peft_json: base pool from HP_SPARSE_BASE_POOL_PEFT_JSON target_modules
+    # - all_linear: all eligible backbone linear weights (whole backbone "linear weights")
+    base_pool: str = "from_current_peft"
+    base_pool_peft_json: Optional[str] = None
     # Engine fixed choices (per requirement)
     salience: str = "gradient"  # only supported
     ranking: str = "global"  # only supported
@@ -82,6 +88,8 @@ class SparseSelectiveConfig:
         if k is None:
             k = _env_int("LAT_SPARSE_K", None)
         reference_cfg = os.environ.get("HP_SPARSE_REFERENCE_CFG") or os.environ.get("LAT_SPARSE_REFERENCE_CFG")
+        base_pool = os.environ.get("HP_SPARSE_BASE_POOL") or os.environ.get("LAT_SPARSE_BASE_POOL") or "from_current_peft"
+        base_pool_peft_json = os.environ.get("HP_SPARSE_BASE_POOL_PEFT_JSON") or os.environ.get("LAT_SPARSE_BASE_POOL_PEFT_JSON")
         score_samples = _env_int("HP_SPARSE_SCORE_SAMPLES", None)
         if score_samples is None:
             score_samples = _env_int("LAT_SPARSE_SCORE_SAMPLES", 1024) or 1024
@@ -92,6 +100,9 @@ class SparseSelectiveConfig:
             rho=float(rho),
             k=k,
             reference_cfg=reference_cfg,
+            # Default: for lora_dense_base_sparse we want "whole backbone" unless overridden.
+            base_pool=str(base_pool),
+            base_pool_peft_json=base_pool_peft_json,
             score_samples=int(score_samples),
         )
 
@@ -189,6 +200,74 @@ def _iter_linear_weight_params(model: torch.nn.Module, targets: List[str]) -> It
             f"(got {type(module)}). Sparse reparameterization requires nn.Linear or PEFT LoRA Linear wrapper."
         )
 
+
+def _iter_all_backbone_linear_weight_params(model: torch.nn.Module) -> Iterable[Tuple[str, torch.nn.Parameter]]:
+    """
+    Yield (param_name, param) for ALL eligible backbone linear weights.
+
+    Eligible means:
+      - torch.nn.Linear modules (base model)
+      - peft.tuners.lora.layer.Linear wrappers (we will sparsify their base_layer)
+
+    Exclusions:
+      - LoRA internal modules/params (lora_A/lora_B etc.) are excluded from the base pool.
+
+    This is the closest practical definition of "entire backbone full parameters" that is safe
+    for SparseDeltaLinear replacement (we cannot replace embeddings/LayerNorm/etc.).
+    """
+    for module_name, module in model.named_modules():
+        # Exclude LoRA internal modules
+        if "lora_" in module_name:
+            continue
+        if isinstance(module, torch.nn.Linear):
+            yield f"{module_name}.weight", module.weight
+            continue
+        if _is_peft_lora_linear(module):
+            base = _get_base_linear_from_peft_linear(module)
+            w = getattr(base, "weight", None)
+            if isinstance(w, torch.nn.Parameter) and w.dim() == 2:
+                yield f"{module_name}.weight", w
+            continue
+
+
+def _load_target_modules_from_peft_json(peft_json_path: str) -> List[str]:
+    """
+    Load a PEFT JSON file and return its target_modules list.
+    Path may be absolute or relative to mamba-peft/.
+    """
+    p = Path(peft_json_path)
+    if not p.is_absolute():
+        p = (Path(__file__).resolve().parents[1] / p).resolve()
+    if not p.exists():
+        raise FileNotFoundError(f"base_pool_peft_json not found: {p}")
+    peft_json = json.loads(p.read_text())
+    targets = list(peft_json.get("target_modules") or [])
+    if not targets:
+        raise ValueError(f"base_pool_peft_json has empty target_modules: {p}")
+    return targets
+
+
+def _resolve_base_pool_params(
+    *,
+    model: torch.nn.Module,
+    base_pool: str,
+    current_targets: List[str],
+    base_pool_peft_json: Optional[str],
+) -> Dict[str, torch.nn.Parameter]:
+    """
+    Resolve base candidate pool according to config.
+    """
+    bp = str(base_pool or "").lower().strip()
+    if bp in ("", "from_current_peft"):
+        return dict(_iter_linear_weight_params(model, current_targets)) if current_targets else {}
+    if bp in ("from_peft_json", "from_peft"):
+        if not base_pool_peft_json:
+            raise ValueError("HP_SPARSE_BASE_POOL=from_peft_json requires HP_SPARSE_BASE_POOL_PEFT_JSON")
+        targets = _load_target_modules_from_peft_json(base_pool_peft_json)
+        return dict(_iter_linear_weight_params(model, targets))
+    if bp in ("all_linear", "all_backbone", "all"):
+        return dict(_iter_all_backbone_linear_weight_params(model))
+    raise ValueError(f"Unknown HP_SPARSE_BASE_POOL='{base_pool}' (use from_current_peft|from_peft_json|all_linear)")
 
 def _iter_lora_linear_weight_params(model: torch.nn.Module) -> Iterable[Tuple[str, torch.nn.Parameter]]:
     """
@@ -808,13 +887,27 @@ def maybe_run_sparse_selective_tuning(
     base_params: Dict[str, torch.nn.Parameter] = {}
     scope_l = cfg.scope.lower().strip()
     if scope_l in ("base_only", "hybrid"):
-        base_params = dict(_iter_linear_weight_params(model, targets)) if targets else {}
+        # Legacy behavior: base pool is from current YAML peft targets, unless user overrides base_pool.
+        base_params = _resolve_base_pool_params(
+            model=model,
+            base_pool=cfg.base_pool,
+            current_targets=targets,
+            base_pool_peft_json=cfg.base_pool_peft_json,
+        )
     elif scope_l == "lora_dense_base_sparse":
-        # New scope: sparse acts on base weights (pool=All minus gates), while LoRA remains dense trainable.
-        # Candidate pool should not be limited by current YAML's LoRA targets (KV-only etc.).
-        all_targets = _default_all_minus_gate_targets()
-        base_params = dict(_iter_linear_weight_params(model, all_targets))
-        base_params = _filter_out_gate_modules(base_params)
+        # User-intended meaning:
+        #   - LoRA remains dense trainable
+        #   - Sparse selection applies to BASE weights
+        # Base candidate pool is configurable via HP_SPARSE_BASE_POOL:
+        #   - all_linear: "entire backbone" linear weights (recommended default)
+        #   - from_peft_json: restrict sparse to a module subset (e.g., QKVOMLP) while keeping LoRA dense
+        #   - from_current_peft: sparse only on modules defined by current YAML's peft targets
+        base_params = _resolve_base_pool_params(
+            model=model,
+            base_pool=("all_linear" if str(cfg.base_pool).strip() == "" else cfg.base_pool),
+            current_targets=targets,
+            base_pool_peft_json=cfg.base_pool_peft_json,
+        )
 
     # Enforce scope for salience computation (only when enabled).
     # For base_only/hybrid we need base weights to have grads during scoring.
