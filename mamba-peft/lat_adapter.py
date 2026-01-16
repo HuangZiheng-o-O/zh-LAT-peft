@@ -135,20 +135,20 @@ def _apply_peft_env_overrides(peft_json: Dict[str, Any]) -> Dict[str, Any]:
     init_env = env.get("HP_INIT")
     if init_env:
         peft_json["init_lora_weights"] = init_env
-    else:
-        # HP_PISSA_FAST: If set and init is "pissa", switch to fast SVD init
-        fast_pissa_env = env.get("HP_PISSA_FAST")
-        try:
-            if fast_pissa_env and str(fast_pissa_env).lower() not in ("0", "false", "no", "off"):
-                init_val = peft_json.get("init_lora_weights", None)
-                # If user asked for PiSSA-fast but config doesn't specify init, default to fast PiSSA.
-                # This is opt-in via env, so it won't change legacy runs unless explicitly enabled.
-                if init_val is None:
-                    peft_json["init_lora_weights"] = "pissa_niter_4"
-                elif isinstance(init_val, str) and init_val.lower() == "pissa":
-                    peft_json["init_lora_weights"] = "pissa_niter_4"
-        except Exception:
-            pass
+
+    # HP_PISSA_FAST: If set and init is "pissa", switch to fast SVD init.
+    # IMPORTANT: apply this even when HP_INIT is explicitly set, so users can do:
+    #   HP_INIT=pissa + HP_PISSA_FAST=1  -> pissa_niter_4
+    fast_pissa_env = env.get("HP_PISSA_FAST")
+    try:
+        if fast_pissa_env and str(fast_pissa_env).lower() not in ("0", "false", "no", "off"):
+            init_val = peft_json.get("init_lora_weights", None)
+            if init_val is None:
+                peft_json["init_lora_weights"] = "pissa_niter_4"
+            elif isinstance(init_val, str) and init_val.lower() == "pissa":
+                peft_json["init_lora_weights"] = "pissa_niter_4"
+    except Exception:
+        pass
 
     # If lora_alpha is missing, default to 2 * r (matches FISH-Tuning impl detail; opt-in via "missing key").
     # We DO NOT override if user already set lora_alpha in JSON or via HP_PEFT_ALPHA.
@@ -315,7 +315,34 @@ def prepare_lat_model_and_tokenizer(
             if default_targets:
                 peft_json["target_modules"] = default_targets
 
-        peft_cfg = LoraConfig(**peft_json)
+        # PEFT compatibility shim:
+        # Some environments ship an older `peft` that doesn't recognize init_lora_weights="pissa"
+        # (but may support "pissa_niter_4"), causing:
+        #   ValueError: Unknown initialization init_lora_weights='pissa'
+        #
+        # We prefer the user's requested init, but if PEFT rejects it, we retry with a safe fallback.
+        try:
+            peft_cfg = LoraConfig(**peft_json)
+        except ValueError as e:
+            init_v = peft_json.get("init_lora_weights", None)
+            msg = str(e).lower()
+            if isinstance(init_v, str) and init_v.lower() == "pissa" and ("unknown initialization" in msg or "init_lora_weights" in msg):
+                # Retry with fast PiSSA (more widely supported across PEFT versions)
+                peft_json2 = dict(peft_json)
+                peft_json2["init_lora_weights"] = "pissa_niter_4"
+                try:
+                    peft_cfg = LoraConfig(**peft_json2)
+                    peft_json = peft_json2
+                    print("[lat_adapter][warn] PEFT rejected init_lora_weights='pissa'; using 'pissa_niter_4' fallback.")
+                except Exception:
+                    # Final fallback: drop init_lora_weights so PEFT uses its default init.
+                    peft_json3 = dict(peft_json)
+                    peft_json3.pop("init_lora_weights", None)
+                    peft_cfg = LoraConfig(**peft_json3)
+                    peft_json = peft_json3
+                    print("[lat_adapter][warn] PEFT rejected PiSSA init; falling back to default LoRA init (no init_lora_weights).")
+            else:
+                raise
         model = get_peft_model(model, peft_cfg)
 
     return model, tokenizer, peft_cfg
