@@ -228,42 +228,7 @@ ROUND_E99=(# ROUND_E12_DELTANET
   )
 
 
-# =============================================================================
-# ROUND_E30_SPARSE_MODES: 8-mode batch suite for Sparse Selective Tuning
-# =============================================================================
-# Goal:
-#   - Provide exactly 8 YAML configs to batch-run the 4 sparse functions × 2 budget modes,
-#     without exploding into "a bunch of YAMLs".
-#   - Each YAML carries a `sparse_selective:` block, which train_lat.py converts into HP_SPARSE_*
-#     env defaults (ENV still wins).
-# Usage:
-#   - RetNet example:
-#       ./lat_batch_tmux.sh --suite E30 --round all --pairs "87:glue-tvt_sst2" ... --model-type retnet
-# Notes:
-#   - match_reference YAMLs intentionally omit reference_cfg; set HP_SPARSE_REFERENCE_CFG in ENV.
-#   - Pure LoRA suites (e.g., E13) are unchanged.
-# =============================================================================
-#ROUND_E30=(
-#  "sparse_modes/KVONLY__SPARSE_LoraOnly_FIXEDK.yaml"
-#  "sparse_modes/KVONLY__SPARSE_BaseOnly_FIXEDK.yaml"
-#  "sparse_modes/KVONLY__SPARSE_Hybrid_FIXEDK.yaml"
-#  "sparse_modes/KVONLY__SPARSE_LoraDenseBaseSparse_FIXEDK.yaml"
-#
-#  "sparse_modes/KVONLY__SPARSE_LoraOnly_REF_QKVOMLP.yaml"
-#  "sparse_modes/KVONLY__SPARSE_BaseOnly_REF_QKVOMLP.yaml"
-#  "sparse_modes/KVONLY__SPARSE_Hybrid_REF_QKVOMLP.yaml"
-#  "sparse_modes/KVONLY__SPARSE_LoraDenseBaseSparse_REF_QKVOMLP.yaml"
-#
-#  "sparse_modes/VOONLY__SPARSE_LoraOnly_FIXEDK.yaml"
-#  "sparse_modes/VOONLY__SPARSE_BaseOnly_FIXEDK.yaml"
-#  "sparse_modes/VOONLY__SPARSE_Hybrid_FIXEDK.yaml"
-#  "sparse_modes/VOONLY__SPARSE_LoraDenseBaseSparse_FIXEDK.yaml"
-#
-#  "sparse_modes/VOONLY__SPARSE_LoraOnly_REF_QKVOMLP.yaml"
-#  "sparse_modes/VOONLY__SPARSE_BaseOnly_REF_QKVOMLP.yaml"
-#  "sparse_modes/VOONLY__SPARSE_Hybrid_REF_QKVOMLP.yaml"
-#  "sparse_modes/VOONLY__SPARSE_LoraDenseBaseSparse_REF_QKVOMLP.yaml"
-#)
+
 
 # Convenience suites (same 8 modes, single base LoRA target set)
 ROUND_E31=( #use this
@@ -273,22 +238,6 @@ ROUND_E31=( #use this
   "sparse_modes/VO_lora__Base_sparse_REF_QKVOMLP.yaml"
   # Control: no LoRA, budget spent fully on base sparse
   "sparse_modes/Base_only__Base_sparse_REF_QKVOMLP.yaml"
-)
-
-
-ROUND_E32=(
-#  "sparse_modes/KVONLY__SPARSE_LoraOnly_FIXEDK.yaml"
-#  "sparse_modes/KVONLY__SPARSE_BaseOnly_FIXEDK.yaml"
-#  "sparse_modes/KVONLY__SPARSE_Hybrid_FIXEDK.yaml"
-#  "sparse_modes/KVONLY__SPARSE_LoraDenseBaseSparse_FIXEDK.yaml"
-
-  # Mirror design of E31:
-  # - sparsify larger QKVOMLP to match smaller KV reference (for lora_only/base_only)
-  # - keep KVONLY for hybrid / lora_dense_base_sparse to match QKVOMLP (budget is achievable via base pool)
-  "sparse_modes/QKVOMLP__SPARSE_LoraOnly_REF_KV.yaml"
-  "sparse_modes/QKVOMLP__SPARSE_BaseOnly_REF_KV.yaml"
-  "sparse_modes/KVONLY__SPARSE_Hybrid_REF_QKVOMLP.yaml"
-  "sparse_modes/KVONLY__SPARSE_LoraDenseBaseSparse_REF_QKVOMLP.yaml"
 )
 
 

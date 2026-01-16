@@ -107,6 +107,43 @@ class SparseSelectiveConfig:
         )
 
 
+def _load_current_peft_targets_from_cfg(cfg_path: str) -> List[str]:
+    """
+    Load `peft.target_modules` from the CURRENT YAML's `peft:` json path.
+
+    This is used to:
+      - build base candidate pools for from_current_peft
+      - compute dense LoRA trainable count snapshots
+    """
+    import yaml as _yaml
+
+    yaml_cfg = _yaml.safe_load(Path(cfg_path).read_text())
+    peft_json_path = (yaml_cfg or {}).get("peft")
+    if not peft_json_path:
+        return []
+    peft_p = Path(peft_json_path)
+    if not peft_p.is_absolute():
+        peft_p = (Path(__file__).resolve().parents[1] / peft_p).resolve()
+    try:
+        peft_json = json.loads(peft_p.read_text())
+        return list(peft_json.get("target_modules") or [])
+    except Exception:
+        return []
+
+
+def _effective_base_pool_for_scope(cfg: SparseSelectiveConfig, scope_l: str) -> str:
+    """
+    Determine the effective base_pool to use for a given scope.
+
+    Contract:
+      - lora_dense_base_sparse defaults to all_linear when cfg.base_pool is empty
+      - other scopes use cfg.base_pool as-is
+    """
+    if scope_l == "lora_dense_base_sparse":
+        return "all_linear" if str(cfg.base_pool).strip() == "" else str(cfg.base_pool)
+    return str(cfg.base_pool)
+
+
 def _match_targets(name: str, targets: List[str]) -> bool:
     # Match PEFT-style targets (often suffixes like "attn.k_proj" or "q_proj").
     return any(name.endswith(t) for t in targets)
@@ -215,11 +252,22 @@ def _iter_all_backbone_linear_weight_params(model: torch.nn.Module) -> Iterable[
     This is the closest practical definition of "entire backbone full parameters" that is safe
     for SparseDeltaLinear replacement (we cannot replace embeddings/LayerNorm/etc.).
     """
+    # IMPORTANT (PEFT): when LoRA is injected, PEFT Linear wrappers often expose a child submodule
+    # like "<wrapper>.base_layer" (and sometimes "<wrapper>.linear") which is itself an nn.Linear.
+    # If we naively include BOTH:
+    #   - "<wrapper>.weight"   (mapped to base_layer.weight)
+    #   - "<wrapper>.base_layer.weight"
+    # then selection may contain both keys and replacement will try to sparsify the same layer twice.
+    # The second attempt hits a SparseDeltaLinear and crashes (exactly the user's trace).
+    name_to_module = dict(model.named_modules())
     for module_name, module in model.named_modules():
         # Exclude LoRA internal modules
         if "lora_" in module_name:
             continue
         if isinstance(module, torch.nn.Linear):
+            # Skip PEFT wrapper children (avoid duplicate views of the same base weight).
+            if _is_peft_shadow_child_linear(module_name=module_name, name_to_module=name_to_module):
+                continue
             yield f"{module_name}.weight", module.weight
             continue
         if _is_peft_lora_linear(module):
@@ -229,6 +277,124 @@ def _iter_all_backbone_linear_weight_params(model: torch.nn.Module) -> Iterable[
                 yield f"{module_name}.weight", w
             continue
 
+
+def _is_peft_shadow_child_linear(
+    *,
+    module_name: str,
+    name_to_module: Dict[str, torch.nn.Module],
+) -> bool:
+    """
+    Detect the "shadow" linear modules that are direct children of a PEFT LoRA Linear wrapper.
+
+    Example shadow module names:
+      - "<wrapper>.base_layer"
+      - "<wrapper>.linear"
+    """
+    if not (module_name.endswith(".base_layer") or module_name.endswith(".linear")):
+        return False
+    parent_name = module_name.rsplit(".", 1)[0]
+    parent = name_to_module.get(parent_name)
+    return parent is not None and _is_peft_lora_linear(parent)
+
+
+def _validate_base_pool_strict(
+    *,
+    model: torch.nn.Module,
+    base_pool: str,
+    base_params: Dict[str, torch.nn.Parameter],
+    model_type: str,
+    expected_targets: Optional[List[str]] = None,
+) -> None:
+    """
+    Fail-fast validation to guarantee:
+      - no duplicate Parameter objects across keys
+      - no PEFT shadow child keys like '*.base_layer.weight'
+      - keys map to replaceable modules (nn.Linear or PEFT LoRA Linear wrapper)
+      - for all_linear: pool covers ALL eligible modules exactly once (no omissions / no extras)
+    """
+    if not base_params:
+        return
+
+    # 1) No duplicates by identity (same Parameter object under multiple names).
+    id_to_keys: Dict[int, List[str]] = {}
+    for k, p in base_params.items():
+        id_to_keys.setdefault(id(p), []).append(k)
+    dup = [(pid, ks) for pid, ks in id_to_keys.items() if len(ks) > 1]
+    if dup:
+        dup.sort(key=lambda x: (-len(x[1]), x[1][0]))
+        pid, ks = dup[0]
+        raise RuntimeError(
+            f"[{model_type}][sparse] base pool has duplicate Parameter object referenced by multiple keys: "
+            f"param_id={pid} keys={ks[:8]} (group_size={len(ks)}). Refusing to proceed."
+        )
+
+    name_to_module = dict(model.named_modules())
+
+    # 2) Keys must be '<module>.weight' and must not target PEFT shadow children.
+    for full_name in base_params.keys():
+        if not full_name.endswith(".weight"):
+            raise RuntimeError(f"[{model_type}][sparse] base pool key must end with '.weight', got: {full_name}")
+        module_name = full_name.rsplit(".", 1)[0]
+        if _is_peft_shadow_child_linear(module_name=module_name, name_to_module=name_to_module):
+            raise RuntimeError(
+                f"[{model_type}][sparse] Invalid base pool key targets PEFT wrapper shadow child: '{full_name}'. "
+                "This would cause double-sparsification (replace wrapper base_layer, then replace base_layer again)."
+            )
+        mod = name_to_module.get(module_name)
+        if mod is None:
+            raise RuntimeError(f"[{model_type}][sparse] base pool module not found for key: {full_name}")
+        if not (isinstance(mod, torch.nn.Linear) or _is_peft_lora_linear(mod)):
+            raise RuntimeError(
+                f"[{model_type}][sparse] base pool key '{full_name}' points to unsupported module type={type(mod)}; "
+                "expected nn.Linear or PEFT LoRA Linear wrapper."
+            )
+
+    # 3) Coverage guarantees (no omissions / no extras).
+    bp = str(base_pool or "").lower().strip()
+    if bp in ("all_linear", "all_backbone", "all"):
+        expected: List[str] = []
+        for mn, mod in name_to_module.items():
+            if "lora_" in mn:
+                continue
+            if isinstance(mod, torch.nn.Linear):
+                if _is_peft_shadow_child_linear(module_name=mn, name_to_module=name_to_module):
+                    continue
+                expected.append(mn)
+            elif _is_peft_lora_linear(mod):
+                expected.append(mn)
+        expected_set = set(expected)
+        pool_set = {k.rsplit(".weight", 1)[0] for k in base_params.keys() if k.endswith(".weight")}
+        missing = sorted(expected_set - pool_set)
+        extra = sorted(pool_set - expected_set)
+        if missing or extra:
+            raise RuntimeError(
+                f"[{model_type}][sparse] all_linear pool coverage mismatch: "
+                f"expected={len(expected_set)} pool={len(pool_set)} missing={missing[:8]} extra={extra[:8]} "
+                "(showing up to 8 each). Refusing to proceed."
+            )
+    else:
+        # For target-based pools, if caller provides the expected target suffixes, enforce exact coverage:
+        # pool keys must match EXACTLY the set of eligible modules whose names match those suffixes.
+        if expected_targets:
+            expected_t: List[str] = []
+            for mn, mod in name_to_module.items():
+                if "lora_" in mn:
+                    continue
+                if not _match_targets(mn, expected_targets):
+                    continue
+                # Eligible: nn.Linear or PEFT wrapper (shadow child modules won't match typical targets).
+                if isinstance(mod, torch.nn.Linear) or _is_peft_lora_linear(mod):
+                    expected_t.append(mn)
+            expected_set = set(expected_t)
+            pool_set = {k.rsplit(".weight", 1)[0] for k in base_params.keys() if k.endswith(".weight")}
+            missing = sorted(expected_set - pool_set)
+            extra = sorted(pool_set - expected_set)
+            if missing or extra:
+                raise RuntimeError(
+                    f"[{model_type}][sparse] target-based base pool coverage mismatch: "
+                    f"targets={expected_targets} expected={len(expected_set)} pool={len(pool_set)} "
+                    f"missing={missing[:8]} extra={extra[:8]} (showing up to 8 each). Refusing to proceed."
+                )
 
 def _load_target_modules_from_peft_json(peft_json_path: str) -> List[str]:
     """
@@ -245,6 +411,28 @@ def _load_target_modules_from_peft_json(peft_json_path: str) -> List[str]:
     if not targets:
         raise ValueError(f"base_pool_peft_json has empty target_modules: {p}")
     return targets
+
+
+def _targets_for_base_pool_validation(
+    *,
+    effective_base_pool: str,
+    current_targets: List[str],
+    base_pool_peft_json: Optional[str],
+) -> Optional[List[str]]:
+    """
+    Return the target suffixes used to build a target-based base pool, so we can enforce coverage.
+    """
+    bp = str(effective_base_pool or "").lower().strip()
+    if bp in ("", "from_current_peft"):
+        return list(current_targets)
+    if bp in ("from_peft_json", "from_peft"):
+        if not base_pool_peft_json:
+            return None
+        try:
+            return _load_target_modules_from_peft_json(base_pool_peft_json)
+        except Exception:
+            return None
+    return None
 
 
 def _resolve_base_pool_params(
@@ -789,6 +977,11 @@ def _replace_linear_weight_with_sparse_delta(
         raise ValueError(f"Expected a weight param name ending with '.weight', got: {param_full_name}")
     module_name = param_full_name.rsplit(".", 1)[0]
     module = _get_module_by_qualname(model, module_name)
+    if isinstance(module, SparseDeltaLinear):
+        raise TypeError(
+            f"Cannot sparsify already-sparsified module at '{module_name}' (type=SparseDeltaLinear). "
+            "This indicates duplicate selection keys targeting the same base layer (often PEFT shadow base_layer keys)."
+        )
     if not (isinstance(module, torch.nn.Linear) or _is_peft_lora_linear(module)):
         raise TypeError(
             f"Cannot sparsify non-linear module at '{module_name}' (type={type(module)}). "
@@ -862,22 +1055,8 @@ def maybe_run_sparse_selective_tuning(
     sel_path = out_dir / "sparse_selective_selection.pt"
     meta_path = out_dir / "sparse_selective_meta.json"
 
-    # Determine candidate set for base weights from PEFT config (current cfg yaml contains peft json path).
-    # We derive base target modules from the CURRENT YAML's peft json (not from defaults), because
-    # the user wants candidate pool scoped to YAML target modules.
-    import yaml as _yaml
-    yaml_cfg = _yaml.safe_load(Path(cfg_path).read_text())
-    peft_json_path = yaml_cfg.get("peft")
-    targets: List[str] = []
-    if peft_json_path:
-        peft_p = Path(peft_json_path)
-        if not peft_p.is_absolute():
-            peft_p = (Path(__file__).resolve().parents[1] / peft_p).resolve()
-        try:
-            peft_json = json.loads(peft_p.read_text())
-            targets = list(peft_json.get("target_modules") or [])
-        except Exception:
-            targets = []
+    # Current YAML's PEFT targets (used for from_current_peft base pool and reference budgeting).
+    targets: List[str] = _load_current_peft_targets_from_cfg(cfg_path)
 
     # IMPORTANT: Only build the candidate pools needed by the selected scope.
     # In lora_only, we must not scan base target modules (they may be PEFT-wrapped).
@@ -886,28 +1065,29 @@ def maybe_run_sparse_selective_tuning(
     lora_trainable_elems = int(sum(int(p.numel()) for p in lora_params.values()))
     base_params: Dict[str, torch.nn.Parameter] = {}
     scope_l = cfg.scope.lower().strip()
-    if scope_l in ("base_only", "hybrid"):
-        # Legacy behavior: base pool is from current YAML peft targets, unless user overrides base_pool.
+    effective_base_pool = _effective_base_pool_for_scope(cfg, scope_l)
+    if scope_l in ("base_only", "hybrid", "lora_dense_base_sparse"):
         base_params = _resolve_base_pool_params(
             model=model,
-            base_pool=cfg.base_pool,
+            base_pool=effective_base_pool,
             current_targets=targets,
             base_pool_peft_json=cfg.base_pool_peft_json,
         )
-    elif scope_l == "lora_dense_base_sparse":
-        # User-intended meaning:
-        #   - LoRA remains dense trainable
-        #   - Sparse selection applies to BASE weights
-        # Base candidate pool is configurable via HP_SPARSE_BASE_POOL:
-        #   - all_linear: "entire backbone" linear weights (recommended default)
-        #   - from_peft_json: restrict sparse to a module subset (e.g., QKVOMLP) while keeping LoRA dense
-        #   - from_current_peft: sparse only on modules defined by current YAML's peft targets
-        base_params = _resolve_base_pool_params(
-            model=model,
-            base_pool=("all_linear" if str(cfg.base_pool).strip() == "" else cfg.base_pool),
-            current_targets=targets,
-            base_pool_peft_json=cfg.base_pool_peft_json,
-        )
+
+    # Hard validation: guarantee base pool has no duplicates/shadow keys and (for all_linear) no omissions.
+    bp_l = str(effective_base_pool or "").lower().strip()
+    expected_targets_for_validation = _targets_for_base_pool_validation(
+        effective_base_pool=effective_base_pool,
+        current_targets=targets,
+        base_pool_peft_json=cfg.base_pool_peft_json,
+    )
+    _validate_base_pool_strict(
+        model=model,
+        base_pool=effective_base_pool,
+        base_params=base_params,
+        model_type=model_type,
+        expected_targets=expected_targets_for_validation,
+    )
 
     # Enforce scope for salience computation (only when enabled).
     # For base_only/hybrid we need base weights to have grads during scoring.
@@ -1159,7 +1339,10 @@ def maybe_run_sparse_selective_tuning(
         "ranking": cfg.ranking,
         "reference_cfg": cfg.reference_cfg,
         "targets_from_current_peft": targets,
-        "base_pool": "all_minus_gate" if scope_l == "lora_dense_base_sparse" else "from_current_peft",
+        # Record the *effective* base pool used to build base_params (important for reproducibility).
+        "base_pool": effective_base_pool,
+        "base_pool_configured": str(cfg.base_pool),
+        "base_pool_peft_json": cfg.base_pool_peft_json,
         "dense_trainable_before": int(sum(trainable_before.values())),
         "selection_path": str(sel_path),
         "impl": "reparam_v1",

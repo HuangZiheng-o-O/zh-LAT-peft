@@ -309,6 +309,11 @@ def main() -> None:
     ap.add_argument("--model-id", required=True, help="HF model id or local path")
     ap.add_argument("--prec", default="bf16", choices=["bf16", "fp16", "fp32"])
     ap.add_argument("--device", default="cuda", choices=["cuda", "cpu"])
+    ap.add_argument(
+        "--inject-peft-json",
+        default=None,
+        help="Optional PEFT json path to inject BEFORE auditing (enables catching PEFT shadow-key issues).",
+    )
 
     ap.add_argument("--current-yaml", help="A config YAML (contains peft:) to audit", default=None)
     ap.add_argument("--reference-yaml", help="B reference YAML (contains peft:) to audit", default=None)
@@ -319,15 +324,44 @@ def main() -> None:
     dtype = {"bf16": torch.bfloat16, "fp16": torch.float16, "fp32": torch.float32}[args.prec]
     device = "cpu" if args.device == "cpu" else "cuda"
 
-    print("[LOAD] Loading base model (no PEFT injection) for shape-audit...")
-    loaded = load_lat_model(
-        model_type=args.model_type,
-        model_id=args.model_id,
-        trust_remote_code=True,
-        device=device,
-        dtype=dtype,
-    )
-    model = loaded["model"]
+    if args.inject_peft_json:
+        # Optional PEFT injection: helps catch PEFT wrapper shadow-key issues for all_linear.
+        from lat_adapter import prepare_lat_model_and_tokenizer  # type: ignore
+
+        print(f"[LOAD] Loading model WITH PEFT injection for audit: peft={args.inject_peft_json}")
+        debug = bool(args.device == "cpu")
+        model, _tok, _pcfg = prepare_lat_model_and_tokenizer(
+            model_type=args.model_type,
+            model_id=args.model_id,
+            prec=args.prec,
+            debug=debug,
+            peft_json_path=str(_resolve_repo_relative(args.inject_peft_json)),
+        )
+        # Validate all_linear candidate pool strictly (this is the failure mode you hit in training).
+        try:
+            from utils.sparse_selective_engine import _resolve_base_pool_params, _validate_base_pool_strict  # type: ignore
+
+            base_params = _resolve_base_pool_params(
+                model=model,
+                base_pool="all_linear",
+                current_targets=[],
+                base_pool_peft_json=None,
+            )
+            _validate_base_pool_strict(model=model, base_pool="all_linear", base_params=base_params, model_type="AUDIT")
+            print("[AUDIT] all_linear base pool validation: OK (no duplicates / no PEFT shadow keys / complete coverage).")
+        except Exception as e:
+            print(f"[AUDIT][FAIL] all_linear base pool validation failed under PEFT injection: {e}")
+            raise
+    else:
+        print("[LOAD] Loading base model (no PEFT injection) for shape-audit...")
+        loaded = load_lat_model(
+            model_type=args.model_type,
+            model_id=args.model_id,
+            trust_remote_code=True,
+            device=device,
+            dtype=dtype,
+        )
+        model = loaded["model"]
     model.eval()
 
     # E31 audit: print contract for the 4 YAMLs (match_reference oriented).

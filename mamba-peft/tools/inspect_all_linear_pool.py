@@ -1,9 +1,9 @@
 """
-Inspect "all_linear" base candidate pool for Sparse Selective Tuning.
+Inspect base candidate pools for Sparse Selective Tuning (strict, PEFT-safe).
 
 This script loads a LAT model (optionally with PEFT/LoRA injected) and prints:
   - all modules (name -> class)
-  - the "all_linear" pool as used by sparse_selective_engine (param_name -> shape)
+  - a chosen base pool (all_linear / from_peft_json / from_current_peft) (param_name -> shape)
   - duplicate detection (same Parameter object referenced by multiple pool keys)
   - omission hints (linear-like 2D weights that are NOT collected, excluding embeddings)
 
@@ -78,12 +78,21 @@ def iter_all_linear_pool(model: torch.nn.Module) -> List[Tuple[str, torch.nn.Par
       - exclude names containing 'lora_'
       - include nn.Linear.weight
       - include PEFT LoRA wrapper's base_layer.weight
+
+    IMPORTANT (PEFT):
+      PEFT wrappers commonly expose child modules like "<wrapper>.base_layer" which may itself be an nn.Linear.
+      If we include BOTH "<wrapper>.weight" (mapped to base_layer.weight) and "<wrapper>.base_layer.weight",
+      sparse replacement will attempt to sparsify the same layer twice and crash.
+      Therefore we SKIP nn.Linear modules that are direct children of a PEFT LoRA wrapper.
     """
     out: List[Tuple[str, torch.nn.Parameter]] = []
+    name_to_mod: Dict[str, torch.nn.Module] = dict(model.named_modules())
     for module_name, module in model.named_modules():
         if "lora_" in module_name:
             continue
         if isinstance(module, torch.nn.Linear):
+            if _is_shadow_base_layer(module_name, name_to_mod):
+                continue
             out.append((f"{module_name}.weight", module.weight))
             continue
         if _is_peft_lora_linear(module):
@@ -92,6 +101,42 @@ def iter_all_linear_pool(model: torch.nn.Module) -> List[Tuple[str, torch.nn.Par
             if isinstance(w, torch.nn.Parameter) and w.dim() == 2:
                 out.append((f"{module_name}.weight", w))
             continue
+    return out
+
+
+def _match_targets(name: str, targets: List[str]) -> bool:
+    return any(name.endswith(t) for t in targets)
+
+
+def iter_target_linear_pool(model: torch.nn.Module, targets: List[str]) -> List[Tuple[str, torch.nn.Parameter]]:
+    """
+    Build a target-based pool (from_current_peft / from_peft_json).
+    Mirrors sparse_selective_engine semantics:
+      - match by suffix
+      - accept nn.Linear or PEFT LoRA Linear wrapper
+      - for PEFT wrapper, use base_layer.weight
+    """
+    name_to_mod: Dict[str, torch.nn.Module] = dict(model.named_modules())
+    out: List[Tuple[str, torch.nn.Parameter]] = []
+    for module_name, module in model.named_modules():
+        if not _match_targets(module_name, targets):
+            continue
+        if "lora_" in module_name:
+            continue
+        if isinstance(module, torch.nn.Linear):
+            if _is_shadow_base_layer(module_name, name_to_mod):
+                continue
+            out.append((f"{module_name}.weight", module.weight))
+            continue
+        if _is_peft_lora_linear(module):
+            base = _get_base_linear_from_peft_linear(module)
+            w = getattr(base, "weight", None)
+            if isinstance(w, torch.nn.Parameter) and getattr(w, "dim", lambda: -1)() == 2:
+                out.append((f"{module_name}.weight", w))
+            continue
+        raise TypeError(
+            f"Target module '{module_name}' matched by targets={targets} is not nn.Linear or PEFT LoRA Linear wrapper (got {type(module)})"
+        )
     return out
 
 
@@ -120,6 +165,17 @@ def main() -> None:
     ap.add_argument("--model-type", default="auto", help="gla|retnet|delta_net|mamba2|auto")
     ap.add_argument("--prec", default="bf16", help="bf16|fp16|fp32")
     ap.add_argument("--debug", action="store_true", help="CPU mode (no CUDA)")
+    ap.add_argument(
+        "--base-pool",
+        default="all_linear",
+        choices=["all_linear", "from_peft_json", "from_current_peft"],
+        help="Which base pool to inspect (matches sparse_selective_engine semantics).",
+    )
+    ap.add_argument(
+        "--base-pool-peft-json",
+        default="",
+        help="Required when --base-pool=from_peft_json. Path to a PEFT json defining target_modules.",
+    )
     ap.add_argument("--out-dir", default="", help="Optional directory to write dumps")
     ap.add_argument("--max-print", type=int, default=200, help="Max entries to print per section (stdout)")
     args = ap.parse_args()
@@ -187,12 +243,39 @@ def main() -> None:
         print(f"... (truncated) total_modules={len(module_rows)}")
 
     # -------------------------
-    # 2) all_linear pool
+    # 2) base pool (chosen)
     # -------------------------
-    pool_items = list(iter_all_linear_pool(model))
+    pool_kind = str(args.base_pool).strip()
+    if pool_kind == "all_linear":
+        pool_items = list(iter_all_linear_pool(model))
+    elif pool_kind == "from_peft_json":
+        if str(args.base_pool_peft_json).strip() == "":
+            raise ValueError("--base-pool-peft-json is required when --base-pool=from_peft_json")
+        bpj = _resolve_mamba_peft_rel_path(str(args.base_pool_peft_json).strip())
+        peft_json = json.loads(bpj.read_text())
+        targets = list(peft_json.get("target_modules") or [])
+        if not targets:
+            raise ValueError(f"base_pool_peft_json has empty target_modules: {bpj}")
+        pool_items = list(iter_target_linear_pool(model, targets))
+    elif pool_kind == "from_current_peft":
+        if cfg_path is None:
+            raise ValueError("--cfg is required when --base-pool=from_current_peft (to read cfg.peft target_modules)")
+        cfg_for_pool = yaml.safe_load(cfg_path.read_text()) or {}
+        peft_rel = cfg_for_pool.get("peft")
+        if not peft_rel:
+            raise ValueError(f"--cfg has no 'peft:' field: {cfg_path}")
+        peft_p = _resolve_mamba_peft_rel_path(str(peft_rel))
+        peft_json = json.loads(peft_p.read_text())
+        targets = list(peft_json.get("target_modules") or [])
+        if not targets:
+            raise ValueError(f"cfg.peft json has empty target_modules: {peft_p}")
+        pool_items = list(iter_target_linear_pool(model, targets))
+    else:
+        raise ValueError(f"Unknown base pool: {pool_kind}")
+
     pool: Dict[str, torch.nn.Parameter] = dict(pool_items)
 
-    print("\n=== all_linear POOL (param_name -> shape, dtype, device) ===")
+    print(f"\n=== BASE POOL ({pool_kind}) (param_name -> shape, dtype, device) ===")
     pool_rows = []
     for k, p in pool.items():
         shape = tuple(p.shape)
@@ -235,6 +318,19 @@ def main() -> None:
     )
 
     # -------------------------
+    # 3.5) PEFT shadow-key preflight (the exact failure mode in sparse_selective_engine)
+    # -------------------------
+    shadow_keys = [k for k in pool.keys() if k.endswith(".base_layer.weight") or k.endswith(".linear.weight")]
+    if shadow_keys:
+        print("\n=== ERROR: SHADOW base_layer keys are present in the pool (this will crash sparse replacement) ===")
+        for k in sorted(shadow_keys)[: max(1, args.max_print)]:
+            print(f"SHADOW_KEY\t{k}")
+        if len(shadow_keys) > args.max_print:
+            print("... (truncated)")
+        print("Fix: all_linear pool must NOT include '<wrapper>.base_layer.weight' when '<wrapper>' is a PEFT LoRA Linear wrapper.")
+        raise SystemExit(2)
+
+    # -------------------------
     # 4) Omission hints
     # -------------------------
     # Define "expected backbone linears" as:
@@ -254,14 +350,46 @@ def main() -> None:
     pool_module_names = sorted({k.rsplit(".weight", 1)[0] for k in pool.keys() if k.endswith(".weight")})
     missing_expected = sorted(set(expected_linear_modules) - set(pool_module_names))
 
-    print("\n=== COVERAGE CHECK (expected linears vs pool) ===")
-    print(f"expected_linear_modules={len(expected_linear_modules)} pool_module_names={len(pool_module_names)} missing_expected={len(missing_expected)}")
-    for n in missing_expected[: max(1, args.max_print)]:
-        m = name_to_mod.get(n)
-        cls = f"{m.__class__.__module__}.{m.__class__.__name__}" if m is not None else "<?>"
-        print(f"MISSING\t{n}\t{cls}")
-    if len(missing_expected) > args.max_print:
-        print("... (truncated)")
+    print("\n=== COVERAGE CHECK ===")
+    if pool_kind == "all_linear":
+        print(f"[all_linear] expected_linear_modules={len(expected_linear_modules)} pool_module_names={len(pool_module_names)} missing_expected={len(missing_expected)}")
+        for n in missing_expected[: max(1, args.max_print)]:
+            m = name_to_mod.get(n)
+            cls = f"{m.__class__.__module__}.{m.__class__.__name__}" if m is not None else "<?>"
+            print(f"MISSING\t{n}\t{cls}")
+        if len(missing_expected) > args.max_print:
+            print("... (truncated)")
+    else:
+        # Recompute expected matches under target suffix rules for this pool.
+        targets_for_pool: List[str] = []
+        if pool_kind == "from_peft_json":
+            bpj = _resolve_mamba_peft_rel_path(str(args.base_pool_peft_json).strip())
+            targets_for_pool = list((json.loads(bpj.read_text()) or {}).get("target_modules") or [])
+        elif pool_kind == "from_current_peft" and cfg_path is not None:
+            cfg_for_pool = yaml.safe_load(cfg_path.read_text()) or {}
+            peft_p = _resolve_mamba_peft_rel_path(str(cfg_for_pool.get("peft")))
+            targets_for_pool = list((json.loads(peft_p.read_text()) or {}).get("target_modules") or [])
+        expected_t: List[str] = []
+        for mn, mod in name_to_mod.items():
+            if "lora_" in mn:
+                continue
+            if _is_shadow_base_layer(mn, name_to_mod):
+                continue
+            if _match_targets(mn, targets_for_pool) and (isinstance(mod, torch.nn.Linear) or _is_peft_lora_linear(mod)):
+                expected_t.append(mn)
+        expected_set = set(expected_t)
+        pool_set = set(pool_module_names)
+        missing = sorted(expected_set - pool_set)
+        extra = sorted(pool_set - expected_set)
+        print(f"[{pool_kind}] expected_matches={len(expected_set)} pool_matches={len(pool_set)} missing={len(missing)} extra={len(extra)}")
+        for n in missing[: max(1, args.max_print)]:
+            m = name_to_mod.get(n)
+            cls = f"{m.__class__.__module__}.{m.__class__.__name__}" if m is not None else "<?>"
+            print(f"MISSING\t{n}\t{cls}")
+        for n in extra[: max(1, args.max_print)]:
+            m = name_to_mod.get(n)
+            cls = f"{m.__class__.__module__}.{m.__class__.__name__}" if m is not None else "<?>"
+            print(f"EXTRA\t{n}\t{cls}")
 
     # Extra: list 2D-weight modules that are not nn.Linear and not PEFT wrapper (excluding embeddings),
     # which may look like "linear-like" projections and thus be omissions by design.
@@ -290,7 +418,7 @@ def main() -> None:
     # -------------------------
     if out_dir is not None:
         (out_dir / "modules.tsv").write_text("\n".join([f"{n}\t{cls}" for n, cls in module_rows]) + "\n")
-        (out_dir / "all_linear_pool.tsv").write_text(
+        (out_dir / "base_pool.tsv").write_text(
             "\n".join([f"{k}\t{tuple(p.shape)}\t{str(p.dtype)}\t{str(p.device)}" for k, p in pool.items()]) + "\n"
         )
         (out_dir / "duplicates.json").write_text(json.dumps({str(pid): keys for pid, keys in dup_groups}, indent=2) + "\n")
@@ -305,6 +433,8 @@ def main() -> None:
             "prec": args.prec,
             "debug": bool(args.debug),
             "peft_json": str(peft_path_abs) if peft_path_abs is not None else None,
+            "base_pool": pool_kind,
+            "base_pool_peft_json": str(args.base_pool_peft_json) if str(args.base_pool_peft_json).strip() != "" else None,
             "total_modules": len(module_rows),
             "pool_entries": len(pool_rows),
             "pool_unique_parameter_objects": unique_param_objs,
