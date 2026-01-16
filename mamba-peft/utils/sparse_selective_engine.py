@@ -756,6 +756,8 @@ def maybe_run_sparse_selective_tuning(
     # IMPORTANT: Only build the candidate pools needed by the selected scope.
     # In lora_only, we must not scan base target modules (they may be PEFT-wrapped).
     lora_params = dict(_iter_lora_linear_weight_params(model))
+    # LoRA trainable count snapshot (stable, independent of temporary base requires_grad changes)
+    lora_trainable_elems = int(sum(int(p.numel()) for p in lora_params.values()))
     base_params: Dict[str, torch.nn.Parameter] = {}
     scope_l = cfg.scope.lower().strip()
     if scope_l in ("base_only", "hybrid"):
@@ -806,12 +808,12 @@ def maybe_run_sparse_selective_tuning(
             raise RuntimeError(f"Computed K_ref=0 from reference_cfg={cfg.reference_cfg}")
         if scope_l == "lora_dense_base_sparse":
             # Contract: total_trainable = dense_LoRA_trainable(current) + sparse_base_k == K_ref(reference dense LoRA)
-            lora_dense_trainable_now = int(sum(p.numel() for p in model.parameters() if p.requires_grad))
-            base_budget = int(k_ref) - int(lora_dense_trainable_now)
+            # IMPORTANT: do NOT count temporary base trainables used for scoring; only count LoRA trainables.
+            base_budget = int(k_ref) - int(lora_trainable_elems)
             if base_budget <= 0:
                 raise RuntimeError(
                     f"[{model_type}] match_reference impossible for scope={cfg.scope}: "
-                    f"K_ref({k_ref}) <= current dense LoRA trainables({lora_dense_trainable_now}). "
+                    f"K_ref({k_ref}) <= current dense LoRA trainables({lora_trainable_elems}). "
                     "Choose a larger reference (or reduce LoRA targets/rank) so base sparse budget is positive."
                 )
             if base_budget > candidate_elems:
@@ -932,9 +934,13 @@ def maybe_run_sparse_selective_tuning(
     alpha = float(os.environ.get("HP_SPARSE_ALPHA", "1.0"))
     dropout = float(os.environ.get("HP_SPARSE_DROPOUT", "0.0"))
     introduced = 0
-    # Snapshot current trainable parameters (e.g., dense LoRA) so we can preserve them in
-    # lora_dense_base_sparse after reparameterization.
-    trainable_before: Dict[str, int] = {n: int(p.numel()) for n, p in model.named_parameters() if p.requires_grad}
+    # Snapshot current trainable parameters so we can restore them after reparameterization.
+    # For lora_dense_base_sparse we MUST snapshot only LoRA params; base params may be temporarily
+    # set requires_grad=True for salience scoring and must NOT be restored as dense-trainable.
+    if scope_l == "lora_dense_base_sparse":
+        trainable_before: Dict[str, int] = {n: int(p.numel()) for n, p in lora_params.items()}
+    else:
+        trainable_before = {n: int(p.numel()) for n, p in model.named_parameters() if p.requires_grad}
 
     _freeze_all_params(model)
     for pname, idxs in sel_dict.items():
