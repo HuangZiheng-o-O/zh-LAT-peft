@@ -28,6 +28,12 @@ Recommended usage on server (RetNet example):
     --e31-suite
 
 
+python tools/audit_sparse_trainables.py \
+        --model-type retnet \
+        --model-id /home/user/mzs_h/model/retnet-1.3B-100B/ \
+        --prec bf16 \
+        --current-yaml /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/cfg/my_lora_exp/yaml/sparse_modes/VOONLY__SPARSE_LoraDenseBaseSparse_REF_QKVOMLP.yaml \
+        --e31-suite
 
 Notes:
   - If PEFT init (PiSSA) causes injection issues in your environment, this script does NOT need
@@ -47,13 +53,58 @@ from typing import Dict, Iterable, List, Optional, Tuple
 import torch
 import yaml
 
-# Ensure imports work when executed from anywhere.
+# ---------------------------------------------------------------------------
+# Import-path bootstrap (server-friendly)
+# ---------------------------------------------------------------------------
 THIS_DIR = Path(__file__).resolve().parent
-MBA_ROOT = THIS_DIR.parents[1]  # .../mamba-peft
-if str(MBA_ROOT) not in sys.path:
-    sys.path.insert(0, str(MBA_ROOT))
+MBA_ROOT = THIS_DIR.parent  # .../mamba-peft
+REPO_ROOT = MBA_ROOT.parent  # .../zh-LAT-peft
 
-from mamba_ssm_peft.utils.lat_model_loader import load_lat_model  # noqa: E402
+
+def _ensure_import_paths() -> None:
+    """
+    Make this script runnable from:
+      - repo root
+      - mamba-peft/
+      - mamba-peft/tools/
+      - arbitrary cwd (tmux runners, etc.)
+    """
+    candidates = [
+        str(MBA_ROOT),
+        str(REPO_ROOT),
+        str(THIS_DIR),
+        os.getcwd(),
+    ]
+    for p in candidates:
+        if p and p not in sys.path:
+            sys.path.insert(0, p)
+
+
+_ensure_import_paths()
+
+# Lazy imports after sys.path bootstrap
+try:
+    from mamba_ssm_peft.utils.lat_model_loader import load_lat_model  # type: ignore
+except ModuleNotFoundError as e:
+    # Second-chance: sometimes the script is copied and __file__/parents differ; add more parents.
+    more = [str(THIS_DIR.parents[i]) for i in range(0, min(6, len(THIS_DIR.parents)))]
+    for p in more:
+        if p and p not in sys.path:
+            sys.path.insert(0, p)
+    try:
+        from mamba_ssm_peft.utils.lat_model_loader import load_lat_model  # type: ignore
+    except ModuleNotFoundError:
+        print("[FATAL] Cannot import 'mamba_ssm_peft'.")
+        print(f"  __file__   = {__file__}")
+        print(f"  THIS_DIR   = {THIS_DIR}")
+        print(f"  MBA_ROOT   = {MBA_ROOT}  (exists={MBA_ROOT.is_dir()})")
+        print(f"  REPO_ROOT  = {REPO_ROOT} (exists={REPO_ROOT.is_dir()})")
+        print(f"  Expect dir = {MBA_ROOT / 'mamba_ssm_peft'} (exists={(MBA_ROOT / 'mamba_ssm_peft').is_dir()})")
+        print("  sys.path (head):")
+        for i, p in enumerate(sys.path[:25]):
+            print(f"    [{i:02d}] {p}")
+        raise e
+
 from utils.sparse_selective_engine import estimate_lora_trainable_count  # noqa: E402
 
 
@@ -316,4 +367,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
