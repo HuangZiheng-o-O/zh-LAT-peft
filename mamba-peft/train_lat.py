@@ -956,6 +956,12 @@ def main():
         # Fail-fast: invalid sparse YAML defaults should be surfaced immediately.
         raise
 
+    # Remove YAML-only metadata keys so they won't be passed into run_train(**kwargs).
+    # These keys are used only for ENV default injection and should never affect training logic.
+    if isinstance(cfg, dict):
+        cfg.pop("env_defaults", None)
+        cfg.pop("sparse_selective", None)
+
     model_env = env.get("LAT_MODEL") or env.get("GLA_MODEL")
     if model_env and not args.model:
         args.model = model_env
