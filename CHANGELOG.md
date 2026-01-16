@@ -1,5 +1,8 @@
 # 项目重构更新日志 - GLA/Mamba 训练管道解耦
 
+## ♻️ 参考实现同步（FISH-Tuning & SPEFT）
+- `lat_adapter.py` 会在加载任意 LoRA/DoRA JSON 后先调用 `_apply_reference_defaults()`，把 `init_lora_weights` 自动升级为 `pissa` 并且在 `lora_alpha` 缺失或等于 `r` 时强制改写为 `2 * r`。这与 `other/FISH-Tuning-6F7C/glue/main.py`、`other/FISH-Tuning-6F7C/gsm8k4lora/mypackage/setlora.py` 以及 `other/speft/model/sparse_peft.py` 的实现保持一致——它们均在论文第 5.2 节及表 12 中强调 PiSSA 初始化和 `alpha = 2r`。如果需要覆盖，依旧可以通过 `HP_INIT`、`HP_PEFT_ALPHA` 环境变量或在 JSON 内显式赋值。
+
 
 ## 🎯 重构目标
 对 `mamba-peft/train.py` 进行架构重构，将高度耦合的 GLA（Gated Linear Attention）和 Mamba 模型训练逻辑分离，提高代码可读性和可维护性，同时**严格保证所有原有功能行为完全一致**。

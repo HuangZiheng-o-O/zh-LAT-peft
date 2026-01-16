@@ -88,6 +88,57 @@ def _dtype_from_prec(prec: str) -> torch.dtype:
     return mapping[prec]
 
 
+def _apply_reference_defaults(peft_json: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Align LoRA/DoRA defaults with the reference repos (FISH-Tuning & SPEFT).
+
+    The paper "FISH-Tuning: Enhancing PEFT Methods with Fisher Information"
+    states that LoRA/DoRA adapters must use PiSSA initialization and lora_alpha
+    should be 2 * rank (Table 12). Their released code under other/FISH-Tuning-6F7C
+    and other/speft follows the same rule.
+
+    Here we auto-upgrade configs that still rely on legacy defaults so that
+    zh-LAT-peft matches those references without requiring users to rewrite
+    every JSON file manually.
+    """
+
+    init_val = peft_json.get("init_lora_weights", None)
+    should_force_pissa = False
+    if init_val is None:
+        should_force_pissa = True
+    elif init_val is True:
+        should_force_pissa = True
+    elif isinstance(init_val, str) and init_val.strip().lower() in {"true", "default"}:
+        should_force_pissa = True
+
+    if should_force_pissa:
+        peft_json["init_lora_weights"] = "pissa"
+
+    r_val = peft_json.get("r", None)
+    if r_val is not None:
+        try:
+            r_int = int(r_val)
+        except (TypeError, ValueError):
+            r_int = None
+
+        if r_int and r_int > 0:
+            alpha_val = peft_json.get("lora_alpha", None)
+            alpha_int: Optional[int]
+            if alpha_val is None:
+                alpha_int = None
+            else:
+                try:
+                    alpha_int = int(alpha_val)
+                except (TypeError, ValueError):
+                    alpha_int = None
+
+            # Upgrade legacy configs where alpha == r (or missing) to 2 * r.
+            if alpha_int is None or alpha_int == r_int:
+                peft_json["lora_alpha"] = 2 * r_int
+
+    return peft_json
+
+
 def _apply_peft_env_overrides(peft_json: Dict[str, Any]) -> Dict[str, Any]:
     """
     Apply environment variable overrides to PEFT configuration.
@@ -291,6 +342,8 @@ def prepare_lat_model_and_tokenizer(
 
         with open(peft_json_path, "r") as f:
             peft_json = json.load(f)
+
+        peft_json = _apply_reference_defaults(peft_json)
 
         # Apply environment variable overrides
         peft_json = _apply_peft_env_overrides(peft_json)

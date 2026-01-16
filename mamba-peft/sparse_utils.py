@@ -5,6 +5,7 @@ from typing import Dict, Iterable, List, Optional, Protocol, Tuple
 
 import torch
 from torch.utils.data import DataLoader
+from torch.nn.utils.parametrize import register_parametrization, is_parametrized, remove_parametrizations
 
 
 class CandidateAccessor(Protocol):
@@ -19,6 +20,7 @@ class CandidateView:
     numel: int
     original_requires_grad: bool
     is_lora: bool = False
+    shape: Tuple[int, ...] = field(default_factory=tuple)
 
 
 @dataclass
@@ -125,6 +127,7 @@ class LoraCandidateAccessor:
                     numel=param.numel(),
                     original_requires_grad=True,
                     is_lora=True,
+                    shape=tuple(param.shape),
                 )
             )
         return candidates
@@ -158,6 +161,7 @@ class BaseCandidateAccessor:
                     numel=param.numel(),
                     original_requires_grad=original,
                     is_lora=False,
+                    shape=tuple(param.shape),
                 )
             )
         return candidates
@@ -334,9 +338,10 @@ def _build_masks_from_indices(
     candidates: List[CandidateView],
     mapping: List[Tuple[str, Tuple[int, ...]]],
     selected_indices: torch.Tensor,
-) -> Dict[str, torch.Tensor]:
+) -> Tuple[Dict[str, torch.Tensor], Dict[str, torch.Tensor]]:
     sorted_idx, _ = torch.sort(selected_indices.to("cpu", torch.int64))
     masks: Dict[str, torch.Tensor] = {}
+    index_map: Dict[str, torch.Tensor] = {}
     cursor = 0
     for (name, shape), view in zip(mapping, candidates):
         length = view.numel
@@ -351,8 +356,9 @@ def _build_masks_from_indices(
         if local.numel() > 0:
             flat.scatter_(0, local.to(torch.int64), 1.0)
         masks[name] = flat.view(shape)
+        index_map[name] = local.to(torch.int64)
         cursor += length
-    return masks
+    return masks, index_map
 
 
 def apply_sparse_training(
@@ -394,8 +400,8 @@ def apply_sparse_training(
         selected = torch.arange(flat_scores.numel(), device=device)
     else:
         _, selected = torch.topk(flat_scores, budget)
-    masks = _build_masks_from_indices(candidates, name_mapping, selected)
-    _apply_masks(model, candidates, masks)
+    mask_tensors, index_map = _build_masks_from_indices(candidates, name_mapping, selected)
+    _apply_masks(model, candidates, index_map)
     mask_meta = {
         "scope": config.scope,
         "budget_mode": config.budget_mode,
@@ -406,46 +412,83 @@ def apply_sparse_training(
     }
     with open(mask_meta_path, "w") as meta_f:
         json.dump(mask_meta, meta_f, indent=2)
-    torch.save({k: v.detach().cpu() for k, v in masks.items()}, mask_tensor_path)
+    torch.save({k: v.cpu() for k, v in index_map.items()}, mask_tensor_path)
     return mask_meta
+
+
+class SparseParametrization(torch.nn.Module):
+    def __init__(self, base_tensor: torch.Tensor, indices: torch.Tensor):
+        super().__init__()
+        self.register_buffer("base_tensor", base_tensor.detach().clone())
+        self.register_buffer("indices", indices.to(torch.int64))
+        initial = base_tensor.flatten()[indices]
+        self.values = torch.nn.Parameter(initial.clone())
+        self.shape = base_tensor.shape
+
+    def forward(self, original: torch.Tensor) -> torch.Tensor:
+        flat = self.base_tensor.flatten().clone()
+        if self.indices.numel() > 0:
+            flat[self.indices] = self.values
+        return flat.view(self.shape)
 
 
 def _apply_masks(
     model: torch.nn.Module,
     candidates: List[CandidateView],
-    masks: Dict[str, torch.Tensor],
+    index_map: Dict[str, torch.Tensor],
 ) -> None:
     for view in candidates:
-        mask = masks.get(view.name)
-        if mask is None:
-            if not view.original_requires_grad:
-                view.parameter.requires_grad_(False)
-            continue
-        mask = mask.to(view.parameter.device)
-        keep = mask.sum().item()
-        if keep == 0:
-            view.parameter.requires_grad_(False)
-            continue
-
-        def _hook(grad, mask=mask):
-            return grad * mask.to(grad.device, dtype=grad.dtype)
-
-        view.parameter.register_hook(_hook)
-        view.parameter.requires_grad_(True)
-
-
-def _apply_loaded_masks(model: torch.nn.Module, masks: Dict[str, torch.Tensor]) -> None:
-    for name, param in model.named_parameters():
-        if name not in masks:
-            continue
-        mask = masks[name].to(param.device)
-        keep = mask.sum().item()
-        if keep == 0:
+        local_idx = index_map.get(view.name)
+        module, param_name = _locate_module_and_param(model, view.name)
+        if local_idx is None or local_idx.numel() == 0:
+            param = getattr(module, param_name)
+            if is_parametrized(module, param_name):
+                remove_parametrizations(module, param_name, leave_parametrized=False)
             param.requires_grad_(False)
             continue
+        param = getattr(module, param_name)
+        if is_parametrized(module, param_name):
+            remove_parametrizations(module, param_name, leave_parametrized=False)
+        register_parametrization(
+            module,
+            param_name,
+            SparseParametrization(param.data, local_idx),
+        )
+        getattr(module, param_name).requires_grad_(True)
 
-        def _hook(grad, mask=mask):
-            return grad * mask.to(grad.device, dtype=grad.dtype)
 
-        param.register_hook(_hook)
-        param.requires_grad_(True)
+def _normalize_loaded_indices(stored: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    normalized: Dict[str, torch.Tensor] = {}
+    for name, tensor in stored.items():
+        if tensor.dim() == 1 and tensor.dtype in (torch.int64, torch.int32):
+            normalized[name] = tensor.to(torch.int64)
+        else:
+            flat = tensor.reshape(-1)
+            idx = torch.nonzero(flat, as_tuple=False).view(-1)
+            normalized[name] = idx.to(torch.int64)
+    return normalized
+
+
+def _apply_loaded_masks(model: torch.nn.Module, stored: Dict[str, torch.Tensor]) -> None:
+    index_map = _normalize_loaded_indices(stored)
+    for name, indices in index_map.items():
+        module, param_name = _locate_module_and_param(model, name)
+        param = getattr(module, param_name)
+        if is_parametrized(module, param_name):
+            remove_parametrizations(module, param_name, leave_parametrized=False)
+        register_parametrization(
+            module,
+            param_name,
+            SparseParametrization(param.data, indices.to(torch.int64)),
+        )
+        getattr(module, param_name).requires_grad_(True)
+
+
+def _locate_module_and_param(model: torch.nn.Module, full_name: str):
+    parts = full_name.split(".")
+    module = model
+    for p in parts[:-1]:
+        if not hasattr(module, p):
+            raise AttributeError(f"Module '{module}' has no attribute '{p}' for parameter '{full_name}'.")
+        module = getattr(module, p)
+    return module, parts[-1]
