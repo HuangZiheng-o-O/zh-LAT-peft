@@ -228,19 +228,23 @@ ROUND_E99=(# ROUND_E12_DELTANET
   )
 
 
-
-
-# Convenience suites (same 8 modes, single base LoRA target set)
-ROUND_E31=( #use this
+ROUND_E30=( #use this
   # Core ablations (all match QKVOMLP budget):
   "sparse_modes/VO_lora__VO_sparse_REF_QKVOMLP.yaml"
   "sparse_modes/VO_lora__QKVOMLP_sparse_REF_QKVOMLP.yaml"
   "sparse_modes/VO_lora__Base_sparse_REF_QKVOMLP.yaml"
   # Two-stage schedules (50/50 steps by default; controlled by HP_TWO_STAGE_* in YAML env_defaults):
-  "sparse_modes/VO_lora__VO_then_Base_sparse_REF_QKVOMLP.yaml"
-  "sparse_modes/VO_lora__Base_then_VO_sparse_REF_QKVOMLP.yaml"
+  "sparse_modes/VO_lora_before__base_sparse_REF_QKVOMLP.yaml"
+  "sparse_modes/base_sparse_before__VO_lora_REF_QKVOMLP.yaml"
   # Control: no LoRA, budget spent fully on base sparse
   "sparse_modes/Base_only__Base_sparse_REF_QKVOMLP.yaml"
+)
+
+# Convenience suites (same 8 modes, single base LoRA target set)
+ROUND_E31=( #use this
+
+  "sparse_modes/VO_lora_before__base_sparse_REF_QKVOMLP.yaml"
+  "sparse_modes/base_sparse_before__VO_lora_REF_QKVOMLP.yaml"
 )
 
 
