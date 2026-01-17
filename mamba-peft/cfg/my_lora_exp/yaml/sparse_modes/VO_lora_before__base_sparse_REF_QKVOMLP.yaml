@@ -4,6 +4,7 @@ env_defaults:
   # Two-stage schedule
   HP_TWO_STAGE_ENABLE: 1
   HP_TWO_STAGE_ORDER: lora_then_base
+  HP_TWO_STAGE_MODE: full_each
   HP_TWO_STAGE_SPLIT: 0.5
   # Saving defaults (keep consistent with other sparse suites)
   HP_SAVE_MODE: best_last

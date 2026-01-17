@@ -300,6 +300,9 @@ def build_and_run_trainer_lat(
     two_stage_order = (os.environ.get("HP_TWO_STAGE_ORDER") or os.environ.get("LAT_TWO_STAGE_ORDER") or "").strip().lower()
     if two_stage and two_stage_order not in ("base_then_lora", "lora_then_base"):
         raise ValueError(f"[{log_tag}] HP_TWO_STAGE_ORDER must be base_then_lora|lora_then_base, got: '{two_stage_order}'")
+    two_stage_mode = (os.environ.get("HP_TWO_STAGE_MODE") or os.environ.get("LAT_TWO_STAGE_MODE") or "split").strip().lower()
+    if two_stage and two_stage_mode not in ("split", "full_each"):
+        raise ValueError(f"[{log_tag}] HP_TWO_STAGE_MODE must be split|full_each, got: '{two_stage_mode}'")
     split_raw = os.environ.get("HP_TWO_STAGE_SPLIT") or os.environ.get("LAT_TWO_STAGE_SPLIT")
     split = 0.5
     if split_raw is not None and str(split_raw).strip() != "":
@@ -360,12 +363,142 @@ def build_and_run_trainer_lat(
         except Exception:
             pass
 
-    # Two-stage is implemented as a single Trainer run (max_steps remains total_steps).
+    # Two-stage can run in two modes:
+    # - split: single Trainer run, switching at split*total_steps (total steps unchanged)
+    # - full_each: two sequential phases, each runs the FULL original total_steps (total steps doubled).
+    #             This guarantees stage1 (e.g., pure LoRA) matches the baseline schedule exactly.
     two_stage_cb = None
     two_stage_switch_step = None
     two_stage_active_order = None
     two_stage_saved_sparse_enable = None
     if two_stage and (not two_stage_disabled):
+        if two_stage_mode == "full_each":
+            # Smooth 2N-step run:
+            # - total steps are doubled (N for stage1 + N for stage2)
+            # - stage1 LR schedule matches a standalone N-step run
+            # - stage2 uses its own LR schedule over N steps
+            stage_steps = int(total_steps)
+            if stage_steps <= 0:
+                raise ValueError(f"[{log_tag}][two_stage] invalid total_steps={total_steps}")
+            total_steps = int(2 * stage_steps)
+            two_stage_active_order = two_stage_order
+            two_stage_switch_step = int(stage_steps)
+            print(
+                f"[{log_tag}][two_stage] mode=full_each(smooth) order={two_stage_active_order} "
+                f"stage_steps={stage_steps} total_steps_effective={total_steps}"
+            )
+
+            # Stage1 initialization (trainables + sparse enable/disable)
+            if two_stage_active_order == "lora_then_base":
+                two_stage_saved_sparse_enable = os.environ.get("HP_SPARSE_ENABLE")
+                os.environ["HP_SPARSE_ENABLE"] = "0"
+                _set_trainable_lora_only(model)
+                learning_rate = float(two_stage_lr_lora)
+            else:
+                two_stage_saved_sparse_enable = os.environ.get("HP_SPARSE_ENABLE")
+                os.environ["HP_SPARSE_ENABLE"] = "1"
+                os.environ["HP_SPARSE_SCOPE"] = "lora_frozen_base_sparse"
+                learning_rate = float(two_stage_lr_sparse)
+
+            # Build a switch callback that also applies a piecewise LR schedule (cosine/linear/constant)
+            # so stage1 matches the baseline N-step schedule exactly.
+            from transformers import TrainerCallback
+
+            def _lr_at(step_in_stage: int, stage_len: int, base_lr: float, sched: str, warm_ratio: float) -> float:
+                if stage_len <= 0:
+                    return float(base_lr)
+                warm_steps = int(float(warm_ratio) * float(stage_len)) if float(warm_ratio) > 0 else 0
+                warm_steps = max(0, min(int(warm_steps), int(stage_len)))
+                if warm_steps > 0 and step_in_stage < warm_steps:
+                    return float(base_lr) * float(step_in_stage) / float(max(1, warm_steps))
+                # progress after warmup
+                denom = max(1, int(stage_len - warm_steps))
+                prog = float(max(0, step_in_stage - warm_steps)) / float(denom)
+                prog = max(0.0, min(1.0, prog))
+                sched_l = str(sched).lower().strip()
+                if sched_l in ("cosine", "cosine_with_restarts"):
+                    import math
+                    return float(base_lr) * (0.5 * (1.0 + math.cos(math.pi * prog)))
+                if sched_l in ("linear",):
+                    return float(base_lr) * (1.0 - prog)
+                # constant / unknown -> constant
+                return float(base_lr)
+
+            class _TwoStageFullEachCallback(TrainerCallback):
+                def __init__(self):
+                    self.trainer = None
+                    self.switched = False
+
+                def _apply_lr(self, state):
+                    if self.trainer is None or self.trainer.optimizer is None:
+                        return
+                    g = int(state.global_step)
+                    if g < int(stage_steps):
+                        # stage1
+                        if two_stage_active_order == "lora_then_base":
+                            base_lr = float(two_stage_lr_lora)
+                        else:
+                            base_lr = float(two_stage_lr_sparse)
+                        lr = _lr_at(g, int(stage_steps), base_lr, _lr_scheduler_type, _warmup_ratio)
+                    else:
+                        # stage2
+                        g2 = int(g - int(stage_steps))
+                        if two_stage_active_order == "lora_then_base":
+                            base_lr = float(two_stage_lr_sparse)
+                            warm = float(two_stage_warmup_ratio2)
+                        else:
+                            base_lr = float(two_stage_lr_lora)
+                            warm = float(two_stage_warmup_ratio2)
+                        lr = _lr_at(g2, int(stage_steps), base_lr, _lr_scheduler_type, warm)
+                    for pg in self.trainer.optimizer.param_groups:
+                        pg["lr"] = float(lr)
+
+                def on_step_begin(self, args, state, control, **kwargs):
+                    # Apply LR for the upcoming step
+                    self._apply_lr(state)
+
+                    if self.switched:
+                        return control
+                    if int(state.global_step) != int(two_stage_switch_step):
+                        return control
+
+                    print(
+                        f"[{log_tag}][two_stage] SWITCH at global_step={state.global_step} "
+                        f"(next step {int(state.global_step) + 1}) order={two_stage_active_order}"
+                    )
+
+                    if two_stage_active_order == "lora_then_base":
+                        os.environ["HP_SPARSE_ENABLE"] = "1"
+                        os.environ["HP_SPARSE_SCOPE"] = "lora_frozen_base_sparse"
+                        maybe_run_sparse_selective_tuning(
+                            model=model,
+                            train_dataset=train_data_module.dataset,
+                            data_collator=train_data_module.data_collator,
+                            batch_size=batch_size,
+                            output_dir=output_dir,
+                            cfg_path=cfg_path,
+                            model_type=model_type,
+                            reuse_selection=False,
+                        )
+                        print_trainable_parameter_names(model, output_dir=output_dir, cfg_path=cfg_path)
+                    else:
+                        os.environ["HP_SPARSE_ENABLE"] = "0"
+                        _set_trainable_lora_only(model)
+                        print_trainable_parameter_names(model, output_dir=output_dir, cfg_path=cfg_path)
+
+                    if self.trainer is not None:
+                        self.trainer.reset_optimizer()
+                        self._apply_lr(state)
+                    self.switched = True
+                    return control
+
+                def on_step_end(self, args, state, control, **kwargs):
+                    # Re-apply LR after any internal scheduler step (defensive).
+                    self._apply_lr(state)
+                    return control
+
+            two_stage_cb = _TwoStageFullEachCallback()
+
         two_stage_switch_step = max(1, int(round(float(total_steps) * float(split))))
         two_stage_active_order = two_stage_order
         print(
@@ -572,6 +705,11 @@ def build_and_run_trainer_lat(
     _warmup_ratio = _env_float("LR_WARMUP_RATIO", 0.1)
     if _warmup_steps is None and _warmup_ratio > 0:
         _warmup_steps = int(_warmup_ratio * total_steps)
+    # For two-stage full_each(smooth), we apply a custom piecewise LR schedule in a callback.
+    # Use a constant scheduler internally to avoid conflicting LR updates.
+    if two_stage and (not two_stage_disabled) and two_stage_mode == "full_each":
+        _lr_scheduler_type = "constant"
+        _warmup_steps = 0
 
     # Optional SwanLab integration
     callbacks = []
