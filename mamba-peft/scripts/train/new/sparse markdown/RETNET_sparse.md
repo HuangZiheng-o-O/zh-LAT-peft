@@ -95,6 +95,8 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 ```bash
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
+
+
 export MODEL_TYPE=retnet
 export LAT_MODEL=/home/user/mzs_h/model/retnet-1.3B-100B/
 export LAT_PREC=bf16
@@ -266,7 +268,8 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 ---
 
 ### tvt_sst2
-Jan 9 H2
+ 
+
 ```bash
  
 conda activate mzsz
@@ -337,9 +340,7 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
 ---
 
 ### tvt_qqp
-Jan 9 H3 失败 还没删除
-jan 10 H2 开始
-https://swanlab.cn/@zh2701/retnet-glue-tvt_qqp-H2-Jan10/overview
+  
 ```bash
 conda activate mzsz
 cd /home/user/mzs_h/code/zh-LAT-peft/mamba-peft/scripts/train/new
@@ -446,7 +447,7 @@ export SWANLAB_EMAIL_ON_INTERRUPT=0
   --round all \
   --pairs "87:glue-tvt_mrpc" \
   --gpus "4 5" \
-  --gpu-plan "2,2" \
+  --gpu-plan "1,1" \
   --model-type retnet
 ```
  
