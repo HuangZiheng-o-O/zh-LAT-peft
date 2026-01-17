@@ -1137,7 +1137,6 @@ def maybe_run_sparse_selective_tuning(
         if k_ref <= 0:
             raise RuntimeError(f"Computed K_ref=0 from reference_cfg={cfg.reference_cfg}")
         if scope_l in ("lora_dense_base_sparse", "lora_frozen_base_sparse"):
-        if scope_l in ("lora_dense_base_sparse", "lora_frozen_base_sparse"):
             # Contract: total_trainable = dense_LoRA_trainable(current) + sparse_base_k == K_ref(reference dense LoRA)
             # IMPORTANT: do NOT count temporary base trainables used for scoring; only count LoRA trainables.
             base_budget = int(k_ref) - int(lora_trainable_elems)
