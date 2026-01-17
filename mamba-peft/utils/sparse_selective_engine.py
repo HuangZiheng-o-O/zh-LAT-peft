@@ -1199,9 +1199,55 @@ def maybe_run_sparse_selective_tuning(
             )
     else:
         # Fresh run (or no existing selection, or reuse_selection=False):
-        # rank0 (or single-process) computes selection; other ranks wait then load.
+        # - rank0 computes + saves selection
+        # - everyone barriers
+        # - non-rank0 loads the saved selection
+        if is_rank0 or (not _dist_available()):
+            # Build a small scoring dataloader (no workers, deterministic-ish)
+            score_bs = max(1, min(batch_size, 4))
+            dl = DataLoader(
+                train_dataset,
+                batch_size=score_bs,
+                shuffle=True,
+                collate_fn=data_collator,
+                num_workers=0,
+            )
+            device = next(model.parameters()).device
+            scores = compute_gradient_salience_scores(
+                model=model,
+                dataloader=dl,
+                candidate_params=candidate_params,
+                num_examples=cfg.score_samples,
+                device=device,
+            )
+            sel_dict = global_topk_indices_from_scores(scores, budget_k)
+            realized_k = int(sum(int(v.numel()) for v in sel_dict.values()))
+            if realized_k != int(budget_k):
+                raise RuntimeError(
+                    f"[{model_type}] Internal error: realized_k({realized_k}) != budget_k({budget_k}). "
+                    "Refusing to proceed."
+                )
+            torch.save(
+                {
+                    "selection": sel_dict,
+                    "budget_k": int(budget_k),
+                    "candidate_elems": int(candidate_elems),
+                    "scope": cfg.scope,
+                    "budget_mode": cfg.budget_mode,
+                    "rho": float(cfg.rho),
+                    "reference_cfg": cfg.reference_cfg,
+                    "score_samples": int(cfg.score_samples),
+                    "salience": cfg.salience,
+                    "ranking": cfg.ranking,
+                    "cfg_path": cfg_path,
+                    "impl": "reparam_v1",
+                },
+                sel_path,
+            )
+
+        _dist_barrier()
+
         if (not is_rank0) and _dist_available():
-            _dist_barrier()
             if not sel_path.exists():
                 raise RuntimeError(f"[{model_type}] Expected rank0 to create {sel_path}, but file is missing.")
             try:
@@ -1216,50 +1262,6 @@ def maybe_run_sparse_selective_tuning(
                     f"[{model_type}] Candidate pool size mismatch after recompute sync: saved={candidate_elems_saved}, now={candidate_elems}. "
                     "This indicates nondeterministic candidate pool construction; refusing to proceed."
                 )
-        else:
-            # rank0 (or single-process) computes selection.
-        # Build a small scoring dataloader (no workers, deterministic-ish)
-        score_bs = max(1, min(batch_size, 4))
-        dl = DataLoader(
-            train_dataset,
-            batch_size=score_bs,
-            shuffle=True,
-            collate_fn=data_collator,
-            num_workers=0,
-        )
-        device = next(model.parameters()).device
-        scores = compute_gradient_salience_scores(
-            model=model,
-            dataloader=dl,
-            candidate_params=candidate_params,
-            num_examples=cfg.score_samples,
-            device=device,
-        )
-        sel_dict = global_topk_indices_from_scores(scores, budget_k)
-        realized_k = int(sum(int(v.numel()) for v in sel_dict.values()))
-        if realized_k != int(budget_k):
-            raise RuntimeError(
-                f"[{model_type}] Internal error: realized_k({realized_k}) != budget_k({budget_k}). "
-                "Refusing to proceed."
-            )
-        torch.save(
-            {
-                "selection": sel_dict,
-                "budget_k": int(budget_k),
-                "candidate_elems": int(candidate_elems),
-                "scope": cfg.scope,
-                "budget_mode": cfg.budget_mode,
-                "rho": float(cfg.rho),
-                "reference_cfg": cfg.reference_cfg,
-                "score_samples": int(cfg.score_samples),
-                "salience": cfg.salience,
-                "ranking": cfg.ranking,
-                "cfg_path": cfg_path,
-                "impl": "reparam_v1",
-            },
-            sel_path,
-        )
-        _dist_barrier()
 
     # Replace targeted linears with SparseDeltaLinear (optimizer state O(K))
     # Also force all other params to requires_grad=False (train only sparse delta vectors),
