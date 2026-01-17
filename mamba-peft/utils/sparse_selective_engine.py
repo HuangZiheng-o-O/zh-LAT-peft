@@ -59,7 +59,7 @@ def _env_float(name: str, default: Optional[float]) -> Optional[float]:
 @dataclass(frozen=True)
 class SparseSelectiveConfig:
     enabled: bool = False
-    scope: str = "lora_only"  # lora_only | base_only | hybrid | lora_dense_base_sparse
+    scope: str = "lora_only"  # lora_only | base_only | hybrid | lora_dense_base_sparse | lora_frozen_base_sparse
     budget_mode: str = "fixed_ratio"  # fixed_ratio | fixed_count | match_reference
     rho: float = 0.3  # used when fixed_ratio
     k: Optional[int] = None  # used when fixed_count
@@ -139,7 +139,7 @@ def _effective_base_pool_for_scope(cfg: SparseSelectiveConfig, scope_l: str) -> 
       - lora_dense_base_sparse defaults to all_linear when cfg.base_pool is empty
       - other scopes use cfg.base_pool as-is
     """
-    if scope_l == "lora_dense_base_sparse":
+    if scope_l in ("lora_dense_base_sparse", "lora_frozen_base_sparse"):
         return "all_linear" if str(cfg.base_pool).strip() == "" else str(cfg.base_pool)
     return str(cfg.base_pool)
 
@@ -561,6 +561,15 @@ def _set_requires_grad_for_scope(
         # Here, keep LoRA trainable and allow base candidates to be enabled when needed.
         for p in lora_params.values():
             p.requires_grad = True
+        for p in base_params.values():
+            p.requires_grad = True
+        return
+    if scope == "lora_frozen_base_sparse":
+        # Semantic contract:
+        #   - LoRA adapters are present in the forward pass, but are FROZEN (not trainable)
+        #   - Base candidates need grads ONLY for salience scoring / sparse replacement
+        for p in lora_params.values():
+            p.requires_grad = False
         for p in base_params.values():
             p.requires_grad = True
         return
@@ -1046,7 +1055,7 @@ def maybe_run_sparse_selective_tuning(
     if not cfg.enabled:
         return None
     # Strict scope validation (fail-fast to avoid silent behavior drift)
-    _known_scopes = {"lora_only", "base_only", "hybrid", "lora_dense_base_sparse"}
+    _known_scopes = {"lora_only", "base_only", "hybrid", "lora_dense_base_sparse", "lora_frozen_base_sparse"}
     if str(cfg.scope).lower().strip() not in _known_scopes:
         raise ValueError(f"[{model_type}] Unknown HP_SPARSE_SCOPE='{cfg.scope}'. Expected one of: {sorted(_known_scopes)}")
 
@@ -1067,7 +1076,7 @@ def maybe_run_sparse_selective_tuning(
     base_params: Dict[str, torch.nn.Parameter] = {}
     scope_l = cfg.scope.lower().strip()
     effective_base_pool = _effective_base_pool_for_scope(cfg, scope_l)
-    if scope_l in ("base_only", "hybrid", "lora_dense_base_sparse"):
+    if scope_l in ("base_only", "hybrid", "lora_dense_base_sparse", "lora_frozen_base_sparse"):
         base_params = _resolve_base_pool_params(
             model=model,
             base_pool=effective_base_pool,
@@ -1102,7 +1111,7 @@ def maybe_run_sparse_selective_tuning(
         candidate_params = dict(base_params)
     elif scope_l == "hybrid":
         candidate_params = {**base_params, **lora_params}
-    elif scope_l == "lora_dense_base_sparse":
+    elif scope_l in ("lora_dense_base_sparse", "lora_frozen_base_sparse"):
         # Only sparsify base weights; LoRA stays dense and is NOT part of the sparse budget.
         candidate_params = dict(base_params)
     else:
@@ -1127,7 +1136,8 @@ def maybe_run_sparse_selective_tuning(
         k_ref = estimate_lora_trainable_count(model, ref_targets, ref_r)
         if k_ref <= 0:
             raise RuntimeError(f"Computed K_ref=0 from reference_cfg={cfg.reference_cfg}")
-        if scope_l == "lora_dense_base_sparse":
+        if scope_l in ("lora_dense_base_sparse", "lora_frozen_base_sparse"):
+        if scope_l in ("lora_dense_base_sparse", "lora_frozen_base_sparse"):
             # Contract: total_trainable = dense_LoRA_trainable(current) + sparse_base_k == K_ref(reference dense LoRA)
             # IMPORTANT: do NOT count temporary base trainables used for scoring; only count LoRA trainables.
             base_budget = int(k_ref) - int(lora_trainable_elems)
@@ -1272,7 +1282,7 @@ def maybe_run_sparse_selective_tuning(
     # Snapshot current trainable parameters so we can restore them after reparameterization.
     # For lora_dense_base_sparse we MUST snapshot only LoRA params; base params may be temporarily
     # set requires_grad=True for salience scoring and must NOT be restored as dense-trainable.
-    if scope_l == "lora_dense_base_sparse":
+    if scope_l in ("lora_dense_base_sparse", "lora_frozen_base_sparse"):
         trainable_before: Dict[str, int] = {n: int(p.numel()) for n, p in lora_params.items()}
     else:
         trainable_before = {n: int(p.numel()) for n, p in model.named_parameters() if p.requires_grad}
@@ -1297,24 +1307,15 @@ def maybe_run_sparse_selective_tuning(
         for _mn, mod in model.named_modules():
             if isinstance(mod, SparseDeltaLinear):
                 mod.delta.requires_grad = True
+    elif scope_l == "lora_frozen_base_sparse":
+        # Only enable SparseDeltaLinear.delta params; keep LoRA frozen.
+        for _mn, mod in model.named_modules():
+            if isinstance(mod, SparseDeltaLinear):
+                mod.delta.requires_grad = True
 
     # Sanity checks: trainable counts must match the scope contract.
     trainable_after = int(sum(p.numel() for p in model.parameters() if p.requires_grad))
-    if scope_l == "lora_dense_base_sparse":
-        dense_lora = int(sum(trainable_before.values()))
-        expected_total = int(dense_lora) + int(budget_k)
-        if cfg.budget_mode == "match_reference":
-            ref_targets, ref_r = _load_peft_targets_and_rank_from_yaml(cfg.reference_cfg)  # type: ignore[arg-type]
-            k_ref = estimate_lora_trainable_count(model, ref_targets, ref_r)
-            expected_total = int(k_ref)
-        if trainable_after != int(expected_total):
-            raise RuntimeError(
-                f"[{model_type}] Trainable param mismatch for scope={cfg.scope}: "
-                f"trainable_after={trainable_after} expected_total={expected_total} "
-                f"(dense_lora_before={dense_lora}, sparse_base_k={budget_k}). Refusing to proceed."
-            )
-        # Additional invariants:
-        # - the sparse replacement must have introduced exactly budget_k delta params (O(K) guarantee for base part)
+    if scope_l in ("lora_dense_base_sparse", "lora_frozen_base_sparse"):
         sparse_delta_total = 0
         for _mn, mod in model.named_modules():
             if isinstance(mod, SparseDeltaLinear):
@@ -1324,6 +1325,26 @@ def maybe_run_sparse_selective_tuning(
                 f"[{model_type}] Internal error: total SparseDeltaLinear.delta numel={sparse_delta_total} "
                 f"!= base sparse budget_k={budget_k} for scope={cfg.scope}. Refusing to proceed."
             )
+        if scope_l == "lora_dense_base_sparse":
+            dense_lora = int(sum(trainable_before.values()))
+            expected_total = int(dense_lora) + int(budget_k)
+            if cfg.budget_mode == "match_reference":
+                ref_targets, ref_r = _load_peft_targets_and_rank_from_yaml(cfg.reference_cfg)  # type: ignore[arg-type]
+                k_ref = estimate_lora_trainable_count(model, ref_targets, ref_r)
+                expected_total = int(k_ref)
+            if trainable_after != int(expected_total):
+                raise RuntimeError(
+                    f"[{model_type}] Trainable param mismatch for scope={cfg.scope}: "
+                    f"trainable_after={trainable_after} expected_total={expected_total} "
+                    f"(dense_lora_before={dense_lora}, sparse_base_k={budget_k}). Refusing to proceed."
+                )
+        else:
+            # lora_frozen_base_sparse: only sparse deltas are trainable (count == budget_k)
+            if trainable_after != int(budget_k):
+                raise RuntimeError(
+                    f"[{model_type}] Trainable param mismatch for scope={cfg.scope}: "
+                    f"trainable_after={trainable_after} expected_sparse_only={budget_k}. Refusing to proceed."
+                )
     else:
         # Legacy scopes keep optimizer-state-O(K) guarantee: trainable == budget_k
         if trainable_after != int(budget_k):

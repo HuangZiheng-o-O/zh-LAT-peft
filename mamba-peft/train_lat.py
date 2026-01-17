@@ -236,6 +236,7 @@ def build_and_run_trainer_lat(
     logits_to_keep: int | None = None,
     train_data_module=None,
     val_data_module=None,
+    two_stage_disabled: bool = False,
 ):
     """
     Unified Linear Attention training and evaluation entry point:
@@ -274,6 +275,284 @@ def build_and_run_trainer_lat(
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     with open(Path(output_dir) / "cfg.yaml", "w") as f:
         yaml.safe_dump(cfg, f)
+
+    # ---------------------------------------------------------------------
+    # Two-stage training (optional):
+    #   Stage A: train one adapter family
+    #   Stage B: train the other family
+    #
+    # Controlled by env (YAML can set these via env_defaults):
+    #   HP_TWO_STAGE_ENABLE=1
+    #   HP_TWO_STAGE_ORDER=base_then_lora | lora_then_base
+    #   HP_TWO_STAGE_SPLIT=0.5   (fraction of total_steps for stage1)
+    #
+    # Requirements implemented:
+    # - BaseSparse stage trains ONLY SparseDeltaLinear.delta (LoRA frozen), using scope=lora_frozen_base_sparse
+    # - LoRA stage trains ONLY LoRA params (and keeps existing SparseDeltaLinear deltas frozen if present)
+    # - If order is lora_then_base: base sparse selection is computed AFTER LoRA training (recompute salience/mask)
+    # - No implicit reuse of stale sparse selection across stages (we use separate stage output dirs)
+    # ---------------------------------------------------------------------
+    def _truthy_env(name: str) -> bool:
+        v = os.environ.get(name)
+        return v is not None and str(v).strip().lower() in ("1", "true", "yes", "on")
+
+    two_stage = _truthy_env("HP_TWO_STAGE_ENABLE") or _truthy_env("LAT_TWO_STAGE_ENABLE")
+    two_stage_order = (os.environ.get("HP_TWO_STAGE_ORDER") or os.environ.get("LAT_TWO_STAGE_ORDER") or "").strip().lower()
+    if two_stage and two_stage_order not in ("base_then_lora", "lora_then_base"):
+        raise ValueError(f"[{log_tag}] HP_TWO_STAGE_ORDER must be base_then_lora|lora_then_base, got: '{two_stage_order}'")
+    split_raw = os.environ.get("HP_TWO_STAGE_SPLIT") or os.environ.get("LAT_TWO_STAGE_SPLIT")
+    split = 0.5
+    if split_raw is not None and str(split_raw).strip() != "":
+        split = float(split_raw)
+    if two_stage and not (0.0 < float(split) < 1.0):
+        raise ValueError(f"[{log_tag}] HP_TWO_STAGE_SPLIT must be in (0,1), got: {split}")
+
+    def _freeze_all_params(model_) -> None:
+        for p in model_.parameters():
+            p.requires_grad = False
+
+    def _set_trainable_lora_only(model_) -> None:
+        # Train ONLY LoRA A/B weights; keep everything else frozen (including SparseDeltaLinear.delta).
+        _freeze_all_params(model_)
+        for name, p in model_.named_parameters():
+            if ("lora_A" in name) or ("lora_B" in name):
+                p.requires_grad = True
+        # Explicitly freeze sparse deltas if they exist.
+        try:
+            from utils.sparse_selective_engine import SparseDeltaLinear  # local import
+            for m in model_.modules():
+                if isinstance(m, SparseDeltaLinear):
+                    m.delta.requires_grad = False
+        except Exception:
+            pass
+
+    if two_stage and (not two_stage_disabled):
+        # Compute step split (guarantee at least 1 step per stage)
+        s1_steps = max(1, int(round(float(total_steps) * float(split))))
+        s2_steps = max(1, int(int(total_steps) - int(s1_steps)))
+
+        # Stage output dirs (avoid any stale sparse files and keep checkpoints separated)
+        if two_stage_order == "lora_then_base":
+            stage1_name = "stage1_lora"
+            stage2_name = "stage2_base_sparse"
+        else:
+            stage1_name = "stage1_base_sparse"
+            stage2_name = "stage2_lora"
+        stage1_dir = str(Path(output_dir) / stage1_name)
+        stage2_dir = str(Path(output_dir) / stage2_name)
+        Path(stage1_dir).mkdir(parents=True, exist_ok=True)
+        Path(stage2_dir).mkdir(parents=True, exist_ok=True)
+
+        # Stage1: LoRA-only or BaseSparse-only
+        if two_stage_order == "lora_then_base":
+            # LoRA-only stage: disable sparse and train only LoRA params
+            _old_sparse_enable = os.environ.get("HP_SPARSE_ENABLE")
+            os.environ["HP_SPARSE_ENABLE"] = "0"
+            _set_trainable_lora_only(model)
+            print(f"[{log_tag}][two_stage] Stage1 LoRA-only: steps={s1_steps} output={stage1_dir}")
+            build_and_run_trainer_lat(
+                model=model,
+                tokenizer=tokenizer,
+                model_type=model_type,
+                output_dir=stage1_dir,
+                cfg=cfg,
+                cfg_path=cfg_path,
+                learning_rate=learning_rate,
+                total_steps=s1_steps,
+                logging_steps=logging_steps,
+                gradient_accumulation_steps=gradient_accumulation_steps,
+                num_data_workers=num_data_workers,
+                batch_size=batch_size,
+                eval_batch_size=eval_batch_size,
+                eval_epochs=eval_epochs,
+                # Keep stage1 minimal to avoid extra overhead; stage2 will do eval/save.
+                skip_eval=True,
+                no_save=True,
+                eval_steps_override=None,
+                save_steps_override=None,
+                eval_gen=eval_gen,
+                resume_from_checkpoint=False,
+                min_eval_metric_after_epoch=min_eval_metric_after_epoch,
+                seed=seed,
+                data=data,
+                val_data=val_data,
+                val_data_split=val_data_split,
+                debug=debug,
+                gradient_checkpointing=gradient_checkpointing,
+                logits_to_keep=logits_to_keep,
+                train_data_module=train_data_module,
+                val_data_module=val_data_module,
+                two_stage_disabled=True,
+            )
+            # Restore sparse env for stage2
+            if _old_sparse_enable is None:
+                os.environ.pop("HP_SPARSE_ENABLE", None)
+            else:
+                os.environ["HP_SPARSE_ENABLE"] = _old_sparse_enable
+
+            # Stage2: BaseSparse-only (recompute salience/mask after LoRA)
+            os.environ["HP_SPARSE_ENABLE"] = "1"
+            os.environ["HP_SPARSE_SCOPE"] = "lora_frozen_base_sparse"
+            print(f"[{log_tag}][two_stage] Stage2 BaseSparse-only (recompute): steps={s2_steps} output={stage2_dir}")
+            # Re-run sparse selection/reparam for stage2 into stage2_dir (fresh files)
+            maybe_run_sparse_selective_tuning(
+                model=model,
+                train_dataset=train_data_module.dataset,
+                data_collator=train_data_module.data_collator,
+                batch_size=batch_size,
+                output_dir=stage2_dir,
+                cfg_path=cfg_path,
+                model_type=model_type,
+                reuse_selection=False,
+            )
+            # Write final trainables for stage2
+            print_trainable_parameter_names(model, output_dir=stage2_dir, cfg_path=cfg_path)
+            # Train stage2 with the existing model state (now sparse reparameterized)
+            # We call the same trainer build path but skip sparse (already applied).
+            # Temporarily disable sparse engine call by setting HP_SPARSE_ENABLE=0.
+            _old_sparse_enable2 = os.environ.get("HP_SPARSE_ENABLE")
+            os.environ["HP_SPARSE_ENABLE"] = "0"
+            build_and_run_trainer_lat(
+                model=model,
+                tokenizer=tokenizer,
+                model_type=model_type,
+                output_dir=stage2_dir,
+                cfg=cfg,
+                cfg_path=cfg_path,
+                learning_rate=learning_rate,
+                total_steps=s2_steps,
+                logging_steps=logging_steps,
+                gradient_accumulation_steps=gradient_accumulation_steps,
+                num_data_workers=num_data_workers,
+                batch_size=batch_size,
+                eval_batch_size=eval_batch_size,
+                eval_epochs=eval_epochs,
+                skip_eval=skip_eval,
+                no_save=no_save,
+                eval_steps_override=eval_steps_override,
+                save_steps_override=save_steps_override,
+                eval_gen=eval_gen,
+                resume_from_checkpoint=False,
+                min_eval_metric_after_epoch=min_eval_metric_after_epoch,
+                seed=seed,
+                data=data,
+                val_data=val_data,
+                val_data_split=val_data_split,
+                debug=debug,
+                gradient_checkpointing=gradient_checkpointing,
+                logits_to_keep=logits_to_keep,
+                train_data_module=train_data_module,
+                val_data_module=val_data_module,
+                two_stage_disabled=True,
+            )
+            if _old_sparse_enable2 is None:
+                os.environ.pop("HP_SPARSE_ENABLE", None)
+            else:
+                os.environ["HP_SPARSE_ENABLE"] = _old_sparse_enable2
+        else:
+            # base_then_lora:
+            # Stage1 BaseSparse-only: enable sparse and run selection/reparam, then train only deltas
+            os.environ["HP_SPARSE_ENABLE"] = "1"
+            os.environ["HP_SPARSE_SCOPE"] = "lora_frozen_base_sparse"
+            print(f"[{log_tag}][two_stage] Stage1 BaseSparse-only: steps={s1_steps} output={stage1_dir}")
+            maybe_run_sparse_selective_tuning(
+                model=model,
+                train_dataset=train_data_module.dataset,
+                data_collator=train_data_module.data_collator,
+                batch_size=batch_size,
+                output_dir=stage1_dir,
+                cfg_path=cfg_path,
+                model_type=model_type,
+                reuse_selection=False,
+            )
+            print_trainable_parameter_names(model, output_dir=stage1_dir, cfg_path=cfg_path)
+            # Train sparse deltas (disable sparse engine call during trainer build)
+            _old_sparse_enable = os.environ.get("HP_SPARSE_ENABLE")
+            os.environ["HP_SPARSE_ENABLE"] = "0"
+            build_and_run_trainer_lat(
+                model=model,
+                tokenizer=tokenizer,
+                model_type=model_type,
+                output_dir=stage1_dir,
+                cfg=cfg,
+                cfg_path=cfg_path,
+                learning_rate=learning_rate,
+                total_steps=s1_steps,
+                logging_steps=logging_steps,
+                gradient_accumulation_steps=gradient_accumulation_steps,
+                num_data_workers=num_data_workers,
+                batch_size=batch_size,
+                eval_batch_size=eval_batch_size,
+                eval_epochs=eval_epochs,
+                skip_eval=True,
+                no_save=True,
+                eval_steps_override=None,
+                save_steps_override=None,
+                eval_gen=eval_gen,
+                resume_from_checkpoint=False,
+                min_eval_metric_after_epoch=min_eval_metric_after_epoch,
+                seed=seed,
+                data=data,
+                val_data=val_data,
+                val_data_split=val_data_split,
+                debug=debug,
+                gradient_checkpointing=gradient_checkpointing,
+                logits_to_keep=logits_to_keep,
+                train_data_module=train_data_module,
+                val_data_module=val_data_module,
+                two_stage_disabled=True,
+            )
+            if _old_sparse_enable is None:
+                os.environ.pop("HP_SPARSE_ENABLE", None)
+            else:
+                os.environ["HP_SPARSE_ENABLE"] = _old_sparse_enable
+
+            # Stage2 LoRA-only: keep sparse deltas frozen, train LoRA params
+            _set_trainable_lora_only(model)
+            print(f"[{log_tag}][two_stage] Stage2 LoRA-only: steps={s2_steps} output={stage2_dir}")
+            _old_sparse_enable2 = os.environ.get("HP_SPARSE_ENABLE")
+            os.environ["HP_SPARSE_ENABLE"] = "0"
+            build_and_run_trainer_lat(
+                model=model,
+                tokenizer=tokenizer,
+                model_type=model_type,
+                output_dir=stage2_dir,
+                cfg=cfg,
+                cfg_path=cfg_path,
+                learning_rate=learning_rate,
+                total_steps=s2_steps,
+                logging_steps=logging_steps,
+                gradient_accumulation_steps=gradient_accumulation_steps,
+                num_data_workers=num_data_workers,
+                batch_size=batch_size,
+                eval_batch_size=eval_batch_size,
+                eval_epochs=eval_epochs,
+                skip_eval=skip_eval,
+                no_save=no_save,
+                eval_steps_override=eval_steps_override,
+                save_steps_override=save_steps_override,
+                eval_gen=eval_gen,
+                resume_from_checkpoint=False,
+                min_eval_metric_after_epoch=min_eval_metric_after_epoch,
+                seed=seed,
+                data=data,
+                val_data=val_data,
+                val_data_split=val_data_split,
+                debug=debug,
+                gradient_checkpointing=gradient_checkpointing,
+                logits_to_keep=logits_to_keep,
+                train_data_module=train_data_module,
+                val_data_module=val_data_module,
+                two_stage_disabled=True,
+            )
+            if _old_sparse_enable2 is None:
+                os.environ.pop("HP_SPARSE_ENABLE", None)
+            else:
+                os.environ["HP_SPARSE_ENABLE"] = _old_sparse_enable2
+
+        # Final: write a stable post-stage trainable report into root output_dir
+        print_trainable_parameter_names(model, output_dir=output_dir, cfg_path=cfg_path)
+        return
 
     # ---------------------------------------------------------------------
     # Sparse Selective Tuning (Gradient + Static + Global Top-K)

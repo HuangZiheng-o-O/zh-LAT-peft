@@ -240,7 +240,7 @@ export TRANSFORMERS_VERBOSITY=error
 # ===== SwanLab =====
 export SWANLAB_ENABLE=1
 export SWANLAB_MODE=cloud
-export SWANLAB_PROJECT="retnet-commonsense170k-H3-mysparse"
+export SWANLAB_PROJECT="retnet-commonsense170k-H3-my_sparse6"
 export SWANLAB_EMAIL_ON_START=0
 export SWANLAB_EMAIL_ON_FINISH=0
 export SWANLAB_EMAIL_ON_INTERRUPT=0

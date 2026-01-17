@@ -236,6 +236,9 @@ ROUND_E31=( #use this
   "sparse_modes/VO_lora__VO_sparse_REF_QKVOMLP.yaml"
   "sparse_modes/VO_lora__QKVOMLP_sparse_REF_QKVOMLP.yaml"
   "sparse_modes/VO_lora__Base_sparse_REF_QKVOMLP.yaml"
+  # Two-stage schedules (50/50 steps by default; controlled by HP_TWO_STAGE_* in YAML env_defaults):
+  "sparse_modes/VO_lora__VO_then_Base_sparse_REF_QKVOMLP.yaml"
+  "sparse_modes/VO_lora__Base_then_VO_sparse_REF_QKVOMLP.yaml"
   # Control: no LoRA, budget spent fully on base sparse
   "sparse_modes/Base_only__Base_sparse_REF_QKVOMLP.yaml"
 )

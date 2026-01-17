@@ -1,0 +1,23 @@
+peft: cfg/my_lora_exp/peft/lora_vo_r8_alpha16.json
+
+env_defaults:
+  # Two-stage schedule
+  HP_TWO_STAGE_ENABLE: 1
+  HP_TWO_STAGE_ORDER: lora_then_base
+  HP_TWO_STAGE_SPLIT: 0.5
+  # Saving defaults (keep consistent with other sparse suites)
+  HP_SAVE_MODE: best_last
+  HP_SAVE_FULL_MODEL: 0
+
+# Two-stage intent:
+#   Stage1: train LoRA (VO) only
+#   Stage2: freeze LoRA, recompute gradient salience and sparsify BASE weights (all_linear),
+#           budget matched to QKVOMLP reference, then train ONLY sparse deltas.
+sparse_selective:
+  enable: true
+  scope: lora_frozen_base_sparse
+  budget_mode: match_reference
+  reference_cfg: cfg/my_lora_exp/yaml/E1_QKVO_plus_MLP_r8_alpha16.yaml
+  base_pool: all_linear
+  score_samples: 1024
+
