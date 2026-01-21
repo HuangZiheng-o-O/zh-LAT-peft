@@ -209,6 +209,20 @@ def plot_one(model: str, combined_csv: str, out_dir: str) -> str:
     if df.empty:
         raise ValueError(f"No rows for model={model} in combined_csv={combined_csv}")
 
+    # Keep only the ROUND_E12 subset for GLA to avoid plotting a much larger experiment space.
+    if model.lower() == "gla":
+        def _base(s: str) -> str:
+            s = str(s)
+            s = s.replace("_r8_alpha16", "")
+            return s
+        mask = df["exp_norm"].apply(_base).isin(ROUND_E12_GLA)
+        df = df.loc[mask].copy()
+        if df.empty:
+            raise ValueError(
+                "After applying GLA ROUND_E12 whitelist, no rows remain. "
+                "Check ROUND_E12_GLA entries vs df['exp_norm']."
+            )
+
     dfz = task_zscore(df)
     agg = aggregate_global(dfz)
 

@@ -23,6 +23,7 @@ Model-specific filtering:
 from __future__ import annotations
 
 import argparse
+import re
 import os
 from pathlib import Path
 
@@ -75,15 +76,11 @@ PREFERRED_CONFIG_ORDER = [
     "QKVO_plus_MLP_r8_alpha16",
     "QKVO_plus_G_r8_alpha16",
     "QKVO_plus_G_plus_MLP_r8_alpha16",
-    "QKVO_plus_G_r8_alpha16",
-    "E1_QKVO_plus_G_r8_alpha16",
 ]
 
 # RetNet allowed
 RETNET_ALLOWED = {
     "QKVO_plus_G_plus_MLP_r8_alpha16",
-    "QKVO_plus_G_r8_alpha16",
-    "E1_QKVO_plus_G_r8_alpha16",
     "QKVO_plus_MLP_r8_alpha16",
     "OMLP_r8_alpha16",
     "VOONLY_r8_alpha16",
@@ -101,7 +98,6 @@ RETNET_ALLOWED = {
 GLA_ALLOWED = {
     "QKVO_plus_MLP_r8_alpha16",
     "QKVO_r8_alpha16",
-    "QKVO_plus_G_r8_alpha16",
     "MLPONLY_r8_alpha16",
     "OMLP_r8_alpha16",
     "QONLY_r8_alpha16",
@@ -111,6 +107,7 @@ GLA_ALLOWED = {
     "KVONLY_r8_alpha16",
     "QVONLY_r8_alpha16",
     "VOONLY_r8_alpha16",
+    "QKVO_plus_G_r8_alpha16",
 }
 
 METRIC_PRIORITY = [
@@ -129,6 +126,13 @@ def infer_dataset_from_filename(fname: str) -> str:
     return "_".join(parts[2:])
 
 
+
+def normalize_config_name(cfg: str) -> str:
+    """Normalize config strings so that legacy prefixes (e.g., E1_) do not create duplicate rows."""
+    s = str(cfg)
+    # Collapse legacy experiment prefixes like E1_, E2_, ...
+    s = re.sub(r"^E\d+_", "", s)
+    return s
 def pick_primary_metric(df: pd.DataFrame) -> str:
     for m in METRIC_PRIORITY:
         if m in df.columns and df[m].notna().any():
@@ -157,7 +161,8 @@ def read_best_scores_for_model(data_dir: Path, model: str) -> pd.DataFrame:
         dataset = infer_dataset_from_filename(path)
         metric = pick_primary_metric(df)
 
-        df["config"] = df["experiment"].astype(str).str.split("__").str[0]
+        df["config_raw"] = df["experiment"].astype(str).str.split("__").str[0]
+        df["config"] = df["config_raw"].apply(normalize_config_name)
         keep = filter_configs_for_model(model, df["config"])
         df = df.loc[keep.index]
         df = df[df["config"].isin(keep.unique())]
@@ -183,7 +188,12 @@ def build_matrix(long_df: pd.DataFrame) -> pd.DataFrame:
     present = set(mat.index)
     ordered = [c for c in PREFERRED_CONFIG_ORDER if c in present]
     remaining = sorted([c for c in mat.index if c not in ordered])
-    return mat.reindex(index=ordered + remaining)
+    present = set(mat.index)
+    ordered = [c for c in PREFERRED_CONFIG_ORDER if c in present]
+    remaining = [c for c in mat.index if c not in ordered]
+    # Build initial order, then optionally sort by average performance (mean z-score across tasks).
+    mat = mat.reindex(index=ordered + remaining)
+    return mat
 
 
 def zscore_columns(mat: pd.DataFrame) -> pd.DataFrame:
@@ -250,6 +260,7 @@ def main() -> None:
     ap.add_argument("--data_dir", required=True)
     ap.add_argument("--out_dir", required=True)
     ap.add_argument("--models", default="delta_net,gla,retnet")
+    ap.add_argument("--sort_rows", choices=["none","mean_z"], default="mean_z", help="Row ordering: none or by average z-score across tasks.")
     args = ap.parse_args()
 
     data_dir = Path(args.data_dir).resolve()
@@ -265,6 +276,9 @@ def main() -> None:
             mat = mat.drop(index=["QKVO_plus_G_plus_MLP_r8_alpha16"], errors="ignore")
 
         z = zscore_columns(mat)
+        if args.sort_rows == "mean_z":
+            row_mean = z.mean(axis=1, skipna=True)
+            z = z.loc[row_mean.sort_values(ascending=False).index]
 
         plot_heatmap(
             z,

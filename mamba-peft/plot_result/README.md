@@ -1,7 +1,7 @@
 # One-click Analysis Project
 
 ## Default input
-- data/dataset_summaries2
+- /mnt/data/work/data/dataset_summaries2
 
 ## Run
 ```bash
