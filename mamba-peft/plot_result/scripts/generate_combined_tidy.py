@@ -33,6 +33,7 @@ from typing import Dict, List
 
 import pandas as pd
 
+from dataset_aliases import canonicalize_task_name
 
 TASK_PRIMARY: Dict[str, str] = {
     "glue-tvt_cola": "eval_matthews_correlation",
@@ -77,6 +78,7 @@ def build_combined(input_glob: str) -> pd.DataFrame:
     frames: List[pd.DataFrame] = []
     for p in paths:
         model, task = infer_model_and_task(p)
+        task = canonicalize_task_name(task)
         df = pd.read_csv(p)
 
         # Harmonize column names across sources

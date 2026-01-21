@@ -34,6 +34,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+from dataset_aliases import canonicalize_task_name, commonsense_name_candidates
 
 # -------------------------
 # ICML-ish typography
@@ -119,12 +120,14 @@ METRIC_PRIORITY = [
 ]
 
 
-def infer_dataset_from_filename(fname: str) -> str:
+def infer_dataset_from_filename(fname: str, model: str) -> str:
     base = os.path.basename(fname)
-    if "glue-tvt_" in base:
-        return base.split("glue-tvt_")[1].replace(".csv", "")
-    parts = base.replace(".csv", "").split("_")
-    return "_".join(parts[2:])
+    prefix = f"{model}_"
+    if base.startswith(prefix):
+        base = base[len(prefix):]
+    if base.startswith("glue-tvt_"):
+        return base.split("glue-tvt_", 1)[1].replace(".csv", "")
+    return base.replace(".csv", "")
 
 
 
@@ -175,16 +178,22 @@ def filter_configs_for_model(model: str, configs: pd.Series) -> pd.Series:
     return configs
 
 
+def _maybe_append_commonsense_file(files: list[str], data_dir: Path, model: str) -> None:
+    for fname in commonsense_name_candidates(model):
+        path = data_dir / fname
+        if path.exists():
+            files.append(str(path))
+            return
+
+
 def read_best_scores_for_model(data_dir: Path, model: str) -> pd.DataFrame:
     files = sorted([str(p) for p in data_dir.glob(f"{model}_glue-tvt_*.csv")])
-    cs = data_dir / f"{model}_commonsense_170k.csv"
-    if cs.exists():
-        files.append(str(cs))
+    _maybe_append_commonsense_file(files, data_dir, model)
 
     rows = []
     for path in files:
         df = pd.read_csv(path)
-        dataset = infer_dataset_from_filename(path)
+        dataset = canonicalize_task_name(infer_dataset_from_filename(path, model))
         metric = pick_primary_metric(df)
 
         df["config_raw"] = df["experiment"].astype(str).str.split("__").str[0]

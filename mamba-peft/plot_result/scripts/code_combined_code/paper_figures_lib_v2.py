@@ -31,6 +31,8 @@ from __future__ import annotations
 import glob
 import os
 import re
+import sys
+from pathlib import Path
 from typing import Dict, List, Set, Tuple
 
 import numpy as np
@@ -39,6 +41,13 @@ import pandas as pd
 import matplotlib as mpl
 mpl.use("Agg")
 import matplotlib.pyplot as plt
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+SCRIPTS_ROOT = SCRIPT_DIR.parent
+if str(SCRIPTS_ROOT) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_ROOT))
+
+from dataset_aliases import canonicalize_task_name
 
 
 # ----------------------
@@ -242,7 +251,7 @@ def load_all_runs(in_dir: str) -> pd.DataFrame:
         m = pat.match(fn)
         if not m:
             continue
-        model, task = m.group(1), m.group(2)
+        model, task = m.group(1), canonicalize_task_name(m.group(2))
         d = pd.read_csv(fp)
         d["model"] = model
         d["task"] = task

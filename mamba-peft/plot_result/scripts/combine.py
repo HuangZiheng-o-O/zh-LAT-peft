@@ -36,6 +36,7 @@ import matplotlib as mpl
 mpl.use("Agg")
 import matplotlib.pyplot as plt
 
+from dataset_aliases import canonicalize_task_name
 
 # ----------------------------
 # Plot style (paper-ish)
@@ -219,7 +220,7 @@ def load_all_runs(data_dir: str) -> pd.DataFrame:
         m = pat.match(fn)
         if not m:
             continue
-        model, task = m.group(1), m.group(2)
+        model, task = m.group(1), canonicalize_task_name(m.group(2))
         d = pd.read_csv(fp)
         d["model"] = model
         d["task"] = task
