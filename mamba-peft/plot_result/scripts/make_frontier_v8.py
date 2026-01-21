@@ -24,6 +24,7 @@ from typing import List, Tuple
 
 import numpy as np
 import pandas as pd
+import re
 
 import matplotlib as mpl
 mpl.use("Agg")
@@ -32,7 +33,7 @@ from matplotlib.lines import Line2D
 from matplotlib.ticker import FuncFormatter, FixedLocator, NullLocator, NullFormatter
 
 
-ROUND_E12_GLA = {
+ROUND_E12_GLA_RAW = {
     "QKVO_plus_G_plus_MLP",
     "QKVO_plus_MLP",
     "QKVO",
@@ -48,6 +49,16 @@ ROUND_E12_GLA = {
     "VOONLY",
 }
 
+def canonicalize_exp_name(name: str) -> str:
+    """Normalize experiment names across scripts."""
+    s = str(name)
+    s = re.sub(r"^E\d+_", "", s)
+    s = re.sub(r"_r\d+_alpha\d+$", "", s)
+    return s
+
+
+ROUND_E12_GLA = {canonicalize_exp_name(x) for x in ROUND_E12_GLA_RAW}
+
 
 def pretty_operator_label(exp_norm: str) -> str:
     """Pretty label for Pareto points.
@@ -55,11 +66,7 @@ def pretty_operator_label(exp_norm: str) -> str:
     The raw experiment names include adapter bookkeeping (ONLY, r8_alpha16, etc.).
     This function converts them into compact operator-style labels.
     """
-    s = str(exp_norm)
-    # Remove any leading experiment prefix
-    s = __import__("re").sub(r"^E\d+_", "", s)
-    # Strip LoRA suffixes
-    s = __import__("re").sub(r"_r\d+_alpha\d+$", "", s)
+    s = canonicalize_exp_name(exp_norm)
 
     # Standardize separators
     s = s.replace("_plus_", "+").replace("_", "_")
@@ -211,11 +218,7 @@ def plot_one(model: str, combined_csv: str, out_dir: str) -> str:
 
     # Keep only the ROUND_E12 subset for GLA to avoid plotting a much larger experiment space.
     if model.lower() == "gla":
-        def _base(s: str) -> str:
-            s = str(s)
-            s = s.replace("_r8_alpha16", "")
-            return s
-        mask = df["exp_norm"].apply(_base).isin(ROUND_E12_GLA)
+        mask = df["exp_norm"].apply(canonicalize_exp_name).isin(ROUND_E12_GLA)
         df = df.loc[mask].copy()
         if df.empty:
             raise ValueError(

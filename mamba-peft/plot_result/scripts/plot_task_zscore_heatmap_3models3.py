@@ -62,7 +62,7 @@ DATASET_ORDER = [
 ]
 
 # Preferred row ordering
-PREFERRED_CONFIG_ORDER = [
+PREFERRED_CONFIG_ORDER_RAW = [
     "KONLY_r8_alpha16",
     "OONLY_r8_alpha16",
     "QONLY_r8_alpha16",
@@ -79,8 +79,9 @@ PREFERRED_CONFIG_ORDER = [
 ]
 
 # RetNet allowed
-RETNET_ALLOWED = {
+RETNET_ALLOWED_RAW = {
     "QKVO_plus_G_plus_MLP_r8_alpha16",
+    "QKVO_plus_G_r8_alpha16",
     "QKVO_plus_MLP_r8_alpha16",
     "OMLP_r8_alpha16",
     "VOONLY_r8_alpha16",
@@ -95,7 +96,7 @@ RETNET_ALLOWED = {
 }
 
 # GLA allowed (ROUND_E12)
-GLA_ALLOWED = {
+GLA_ALLOWED_RAW = {
     "QKVO_plus_MLP_r8_alpha16",
     "QKVO_r8_alpha16",
     "MLPONLY_r8_alpha16",
@@ -132,7 +133,32 @@ def normalize_config_name(cfg: str) -> str:
     s = str(cfg)
     # Collapse legacy experiment prefixes like E1_, E2_, ...
     s = re.sub(r"^E\d+_", "", s)
+    # Drop trailing LoRA-style suffixes (e.g., _r8_alpha16) so variants map to the same config.
+    s = re.sub(r"_r\d+_alpha\d+$", "", s)
     return s
+
+
+def _canonicalize_sequence(values) -> list[str]:
+    seen = set()
+    out: list[str] = []
+    for v in values:
+        canon = normalize_config_name(v)
+        if canon not in seen:
+            seen.add(canon)
+            out.append(canon)
+    return out
+
+
+def _canonicalize_set(values) -> set[str]:
+    return set(_canonicalize_sequence(values))
+
+
+PREFERRED_CONFIG_ORDER = _canonicalize_sequence(PREFERRED_CONFIG_ORDER_RAW)
+RETNET_ALLOWED = _canonicalize_set(RETNET_ALLOWED_RAW)
+GLA_ALLOWED = _canonicalize_set(GLA_ALLOWED_RAW)
+GLA_DROP_CONFIG = normalize_config_name("QKVO_plus_G_plus_MLP_r8_alpha16")
+
+
 def pick_primary_metric(df: pd.DataFrame) -> str:
     for m in METRIC_PRIORITY:
         if m in df.columns and df[m].notna().any():
@@ -187,11 +213,7 @@ def build_matrix(long_df: pd.DataFrame) -> pd.DataFrame:
 
     present = set(mat.index)
     ordered = [c for c in PREFERRED_CONFIG_ORDER if c in present]
-    remaining = sorted([c for c in mat.index if c not in ordered])
-    present = set(mat.index)
-    ordered = [c for c in PREFERRED_CONFIG_ORDER if c in present]
     remaining = [c for c in mat.index if c not in ordered]
-    # Build initial order, then optionally sort by average performance (mean z-score across tasks).
     mat = mat.reindex(index=ordered + remaining)
     return mat
 
@@ -215,9 +237,7 @@ def display_config(name: str) -> str:
       - remove '_r8_alpha16'
       - collapse '*ONLY' -> '*'
     """
-    s = name
-    if s.endswith("_r8_alpha16"):
-        s = s.replace("_r8_alpha16", "")
+    s = normalize_config_name(name)
     if s.endswith("ONLY"):
         s = s.replace("ONLY", "")
     return s
@@ -273,7 +293,7 @@ def main() -> None:
 
         # requested earlier: drop this row only for GLA
         if model.lower() == "gla":
-            mat = mat.drop(index=["QKVO_plus_G_plus_MLP_r8_alpha16"], errors="ignore")
+            mat = mat.drop(index=[GLA_DROP_CONFIG], errors="ignore")
 
         z = zscore_columns(mat)
         if args.sort_rows == "mean_z":

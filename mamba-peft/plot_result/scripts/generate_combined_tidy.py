@@ -129,8 +129,8 @@ def build_combined(input_glob: str) -> pd.DataFrame:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--input_glob", default="/mnt/data/dataset_summaries2/*.csv")
-    ap.add_argument("--output", default="/mnt/data/combined_tidy.csv")
+    ap.add_argument("--input_glob", default="/Users/huangziheng/Documents/zotero附件/transformer改造/research_trackers/dataset_summaries2/*.csv")
+    ap.add_argument("--output", default="/Users/huangziheng/Documents/zotero附件/transformer改造/research_trackers/combined_tidy.csv")
     args = ap.parse_args()
 
     df = build_combined(args.input_glob)
