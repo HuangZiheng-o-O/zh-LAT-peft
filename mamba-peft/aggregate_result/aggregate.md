@@ -121,7 +121,11 @@ python -m aggregate_result.main \
   --output /home/user/mzs_h/code/zh-LAT-peft/output/resultJan15_transfer/all_agg_results2/gla_all_agg \
   --workers 8
 
-
+python -m aggregate_result.main \
+  --base_dir /home/user/mzs_h/code/zh-LAT-peft/output/resultJan15_transfer/retnet/ \
+  --output /home/user/mzs_h/code/zh-LAT-peft/output/resultJan15_transfer/all_agg_results_Jan20 \
+  --dataset qnli \
+  --workers 8
 
 SRC="/Users/huangziheng/Documents/zotero附件/transformer改造/research_trackers/all_agg_results"
 DST="/Users/huangziheng/Documents/zotero附件/transformer改造/research_trackers/dataset_summaries2"
