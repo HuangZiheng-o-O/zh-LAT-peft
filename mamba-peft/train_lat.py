@@ -1467,6 +1467,19 @@ def main():
     if "device" in train_args:
         del train_args["device"]
 
+    # Defensive: ensure base model path is populated even if CLI/env overrides were lost upstream.
+    if "model" not in train_args or train_args["model"] in ("", None):
+        fallback_model = env.get("LAT_MODEL") or env.get("GLA_MODEL")
+        if fallback_model:
+            train_args["model"] = fallback_model
+            print(f"[{args.model_type.upper() if args.model_type else 'LAT'}] "
+                  f"No --model provided; falling back to LAT_MODEL={fallback_model}")
+        else:
+            raise ValueError(
+                "Base model path is missing. Provide it via the YAML `model:` key, "
+                "--model CLI flag, or LAT_MODEL/GLA_MODEL environment variable."
+            )
+
     run_train(**train_args)
 
 
