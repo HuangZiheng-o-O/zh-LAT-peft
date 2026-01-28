@@ -53,7 +53,8 @@ except Exception:
 import json
 import os
 import shutil
-from typing import Optional, Dict
+import tempfile
+from typing import Optional, Dict, List
 
 import torch
 import argparse
@@ -76,6 +77,64 @@ from mamba_ssm_peft.utils.lat_model_loader import get_lat_env, get_lat_env_bool
 from utils.sparse_selective_engine import maybe_run_sparse_selective_tuning
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _log_model_architecture(model, log_tag: str) -> None:
+    """
+    Print a textual dump of the full model so we can see the instantiated architecture.
+    """
+    divider = "=" * 80
+    try:
+        print(f"[{log_tag}] {divider}")
+        print(f"[{log_tag}] Full model architecture:")
+        print(model)
+        print(f"[{log_tag}] {divider}")
+    except Exception as exc:
+        print(f"[{log_tag}][warn] Unable to print model architecture: {exc}")
+
+
+def _infer_lora_injection_sites(model) -> List[str]:
+    """
+    Infer which modules received LoRA adapters by scanning parameter names for
+    `lora_` components (matches Hugging Face PEFT naming).
+    """
+    sites = set()
+    for name, _ in model.named_parameters():
+        if ".lora_" in name:
+            sites.add(name.split(".lora_")[0])
+        elif ".lora_embedding_" in name:
+            sites.add(name.split(".lora_embedding_")[0])
+    return sorted(sites)
+
+
+def _log_lora_summary(model, peft_cfg, log_tag: str) -> None:
+    """
+    Emit a one-stop summary showing the LoRA config and which modules contain adapters.
+    """
+    if peft_cfg is None:
+        print(f"[{log_tag}] LoRA/PEFT not enabled for this run.")
+        return
+
+    try:
+        target_modules = getattr(peft_cfg, "target_modules", None)
+    except Exception:
+        target_modules = None
+
+    print(f"[{log_tag}] LoRA configuration:")
+    print(f"  r={getattr(peft_cfg, 'r', 'n/a')}  alpha={getattr(peft_cfg, 'lora_alpha', 'n/a')}  "
+          f"dropout={getattr(peft_cfg, 'lora_dropout', 'n/a')}")
+    if target_modules:
+        print(f"  target_modules={target_modules}")
+    else:
+        print("  target_modules=<PEFT default/auto>")
+
+    injected_sites = _infer_lora_injection_sites(model)
+    if injected_sites:
+        print(f"[{log_tag}] LoRA adapters injected into {len(injected_sites)} module(s):")
+        for site in injected_sites:
+            print(f"    - {site}")
+    else:
+        print(f"[{log_tag}] No LoRA adapter parameters were found on the model.")
 
 
 def _is_sparse_run_enabled() -> bool:
@@ -1020,6 +1079,28 @@ def run_train(
     # Log tag
     log_tag = model_type.upper() if model_type != "auto" else "LAT"
 
+    # Optional dry-run sandbox mode (redirect outputs to a temp directory and drop checkpoints afterwards)
+    dry_run_mode = _env_bool("LAT_DRY_RUN", False)
+    dry_run_keep = _env_bool("LAT_DRY_RUN_KEEP", False)
+    dry_run_tmpdir = None
+    if dry_run_mode:
+        tmp_kwargs = {}
+        dry_run_root_env = os.environ.get("LAT_DRY_RUN_ROOT")
+        if dry_run_root_env:
+            dry_root = Path(dry_run_root_env).expanduser()
+            dry_root.mkdir(parents=True, exist_ok=True)
+            tmp_kwargs["dir"] = str(dry_root)
+        dry_run_tmpdir = Path(
+            tempfile.mkdtemp(prefix="lat_dryrun_", **tmp_kwargs)
+        )
+        output_dir = str(dry_run_tmpdir)
+        no_save = True  # never write checkpoints to user directories in dry-run mode
+        print(f"[{log_tag}] LAT_DRY_RUN=1 -> redirecting output_dir to {output_dir} (no_save forced).")
+        if dry_run_keep:
+            print(f"[{log_tag}] LAT_DRY_RUN_KEEP=1 -> preserving temporary outputs under {output_dir}.")
+        else:
+            print(f"[{log_tag}] Temporary dry-run outputs will be deleted after the run completes.")
+
     # Legacy SD-LoRA check (kept for compatibility)
     if overwrite and is_sdlora:
         assert Path(output_dir).exists()
@@ -1069,13 +1150,15 @@ def run_train(
     except Exception:
         pass
 
-    model, tokenizer_obj, _ = prepare_lat_model_and_tokenizer(
+    model, tokenizer_obj, peft_cfg = prepare_lat_model_and_tokenizer(
         model_type=model_type,
         model_id=model_id,
         prec=prec,
         debug=debug,
         peft_json_path=peft_for_load,
     )
+    _log_model_architecture(model, log_tag)
+    _log_lora_summary(model, peft_cfg, log_tag)
 
     # Force left padding
     force_left = get_lat_env_bool("FORCE_LEFT_PAD", "1")
@@ -1168,6 +1251,12 @@ def run_train(
                 print(f"[{log_tag}][lock] released {lock_path}")
             except Exception as e:
                 print(f"[{log_tag}][lock][warn] failed to remove lock: {e}")
+        if dry_run_tmpdir is not None and not dry_run_keep:
+            try:
+                shutil.rmtree(dry_run_tmpdir, ignore_errors=True)
+                print(f"[{log_tag}] LAT_DRY_RUN cleaned up temporary directory {dry_run_tmpdir}.")
+            except Exception as e:
+                print(f"[{log_tag}][warn] Failed to clean dry-run directory {dry_run_tmpdir}: {e}")
 
 
 def get_output_path_for_cfg(cfg_path, cfg, model_type: str = "gla"):

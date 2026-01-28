@@ -120,7 +120,9 @@ ROUND_E12=(#GLA
   "E6_VOONLY_r8_alpha16.yaml"
 
 )
-
+ROUND_E122=(#GLA
+  "E1_QKVO_plus_G_plus_MLP_r8_alpha16.yaml"
+)
 # =============================================================================
 # ROUND_E13_RETNET: RetNet 专用配置（无 gk_proj，RetNet 架构不包含此模块）
 # =============================================================================
@@ -156,8 +158,8 @@ ROUND_E13=(#ROUND_E12_RETNET
 
 
 )
-ROUND_E1317=(
-  "E1_QKVO_plus_G_r8_alpha16.yaml"
+ROUND_E132=(
+  "E1_QKVO_plus_MLP_r8_alpha16.yaml"
 )
 # =============================================================================
 # ROUND_E12_DELTANET: DeltaNet 专用配置（无 gk_proj, 默认无 g_proj）
@@ -191,8 +193,8 @@ ROUND_E14=(# ROUND_E12_DELTANET
   "E6_VOONLY_r8_alpha16.yaml"
 
 )
-ROUND_E1414=(# ROUND_E12_DELTANET
-  "E1_QKVO_plus_MLP_r8_alpha16.yaml"
+ROUND_E142=(# ROUND_E12_DELTANET
+  "E4_MLPONLY_r8_alpha16.yaml"
 )
 
 ROUND_E99=(# ROUND_E12_DELTANET
